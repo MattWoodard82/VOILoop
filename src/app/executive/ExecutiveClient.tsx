@@ -14,7 +14,7 @@ export function ExecutiveClient({ employees }: Props) {
   const [personFilter, setPersonFilter] = useState('All')
 
   const departments = useMemo(() => {
-    const depts = [...new Set(employees.map(e => e.department))].sort()
+const depts = Array.from(new Set(employees.map(e => e.department))).sort()
     return ['All', ...depts]
   }, [employees])
 
