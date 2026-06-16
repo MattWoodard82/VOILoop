@@ -34,7 +34,7 @@ export function ExecutiveCharts({ type, data }: Props) {
       <BarChart data={data} margin={{ left: 0, right: 4, top: 4, bottom: 4 }}>
         <XAxis dataKey="name" tick={{ ...TICK, fontSize: 8 }} axisLine={false} tickLine={false} />
         <YAxis tick={TICK} axisLine={false} tickLine={false} width={28}
-          tickFormatter={type === 'hvr' ? (v) => `${v}ms` : undefined} />
+          tickFormatter={type === 'hrv' ? (v) => `${v}ms` : undefined} />
         <Tooltip
           contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }}
           labelStyle={{ color: '#fff' }}
