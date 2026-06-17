@@ -5,8 +5,6 @@ import type {
   RiskLevel, RecoveryStatus,
 } from '@/types'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 export function getRecoveryStatus(score: number | null): RecoveryStatus {
   if (!score) return 'yellow'
   if (score >= 67) return 'green'
@@ -27,8 +25,6 @@ export function avg(nums: (number | null)[]): number {
   return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
 }
 
-// ─── Employees ───────────────────────────────────────────────────────────────
-
 export async function getEmployees(): Promise<Employee[]> {
   const supabase = createClient()
   const { data, error } = await supabase
@@ -40,85 +36,63 @@ export async function getEmployees(): Promise<Employee[]> {
   return data ?? []
 }
 
-// ─── Daily Wellness ───────────────────────────────────────────────────────────
-
 export async function getLatestWellness(date?: string): Promise<DailyWellness[]> {
   const supabase = createClient()
   let query = supabase
     .from('daily_wellness')
     .select('*')
     .order('date', { ascending: false })
-
   if (date) {
     query = query.eq('date', date)
   } else {
-    // Get the most recent date available
     const { data: latestDate } = await supabase
       .from('daily_wellness')
       .select('date')
       .order('date', { ascending: false })
       .limit(1)
       .single()
-
-    if (latestDate) {
-      query = query.eq('date', latestDate.date)
-    }
+    if (latestDate) query = query.eq('date', latestDate.date)
   }
-
   const { data, error } = await query
   if (error) throw error
   return data ?? []
 }
 
-export async function getWellnessTrend(
-  employeeId: string,
-  days: number = 30
-): Promise<DailyWellness[]> {
+export async function getWellnessTrend(employeeId: string, days: number = 30): Promise<DailyWellness[]> {
   const supabase = createClient()
   const since = new Date()
   since.setDate(since.getDate() - days)
-
   const { data, error } = await supabase
     .from('daily_wellness')
     .select('*')
     .eq('employee_id', employeeId)
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
-
   if (error) throw error
   return data ?? []
 }
 
-export async function getTeamWellnessTrend(months: number = 6): Promise<
-  { month: string; avg_recovery: number }[]
-> {
+export async function getTeamWellnessTrend(months: number = 6): Promise<{ month: string; avg_recovery: number }[]> {
   const supabase = createClient()
   const since = new Date()
   since.setMonth(since.getMonth() - months)
-
   const { data, error } = await supabase
     .from('daily_wellness')
     .select('date, recovery_score')
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
-
   if (error) throw error
-
-  // Group by month and average
   const byMonth: Record<string, number[]> = {}
   ;(data ?? []).forEach((row) => {
-    const month = row.date.slice(0, 7) // YYYY-MM
+    const month = row.date.slice(0, 7)
     if (!byMonth[month]) byMonth[month] = []
     if (row.recovery_score) byMonth[month].push(row.recovery_score)
   })
-
   return Object.entries(byMonth).map(([month, scores]) => ({
     month,
     avg_recovery: avg(scores),
   }))
 }
-
-// ─── Workouts ─────────────────────────────────────────────────────────────────
 
 export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
   const supabase = createClient()
@@ -129,8 +103,6 @@ export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
   return data ?? []
 }
 
-// ─── Habits ──────────────────────────────────────────────────────────────────
-
 export async function getLatestHabits(date?: string): Promise<Habit[]> {
   const supabase = createClient()
   let q = supabase.from('habits').select('*').order('date', { ascending: false })
@@ -140,8 +112,6 @@ export async function getLatestHabits(date?: string): Promise<Habit[]> {
   return data ?? []
 }
 
-// ─── Pulse Surveys ───────────────────────────────────────────────────────────
-
 export async function getLatestPulse(): Promise<PulseSurvey[]> {
   const supabase = createClient()
   const { data: latestDate } = await supabase
@@ -150,36 +120,28 @@ export async function getLatestPulse(): Promise<PulseSurvey[]> {
     .order('date', { ascending: false })
     .limit(1)
     .single()
-
   if (!latestDate) return []
-
   const { data, error } = await supabase
     .from('pulse_surveys')
     .select('*')
     .eq('date', latestDate.date)
-
   if (error) throw error
   return data ?? []
 }
 
-export async function getPulseTrend(): Promise<
-  { date: string; avg_wellbeing: number; avg_burnout: number }[]
-> {
+export async function getPulseTrend(): Promise<{ date: string; avg_wellbeing: number; avg_burnout: number }[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('pulse_surveys')
     .select('date, wellbeing_score, burnout_score')
     .order('date', { ascending: true })
-
   if (error) throw error
-
   const byDate: Record<string, { w: number[]; b: number[] }> = {}
   ;(data ?? []).forEach((row) => {
     if (!byDate[row.date]) byDate[row.date] = { w: [], b: [] }
     if (row.wellbeing_score) byDate[row.date].w.push(row.wellbeing_score)
     if (row.burnout_score) byDate[row.date].b.push(row.burnout_score)
   })
-
   return Object.entries(byDate).map(([date, v]) => ({
     date,
     avg_wellbeing: avg(v.w),
@@ -187,25 +149,19 @@ export async function getPulseTrend(): Promise<
   }))
 }
 
-// ─── Interventions ───────────────────────────────────────────────────────────
-
 export async function getInterventions(status?: string): Promise<Intervention[]> {
   const supabase = createClient()
   let q = supabase
     .from('interventions')
     .select('*')
     .order('date_triggered', { ascending: false })
-
   if (status) q = q.eq('outcome', status)
-
   const { data, error } = await q
   if (error) throw error
   return data ?? []
 }
 
-export async function createIntervention(
-  intervention: Omit<Intervention, 'id'>
-): Promise<Intervention> {
+export async function createIntervention(intervention: Omit<Intervention, 'id'>): Promise<Intervention> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('interventions')
@@ -216,10 +172,7 @@ export async function createIntervention(
   return data
 }
 
-export async function updateIntervention(
-  id: string,
-  updates: Partial<Intervention>
-): Promise<void> {
+export async function updateIntervention(id: string, updates: Partial<Intervention>): Promise<void> {
   const supabase = createClient()
   const { error } = await supabase
     .from('interventions')
@@ -227,8 +180,6 @@ export async function updateIntervention(
     .eq('id', id)
   if (error) throw error
 }
-
-// ─── Combined team view ───────────────────────────────────────────────────────
 
 export async function getTeamDashboard(): Promise<{
   employees: EmployeeWithWellness[]
