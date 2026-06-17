@@ -89,7 +89,7 @@ export async function getWellnessTrend(
   return data ?? []
 }
 
-export async function getTeamWellnessTrend(months: number = 5): Promise<
+export async function getTeamWellnessTrend(months: number = 6): Promise<
   { month: string; avg_recovery: number }[]
 > {
   const supabase = createClient()
@@ -273,6 +273,6 @@ export async function getTeamDashboard(): Promise<{
     total_employees: employees.length,
     participation_rate: Math.round((pulseResponded / employees.length) * 100),
   }
-
+Fix trend to show 6 months
   return { employees: enriched, stats }
 }
