@@ -8,10 +8,10 @@ export const revalidate = 60
 
 // Resolved interventions with before/after data
 const RESOLVED = [
-  { name: 'James Mitchell', before: 48, after: 67, metric: 'Recovery Score' },
-  { name: 'Sara Chen', before: 52, after: 71, metric: 'Recovery Score' },
-  { name: 'Marcus Webb', before: 44, after: 63, metric: 'Recovery Score' },
-  { name: 'Alicia Torres', before: 56, after: 74, metric: 'Recovery Score' },
+  { name: 'Caleb Stone', before: 52, after: 66, metric: 'Recovery Score' },
+  { name: 'Kyle Schuppan', before: 55, after: 71, metric: 'Recovery Score' },
+  { name: 'Frank Anderson', before: 38, after: 59, metric: 'Recovery Score' },
+  { name: 'Charlie Davis', before: 44, after: 63, metric: 'Recovery Score' },
 ]
 
 const LOOP_STEPS = [
