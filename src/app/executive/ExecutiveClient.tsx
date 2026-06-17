@@ -134,16 +134,29 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
             }))}
           />
         </Card>
-        <Card title="Risk by employee">
-          {filtered.map(e => (
-            <BarRow
-              key={e.id}
-              label={e.first_name + (e.is_exact_data ? ' ★' : '')}
-              value={e.latest_wellness?.recovery_score ?? 0}
-              color={recoveryColor(e.latest_wellness?.recovery_score ?? null)}
-            />
-          ))}
-        </Card>
+      <Card title="Risk by department">
+  {Object.entries(
+    filtered.reduce((acc, e) => {
+      const dept = e.department ?? 'Unknown'
+      const score = e.latest_wellness?.recovery_score ?? 0
+      if (!acc[dept]) acc[dept] = { total: 0, count: 0 }
+      acc[dept].total += score
+      acc[dept].count += 1
+      return acc
+    }, {} as Record<string, { total: number; count: number }>)
+  )
+    .map(([dept, { total, count }]) => ({ dept, avg: Math.round(total / count) }))
+    .sort((a, b) => a.avg - b.avg)
+    .map(({ dept, avg }) => (
+      <BarRow
+        key={dept}
+        label={dept}
+        value={avg}
+        color={recoveryColor(avg)}
+      />
+    ))
+  }
+</Card>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
