@@ -234,23 +234,14 @@ export async function getTeamDashboard(): Promise<{
   employees: EmployeeWithWellness[]
   stats: TeamStats
   interventions: Intervention[]
-}>  {
-  employees: EmployeeWithWellness[]
-  stats: TeamStats
 }> {
- const [employees, wellness, workouts, habits, pulse, interventions] = await Promise.all([
-  getEmployees(),
-  getLatestWellness(),
-  getLatestWorkouts(),
-  getLatestHabits(),
-  getLatestPulse(),
-  getInterventions(),
-])
+  const [employees, wellness, workouts, habits, pulse, interventions] = await Promise.all([
     getEmployees(),
     getLatestWellness(),
     getLatestWorkouts(),
     getLatestHabits(),
     getLatestPulse(),
+    getInterventions(),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.employee_id, w]))
@@ -278,13 +269,12 @@ export async function getTeamDashboard(): Promise<{
 
   const stats: TeamStats = {
     avg_recovery: avg(recoveries),
-return { employees: enriched, stats, interventions }
+    avg_hrv: avg(hrvs),
     avg_sleep_perf: avg(sleeps),
     high_risk_count: enriched.filter((e) => e.risk_level === 'High').length,
     total_employees: employees.length,
     participation_rate: Math.round((pulseResponded / employees.length) * 100),
   }
-Fix trend to show 6 months
-  return { employees: enriched, stats }
+
+  return { employees: enriched, stats, interventions }
 }
-Add interventions to getTeamDashboard
