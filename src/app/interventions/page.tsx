@@ -51,7 +51,7 @@ export default async function InterventionsPage() {
             {interventions.map((int) => {
               const emp = empMap[int.employee_id]
               return (
-                <tr key={int.id}>
+               <tr key={int.id} onClick={() => window.location.href = `/interventions/${int.id}`} style={{ cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(105,190,40,0.04)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <td>
                     <div style={{ fontWeight: 600 }}>{emp ? `${emp.first_name} ${emp.last_name}` : int.employee_id}</div>
                     <div style={{ fontSize: 10, color: '#A5ACAF' }}>{int.department}</div>
