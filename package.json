@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "typecheck": "tsc --noEmit",
+    "smoke:routes": "node scripts/smoke-routes.mjs",
     "db:seed": "npx ts-node --project tsconfig.json src/lib/seed.ts",
     "admin:bootstrap": "npx ts-node --project tsconfig.json src/lib/bootstrap-admin.ts"
   },

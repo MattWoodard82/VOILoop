@@ -80,6 +80,34 @@ gh repo create voiloop --public --push
 
 ---
 
+## CI Build & Demo Checks
+
+The repository includes a CI workflow at `.github/workflows/ci.yml` with these gates:
+
+1. `npm ci` (or `npm install` fallback if no lockfile exists)
+2. `npm run lint`
+3. `npm run typecheck`
+4. `npm run build`
+5. `npm test` (full test suite)
+6. `npm run smoke:routes -- http://127.0.0.1:3000` (non-blocking demo route smoke check)
+
+**Required:** lint, typecheck, build, and full test execution.
+
+**Non-blocking for now:** route smoke check for demo paths (`/`, `/executive`, `/team`, `/interventions`, `/outcomes`, `/admin/import`) so demo regressions are visible while pilot infrastructure is still being finalized.
+
+**Build env requirement:** CI build needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` configured as repository variables or secrets, because pages fetch Supabase data during build/prerender.
+
+## Production Deploy Safeguards
+
+To protect live demo production while PRs are in flight:
+
+1. **PR deployment guard:** `.github/workflows/deployment-guard.yml` fails a PR if its head SHA has any deployment marked as Production.
+2. **Vercel project setting:** set **Production Branch** to `main` only.
+3. **GitHub branch protection:** require PR + required checks before merge into `main`.
+4. **Vercel access control:** limit who can manually promote/deploy to Production.
+
+---
+
 ## Project Structure
 ```
 src/

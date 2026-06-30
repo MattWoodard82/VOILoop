@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY || secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate Supabase env for build
+        run: |
+          if [ -z "$NEXT_PUBLIC_SUPABASE_URL" ] || [ -z "$NEXT_PUBLIC_SUPABASE_ANON_KEY" ]; then
+            echo "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY."
+            echo "Set repository variables or secrets so build-time data fetching can run."
+            exit 1
+          fi
+
+      - name: Build
+        run: npm run build
+
+      - name: Test (full suite)
+        run: npm test
+
+      - name: Start app for smoke check
+        run: |
+          npm run start -- --port 3000 > next-start.log 2>&1 &
+          echo $! > next-start.pid
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "App did not start in time"
+          cat next-start.log
+          exit 1
+
+      - name: Demo route smoke check (non-blocking)
+        continue-on-error: true
+        run: npm run smoke:routes -- http://127.0.0.1:3000
+
+      - name: Print smoke logs on failure
+        if: failure()
+        run: cat next-start.log
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f next-start.pid ]; then
+            kill "$(cat next-start.pid)" || true
+          fi
