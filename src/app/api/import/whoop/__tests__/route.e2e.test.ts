@@ -31,6 +31,9 @@ function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
   })
   formData.append('file', file)
   return {
+    headers: {
+      get: (key: string) => (key.toLowerCase() === 'content-type' ? 'multipart/form-data; boundary=test' : null),
+    },
     formData: async () => formData,
   } as unknown as NextRequest
 }

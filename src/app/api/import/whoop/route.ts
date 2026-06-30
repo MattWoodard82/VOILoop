@@ -10,6 +10,11 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
 
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'unknown error'
+}
+
 function countValidationFailures(errors: ImportRowError[], tabs: string[]): number {
   const tabSet = new Set(tabs)
   const failedRows = new Set<string>()
@@ -40,12 +45,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const contentType = req.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().includes('multipart/form-data')) {
+    return NextResponse.json({ error: 'Invalid content type: expected multipart/form-data' }, { status: 400 })
+  }
+
   // Parse multipart form
   let formData: FormData
   try {
     formData = await req.formData()
-  } catch {
-    return NextResponse.json({ error: 'Invalid multipart form data' }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json(
+      { error: `Invalid multipart form data: ${toErrorMessage(error)}` },
+      { status: 400 }
+    )
   }
 
   const file = formData.get('file') as File | null
@@ -66,8 +79,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let wb: ReturnType<typeof parseWorkbook>
   try {
     wb = parseWorkbook(buffer)
-  } catch (e) {
-    return NextResponse.json({ error: `Failed to parse file: ${(e as Error).message}` }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json({ error: `Failed to parse file: ${toErrorMessage(error)}` }, { status: 400 })
   }
 
   // Validate tab structure (FR-2, FR-3)

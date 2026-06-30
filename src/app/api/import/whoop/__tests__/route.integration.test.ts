@@ -23,13 +23,16 @@ jest.mock('@/lib/whoop/mappers', () => ({
   mapManualEntries: jest.fn(() => ({ habits: [], errors: [], processed: 0 })),
 }))
 
-function makeRequest(fileName = 'whoop.xlsx'): NextRequest {
+function makeRequest(fileName = 'whoop.xlsx', contentType = 'multipart/form-data; boundary=test'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('dummy')], fileName, {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
   return {
+    headers: {
+      get: (key: string) => (key.toLowerCase() === 'content-type' ? contentType : null),
+    },
     formData: async () => formData,
   } as unknown as NextRequest
 }
@@ -101,5 +104,24 @@ describe('POST /api/import/whoop integration', () => {
     expect(body.details).toContain('Missing required tabs: Exercise')
     expect(body.details).toContain('At least one of "Stress" or "Sleep" tabs must be present')
     expect(body.details).toContain('Tab "Sleep" missing columns: Cycle start time')
+  })
+
+  test('returns 400 for non-multipart requests', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
+
+    const mockSupabase = {
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+        })),
+      })),
+    }
+    mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
+
+    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid content type: expected multipart/form-data',
+    })
   })
 })
