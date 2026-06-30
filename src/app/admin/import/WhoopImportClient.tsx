@@ -59,11 +59,23 @@ export function WhoopImportClient() {
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
+    if (status === 'uploading') return
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
     if (file) handleFile(file)
   }
 
+  const openFilePicker = () => {
+    if (status !== 'uploading') fileInputRef.current?.click()
+  }
+
+  const onDropZoneKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (status === 'uploading') return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      fileInputRef.current?.click()
+    }
+  }
   const downloadErrors = () => {
     if (!result?.errors.length) return
     const csv = [
@@ -106,7 +118,11 @@ export function WhoopImportClient() {
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={openFilePicker}
+          onKeyDown={onDropZoneKeyDown}
+          role="button"
+          tabIndex={status === 'uploading' ? -1 : 0}
+          aria-disabled={status === 'uploading'}
           style={{
             border: `2px dashed ${dragOver ? '#69BE28' : '#0a3560'}`,
             borderRadius: 10,

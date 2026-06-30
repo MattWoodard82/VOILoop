@@ -63,7 +63,7 @@ create table if not exists workouts (
   employee_id  text references employees(id) on delete cascade,
   source_batch_id uuid references upload_batches(id) on delete set null,
   date         date not null,
-  start_time   timestamptz,
+  start_time   timestamptz not null,
   end_time     timestamptz,
   activity     text,
   duration_min int,

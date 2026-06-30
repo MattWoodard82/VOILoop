@@ -44,7 +44,7 @@ export interface Workout {
   employee_id: string
   source_batch_id: string | null
   date: string
-  start_time: string | null
+  start_time: string
   end_time: string | null
   activity: string | null
   duration_min: number | null

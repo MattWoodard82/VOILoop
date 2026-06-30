@@ -3,7 +3,7 @@ import { getTeamDashboard, getLatestPulse } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, BarRow } from '@/components/ui'
 import { initials, safeAvg } from '@/lib/utils'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 export default async function PulsePage() {
   const [{ employees }, pulse] = await Promise.all([

@@ -6,6 +6,10 @@ const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to staff; list it before ADMIN_ONLY so it takes priority
 const STAFF_ROUTES = ['/executive', '/team', '/pulse', '/interventions', '/outcomes', '/admin/import']
 
+function isRouteMatch(pathname: string, route: string): boolean {
+  return pathname === route || pathname.startsWith(`${route}/`)
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
@@ -54,8 +58,8 @@ export async function middleware(request: NextRequest) {
 
   // Check staff-accessible routes before admin-only routes so explicitly
   // whitelisted sub-paths (e.g. /admin/import) aren't blocked by the admin check.
-  const isStaffRoute = STAFF_ROUTES.some(r => pathname.startsWith(r))
-  const isAdminOnly = !isStaffRoute && ADMIN_ONLY.some(r => pathname.startsWith(r))
+  const isStaffRoute = STAFF_ROUTES.some((r) => isRouteMatch(pathname, r))
+  const isAdminOnly = !isStaffRoute && ADMIN_ONLY.some((r) => isRouteMatch(pathname, r))
 
   if (isAdminOnly) {
     if (role !== 'admin') {

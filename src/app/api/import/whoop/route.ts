@@ -9,6 +9,12 @@ import { createHash } from 'crypto'
 export const runtime = 'nodejs'
 // Increase body size limit for xlsx files (default 4MB is often too small)
 export const maxDuration = 60
+const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message
+  return 'unknown error'
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // AC-6: require authenticated session
@@ -17,12 +23,31 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const supabase = createServerSupabaseClient()
+  const { data: roleData, error: roleError } = await supabase
+    .from('user_roles')
+    .select('role')
+    .single()
+  if (roleError) {
+    return NextResponse.json({ error: `Failed to verify role: ${roleError.message}` }, { status: 500 })
+  }
+  if (!roleData?.role || !WHOOP_IMPORT_ALLOWED_ROLES.has(roleData.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const contentType = req.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().includes('multipart/form-data')) {
+    return NextResponse.json({ error: 'Invalid content type: expected multipart/form-data' }, { status: 400 })
+  }
   // Parse multipart form
   let formData: FormData
   try {
     formData = await req.formData()
-  } catch {
-    return NextResponse.json({ error: 'Invalid multipart form data' }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json(
+      { error: `Invalid multipart form data: ${toErrorMessage(error)}` },
+      { status: 400 }
+    )
   }
 
   const file = formData.get('file') as File | null
@@ -43,8 +68,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let wb: ReturnType<typeof parseWorkbook>
   try {
     wb = parseWorkbook(buffer)
-  } catch (e) {
-    return NextResponse.json({ error: `Failed to parse file: ${(e as Error).message}` }, { status: 400 })
+  } catch (error) {
+    return NextResponse.json({ error: `Failed to parse file: ${toErrorMessage(error)}` }, { status: 400 })
   }
 
   // Validate tab structure (FR-2, FR-3)
@@ -68,7 +93,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const wellnessResult = mapWellness(wb)
   const habitsResult = mapManualEntries(wb)
 
-  const supabase = createServerSupabaseClient()
   const fileHash = createHash('sha256').update(buffer).digest('hex')
 
   try {
@@ -87,7 +111,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   } catch (error) {
     return NextResponse.json({
       error: 'Failed to persist import batch',
-      detail: (error as Error).message,
+      detail: toErrorMessage(error),
     }, { status: 500 })
   }
 }
