@@ -4,6 +4,7 @@ import { Upload, CheckCircle, XCircle, AlertCircle, Download, RotateCcw } from '
 import type { ImportResult, ImportRowError } from '@/lib/whoop/types'
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'partial' | 'error'
+const MAX_DISPLAYED_ERRORS = 100
 
 export function WhoopImportClient() {
   const [status, setStatus] = useState<UploadStatus>('idle')
@@ -252,15 +253,15 @@ export function WhoopImportClient() {
                 </button>
               </div>
               <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #0a3560', borderRadius: 6 }}>
-                {result.errors.slice(0, 100).map((e: ImportRowError, i: number) => (
+                {result.errors.slice(0, MAX_DISPLAYED_ERRORS).map((e: ImportRowError, i: number) => (
                   <div key={i} style={{ padding: '7px 12px', borderBottom: '1px solid #0a3560', fontSize: 12 }}>
                     <span style={{ color: '#A5ACAF' }}>[{e.tab} row {e.row}]</span>{' '}
                     {e.field && <span style={{ color: '#eab308' }}>{e.field}: </span>}
                     <span style={{ color: '#fca5a5' }}>{e.message}</span>
                   </div>
                 ))}
-                {result.errors.length > 100 && (
-                  <div style={{ padding: '7px 12px', color: '#A5ACAF', fontSize: 12 }}>… and {result.errors.length - 100} more (download CSV for full list)</div>
+                {result.errors.length > MAX_DISPLAYED_ERRORS && (
+                  <div style={{ padding: '7px 12px', color: '#A5ACAF', fontSize: 12 }}>… and {result.errors.length - MAX_DISPLAYED_ERRORS} more (download CSV for full list)</div>
                 )}
               </div>
             </div>

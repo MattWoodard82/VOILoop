@@ -38,6 +38,14 @@ function inferCsvWorkbookTabs(workbook: ParsedWorkbook): ParsedWorkbook {
   return Object.keys(inferred).length ? inferred : workbook
 }
 
+function hasRecognizedCsvTab(workbook: ParsedWorkbook): boolean {
+  return [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => workbook[tab]?.length)
+}
+
+function shouldAllowCsvWithPartialStructure(structure: ReturnType<typeof validateTabStructure>, workbook: ParsedWorkbook): boolean {
+  return hasRecognizedCsvTab(workbook) && Object.keys(structure.missingColumns).length === 0
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // AC-6: require authenticated session
   const session = await getSession()
@@ -100,8 +108,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Validate tab structure (FR-2, FR-3)
   const structure = validateTabStructure(wb)
   if (!structure.valid) {
-    const hasAnyRecognizedCsvTab = [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => wb[tab]?.length)
-    if (isCsv && hasAnyRecognizedCsvTab && Object.keys(structure.missingColumns).length === 0) {
+    if (isCsv && shouldAllowCsvWithPartialStructure(structure, wb)) {
       // CSV imports can legitimately contain one WHOOP slice; allow row-level validators to handle data quality.
     } else {
       const details: string[] = []
@@ -114,7 +121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       for (const [tab, cols] of Object.entries(structure.missingColumns)) {
         details.push(`Tab "${tab}" missing columns: ${cols.join(', ')}`)
       }
-      if (isCsv && !hasAnyRecognizedCsvTab) {
+      if (isCsv && !hasRecognizedCsvTab(wb)) {
         details.push('CSV did not match recognized WHOOP export columns')
       }
       return NextResponse.json({ error: isCsv ? 'Invalid CSV structure' : 'Invalid workbook structure', details }, { status: 422 })
