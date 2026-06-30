@@ -4,7 +4,7 @@ import { KpiCard, Alert } from '@/components/ui'
 import { AlertTriangle } from 'lucide-react'
 import { ExecutiveClient } from './ExecutiveClient'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 export default async function ExecutivePage() {
   const { employees, stats, interventions } = await getTeamDashboard()

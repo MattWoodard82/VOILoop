@@ -4,7 +4,7 @@ import { KpiCard, Card, Badge, Alert } from '@/components/ui'
 import { Check } from 'lucide-react'
 import { OutcomesCharts } from './OutcomesCharts'
 
-export const revalidate = 60
+export const dynamic = 'force-dynamic'
 
 // Resolved interventions with before/after data
 const RESOLVED = [
