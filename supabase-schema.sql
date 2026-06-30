@@ -45,7 +45,7 @@ create table if not exists workouts (
   id           uuid primary key default gen_random_uuid(),
   employee_id  text references employees(id) on delete cascade,
   date         date not null,
-  start_time   timestamptz,
+  start_time   timestamptz not null,
   end_time     timestamptz,
   activity     text,
   duration_min int,

@@ -13,9 +13,9 @@ export function WhoopImportClient() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(async (file: File) => {
-    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
       setStatus('error')
-      setStructureErrors(['Only .xlsx and .csv files are supported'])
+      setStructureErrors(['Only .xlsx files are supported'])
       return
     }
 
@@ -59,9 +59,22 @@ export function WhoopImportClient() {
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
+    if (status === 'uploading') return
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
     if (file) handleFile(file)
+  }
+
+  const openFilePicker = () => {
+    if (status !== 'uploading') fileInputRef.current?.click()
+  }
+
+  const onDropZoneKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (status === 'uploading') return
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      fileInputRef.current?.click()
+    }
   }
 
   const downloadErrors = () => {
@@ -106,7 +119,11 @@ export function WhoopImportClient() {
           onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={openFilePicker}
+          onKeyDown={onDropZoneKeyDown}
+          role="button"
+          tabIndex={status === 'uploading' ? -1 : 0}
+          aria-disabled={status === 'uploading'}
           style={{
             border: `2px dashed ${dragOver ? '#69BE28' : '#0a3560'}`,
             borderRadius: 10,
@@ -134,7 +151,7 @@ export function WhoopImportClient() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.csv"
+            accept=".xlsx"
             style={{ display: 'none' }}
             onChange={onInputChange}
             disabled={status === 'uploading'}

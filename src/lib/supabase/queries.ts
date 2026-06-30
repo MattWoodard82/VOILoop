@@ -96,7 +96,11 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
 
 export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
   const supabase = createClient()
-  let q = supabase.from('workouts').select('*').order('date', { ascending: false })
+  let q = supabase
+    .from('workouts')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('start_time', { ascending: false })
   if (date) q = q.eq('date', date)
   const { data, error } = await q
   if (error) throw error
@@ -196,7 +200,10 @@ export async function getTeamDashboard(): Promise<{
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.employee_id, w]))
-  const workoutMap = Object.fromEntries(workouts.map((w) => [w.employee_id, w]))
+  const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
+    if (!map[workout.employee_id]) map[workout.employee_id] = workout
+    return map
+  }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.employee_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.employee_id, p]))
 

@@ -40,8 +40,7 @@ describe('toISOString', () => {
   })
   test('parses date string', () => {
     const iso = toISOString('2024-03-15 08:00:00')
-    expect(iso).not.toBeNull()
-    expect(iso).toContain('2024-03-15')
+    expect(iso).toBe('2024-03-15T08:00:00.000Z')
   })
   test('returns null for ##########', () => expect(toISOString('##########')).toBeNull())
   test('returns null for invalid', () => expect(toISOString('not a date')).toBeNull())

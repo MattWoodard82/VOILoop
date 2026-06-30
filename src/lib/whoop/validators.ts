@@ -104,7 +104,16 @@ export function toISOString(val: unknown): string | null {
   }
   const s = String(val).trim()
   if (s === '##########' || s === '') return null
-  const d = new Date(s)
+  let normalized = s
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    normalized = `${s}T00:00:00Z`
+  } else if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) {
+    normalized = `${s.replace(' ', 'T')}Z`
+  } else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(s)) {
+    normalized = `${s}Z`
+  }
+
+  const d = new Date(normalized)
   return isNaN(d.getTime()) ? null : d.toISOString()
 }
 
