@@ -18,6 +18,7 @@ export interface Employee {
 export interface DailyWellness {
   id: string
   employee_id: string
+  source_batch_id: string | null
   date: string
   recovery_score: number | null
   hrv_ms: number | null
@@ -41,6 +42,7 @@ export interface DailyWellness {
 export interface Workout {
   id: string
   employee_id: string
+  source_batch_id: string | null
   date: string
   start_time: string | null
   end_time: string | null
@@ -60,6 +62,7 @@ export interface Workout {
 export interface Habit {
   id: string
   employee_id: string
+  source_batch_id: string | null
   date: string
   alcohol: boolean | null
   caffeine: boolean | null
@@ -125,4 +128,33 @@ export interface TeamStats {
   high_risk_count: number
   total_employees: number
   participation_rate: number
+}
+
+export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed'
+
+export interface ImportBatch {
+  id: string
+  imported_by: string | null
+  file_name: string
+  file_size_bytes: number
+  file_hash_sha256: string
+  status: ImportBatchStatus
+  started_at: string
+  completed_at: string | null
+  rows_processed: number
+  rows_inserted: number
+  rows_updated: number
+  rows_skipped: number
+  rows_failed: number
+}
+
+export interface ImportRowOutcome {
+  id: string
+  batch_id: string
+  tab_name: string
+  row_number: number
+  field_name: string | null
+  outcome: 'failed' | 'skipped'
+  message: string
+  created_at: string
 }

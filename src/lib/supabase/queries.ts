@@ -2,7 +2,7 @@ import { createClient } from './client'
 import type {
   Employee, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, EmployeeWithWellness, TeamStats,
-  RiskLevel, RecoveryStatus,
+  RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
 } from '@/types'
 
 export function getRecoveryStatus(score: number | null): RecoveryStatus {
@@ -228,4 +228,26 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { employees: enriched, stats, interventions }
+}
+
+export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('upload_batches')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOutcome[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('import_row_outcomes')
+    .select('*')
+    .eq('batch_id', batchId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
 }

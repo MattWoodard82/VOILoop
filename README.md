@@ -100,6 +100,33 @@ src/
 
 ---
 
+## WHOOP Import Persistence (Issue #2)
+
+The importer now persists each upload as a tracked batch:
+- `upload_batches` stores upload metadata + run status/counts.
+- Normalized records in `workouts`, `daily_wellness`, and `habits` are linked to `source_batch_id`.
+- `import_row_outcomes` stores row-level failures/skips for review/export.
+
+### Local verification runbook (no hosted demo changes)
+1. Use a local/dev Supabase project for schema testing.
+2. Apply `supabase-schema.sql` to that local/dev project.
+3. Run the app and import a WHOOP workbook from `/admin/import`.
+4. Verify:
+   - `upload_batches` has a run with `completed`, `partial`, or `failed` status.
+   - Upserts landed in normalized tables with `source_batch_id` set.
+   - `import_row_outcomes` contains row-level failures when validation or DB writes fail.
+5. Re-upload the same file and confirm there are no duplicate logical records.
+
+> This branch does not apply schema changes to the hosted demo Supabase automatically.  
+> Schema updates are repository SQL changes and should be applied only to the environment you choose.
+
+### Retention/archival guidance
+- Keep `upload_batches` + `import_row_outcomes` online for active troubleshooting and auditability.
+- Archive older raw upload artifacts and historical row outcomes to cold storage based on pilot policy.
+- Preserve file hash + batch status history so replay/idempotency behavior remains explainable.
+
+---
+
 ## Key Data Fields (Travis — exact June 9 2026)
 | Metric | Value |
 |--------|-------|

@@ -17,9 +17,26 @@ create table if not exists employees (
   created_at    timestamptz default now()
 );
 
+create table if not exists upload_batches (
+  id               uuid primary key default gen_random_uuid(),
+  imported_by      uuid references auth.users(id) on delete set null,
+  file_name        text not null,
+  file_size_bytes  bigint not null default 0 check (file_size_bytes >= 0),
+  file_hash_sha256 text not null,
+  status           text not null default 'pending' check (status in ('pending', 'processing', 'completed', 'partial', 'failed')),
+  started_at       timestamptz not null default now(),
+  completed_at     timestamptz,
+  rows_processed   int not null default 0,
+  rows_inserted    int not null default 0,
+  rows_updated     int not null default 0,
+  rows_skipped     int not null default 0,
+  rows_failed      int not null default 0
+);
+
 create table if not exists daily_wellness (
   id                 uuid primary key default gen_random_uuid(),
   employee_id        text references employees(id) on delete cascade,
+  source_batch_id    uuid references upload_batches(id) on delete set null,
   date               date not null,
   recovery_score     int,
   hrv_ms             int,
@@ -44,6 +61,7 @@ create table if not exists daily_wellness (
 create table if not exists workouts (
   id           uuid primary key default gen_random_uuid(),
   employee_id  text references employees(id) on delete cascade,
+  source_batch_id uuid references upload_batches(id) on delete set null,
   date         date not null,
   start_time   timestamptz,
   end_time     timestamptz,
@@ -66,6 +84,7 @@ create table if not exists workouts (
 create table if not exists habits (
   id               uuid primary key default gen_random_uuid(),
   employee_id      text references employees(id) on delete cascade,
+  source_batch_id  uuid references upload_batches(id) on delete set null,
   date             date not null,
   alcohol          boolean,
   caffeine         boolean,
@@ -120,16 +139,22 @@ create table if not exists interventions (
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
 create index if not exists idx_wellness_emp_date    on daily_wellness(employee_id, date desc);
+create index if not exists idx_wellness_batch_id    on daily_wellness(source_batch_id);
 create index if not exists idx_workouts_emp_date    on workouts(employee_id, date desc);
+create index if not exists idx_workouts_batch_id    on workouts(source_batch_id);
 create index if not exists idx_habits_emp_date      on habits(employee_id, date desc);
+create index if not exists idx_habits_batch_id      on habits(source_batch_id);
 create index if not exists idx_pulse_emp_date       on pulse_surveys(employee_id, date desc);
 create index if not exists idx_interventions_emp    on interventions(employee_id);
 create index if not exists idx_interventions_status on interventions(outcome);
+create index if not exists idx_upload_batches_status_started_at on upload_batches(status, started_at desc);
+create index if not exists idx_upload_batches_file_hash on upload_batches(file_hash_sha256);
 
 -- ─── Import audit log ─────────────────────────────────────────────────────────
 
 create table if not exists import_logs (
   id             uuid primary key default gen_random_uuid(),
+  batch_id       uuid references upload_batches(id) on delete set null,
   imported_by    uuid references auth.users(id) on delete set null,
   file_name      text not null,
   imported_at    timestamptz default now(),
@@ -140,6 +165,26 @@ create table if not exists import_logs (
   rows_failed    int default 0,
   error_detail   jsonb
 );
+
+create table if not exists import_row_outcomes (
+  id         uuid primary key default gen_random_uuid(),
+  batch_id   uuid not null references upload_batches(id) on delete cascade,
+  tab_name   text not null,
+  row_number int not null,
+  field_name text,
+  outcome    text not null check (outcome in ('failed', 'skipped')),
+  message    text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_import_row_outcomes_batch on import_row_outcomes(batch_id);
+create index if not exists idx_import_row_outcomes_batch_tab on import_row_outcomes(batch_id, tab_name);
+
+-- Backfill/compatibility for environments that already created baseline tables.
+alter table if exists daily_wellness add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists workouts add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
 
 -- ─── Row Level Security (optional — enable for multi-tenant) ──────────────────
 -- alter table employees enable row level security;
