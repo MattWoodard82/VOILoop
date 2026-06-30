@@ -45,6 +45,8 @@ create table if not exists workouts (
   id           uuid primary key default gen_random_uuid(),
   employee_id  text references employees(id) on delete cascade,
   date         date not null,
+  start_time   timestamptz,
+  end_time     timestamptz,
   activity     text,
   duration_min int,
   strain       numeric(5,2),
@@ -56,7 +58,9 @@ create table if not exists workouts (
   zone3_pct    int,
   zone4_pct    int,
   zone5_pct    int,
-  unique (employee_id, date)
+  -- start_time uniquely identifies a workout session per employee; date alone is not sufficient
+  -- because multiple workouts may occur on the same day
+  unique (employee_id, start_time)
 );
 
 create table if not exists habits (
@@ -121,6 +125,21 @@ create index if not exists idx_habits_emp_date      on habits(employee_id, date 
 create index if not exists idx_pulse_emp_date       on pulse_surveys(employee_id, date desc);
 create index if not exists idx_interventions_emp    on interventions(employee_id);
 create index if not exists idx_interventions_status on interventions(outcome);
+
+-- ─── Import audit log ─────────────────────────────────────────────────────────
+
+create table if not exists import_logs (
+  id             uuid primary key default gen_random_uuid(),
+  imported_by    uuid references auth.users(id) on delete set null,
+  file_name      text not null,
+  imported_at    timestamptz default now(),
+  rows_processed int default 0,
+  rows_inserted  int default 0,
+  rows_updated   int default 0,
+  rows_skipped   int default 0,
+  rows_failed    int default 0,
+  error_detail   jsonb
+);
 
 -- ─── Row Level Security (optional — enable for multi-tenant) ──────────────────
 -- alter table employees enable row level security;

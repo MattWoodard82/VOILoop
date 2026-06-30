@@ -3,7 +3,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_ROUTES = ['/login']
 const ADMIN_ONLY = ['/admin']
-const STAFF_ROUTES = ['/executive', '/team', '/pulse', '/interventions', '/outcomes']
+// /admin/import is accessible to staff; list it before ADMIN_ONLY so it takes priority
+const STAFF_ROUTES = ['/executive', '/team', '/pulse', '/interventions', '/outcomes', '/admin/import']
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
@@ -51,13 +52,18 @@ export async function middleware(request: NextRequest) {
 
   const role = roleData?.role
 
-  if (ADMIN_ONLY.some(r => pathname.startsWith(r))) {
+  // Check staff-accessible routes before admin-only routes so explicitly
+  // whitelisted sub-paths (e.g. /admin/import) aren't blocked by the admin check.
+  const isStaffRoute = STAFF_ROUTES.some(r => pathname.startsWith(r))
+  const isAdminOnly = !isStaffRoute && ADMIN_ONLY.some(r => pathname.startsWith(r))
+
+  if (isAdminOnly) {
     if (role !== 'admin') {
       return NextResponse.redirect(new URL('/executive', request.url))
     }
   }
 
-  if (STAFF_ROUTES.some(r => pathname.startsWith(r))) {
+  if (isStaffRoute) {
     if (!role || role === 'employee') {
       return NextResponse.redirect(new URL('/my', request.url))
     }
