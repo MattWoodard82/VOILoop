@@ -1,19 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
-import { parseWorkbook } from '@/lib/whoop/parser'
+import { TAB_EXERCISE, TAB_MANUAL, TAB_SLEEP, TAB_STRESS, parseWorkbook, type ParsedWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
 import { createHash } from 'crypto'
 
 export const runtime = 'nodejs'
-// Increase body size limit for xlsx files (default 4MB is often too small)
+// Increase body size limit for WHOOP uploads
 export const maxDuration = 60
 const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return 'unknown error'
+}
+
+function inferCsvWorkbookTabs(workbook: ParsedWorkbook): ParsedWorkbook {
+  const sheetNames = Object.keys(workbook)
+  const hasNamedWhoopTabs = [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => sheetNames.includes(tab))
+  if (hasNamedWhoopTabs) return workbook
+
+  const firstSheetName = sheetNames[0]
+  if (!firstSheetName) return workbook
+  const sourceRows = workbook[firstSheetName] ?? []
+  if (!sourceRows.length) return workbook
+
+  const columns = new Set(Object.keys(sourceRows[0]))
+  const hasExerciseColumns = columns.has('Workout start time') || columns.has('Activity name')
+  const hasWellnessColumns = columns.has('Cycle start time')
+  const hasManualColumns = columns.has('Question text') && columns.has('Answered yes')
+
+  const inferred: ParsedWorkbook = {}
+  if (hasExerciseColumns) inferred[TAB_EXERCISE] = sourceRows
+  if (hasWellnessColumns) inferred[TAB_SLEEP] = sourceRows
+  if (hasManualColumns) inferred[TAB_MANUAL] = sourceRows
+  return Object.keys(inferred).length ? inferred : workbook
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -56,8 +78,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const fileName = file.name
-  if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.csv')) {
-    return NextResponse.json({ error: 'Only .xlsx and .csv files are supported' }, { status: 400 })
+  const isCsv = fileName.toLowerCase().endsWith('.csv')
+  if (!isCsv) {
+    return NextResponse.json({ error: 'Only .csv files are supported' }, { status: 400 })
   }
 
   // Read file buffer
@@ -72,20 +95,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Failed to parse file: ${toErrorMessage(error)}` }, { status: 400 })
   }
 
+  wb = inferCsvWorkbookTabs(wb)
+
   // Validate tab structure (FR-2, FR-3)
   const structure = validateTabStructure(wb)
   if (!structure.valid) {
-    const details: string[] = []
-    if (structure.missingRequiredTabs.length) {
-      details.push(`Missing required tabs: ${structure.missingRequiredTabs.join(', ')}`)
+    const hasAnyRecognizedCsvTab = [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => wb[tab]?.length)
+    if (isCsv && hasAnyRecognizedCsvTab && Object.keys(structure.missingColumns).length === 0) {
+      // CSV imports can legitimately contain one WHOOP slice; allow row-level validators to handle data quality.
+    } else {
+      const details: string[] = []
+      if (structure.missingRequiredTabs.length) {
+        details.push(`Missing required tabs: ${structure.missingRequiredTabs.join(', ')}`)
+      }
+      if (structure.missingAtLeastOneTab) {
+        details.push('At least one of "Stress" or "Sleep" tabs must be present')
+      }
+      for (const [tab, cols] of Object.entries(structure.missingColumns)) {
+        details.push(`Tab "${tab}" missing columns: ${cols.join(', ')}`)
+      }
+      if (isCsv && !hasAnyRecognizedCsvTab) {
+        details.push('CSV did not match recognized WHOOP export columns')
+      }
+      return NextResponse.json({ error: isCsv ? 'Invalid CSV structure' : 'Invalid workbook structure', details }, { status: 422 })
     }
-    if (structure.missingAtLeastOneTab) {
-      details.push('At least one of "Stress" or "Sleep" tabs must be present')
-    }
-    for (const [tab, cols] of Object.entries(structure.missingColumns)) {
-      details.push(`Tab "${tab}" missing columns: ${cols.join(', ')}`)
-    }
-    return NextResponse.json({ error: 'Invalid workbook structure', details }, { status: 422 })
   }
 
   // Map all tabs

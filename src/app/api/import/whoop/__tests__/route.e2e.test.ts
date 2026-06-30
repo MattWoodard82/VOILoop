@@ -29,10 +29,10 @@ jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
 }))
 
-function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
+function makeRequest(fileName = 'whoop-export.csv'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('workbook')], fileName, {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    type: 'text/csv',
   })
   formData.append('file', file)
   return {
@@ -169,7 +169,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       batchId: 'batch-1',
       status: 'completed',
       success: true,
-      fileName: 'whoop-export.xlsx',
+      fileName: 'whoop-export.csv',
       tabs: [
         { tab: 'Exercise', processed: 2, inserted: 1, updated: 1, skipped: 0, failed: 0 },
         { tab: 'Stress/Sleep', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
@@ -202,7 +202,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const body = await response.json()
     expect(body.success).toBe(true)
-    expect(body.fileName).toBe('whoop-export.xlsx')
+    expect(body.fileName).toBe('whoop-export.csv')
     expect(body.totals).toEqual({
       processed: 4,
       inserted: 3,
@@ -216,7 +216,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
-      fileName: 'whoop-export.xlsx',
+      fileName: 'whoop-export.csv',
       fileSize: expect.any(Number),
       fileHash: expect.any(String),
       exerciseResult: expect.objectContaining({ processed: 2 }),
