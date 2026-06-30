@@ -120,38 +120,38 @@ async function seed() {
 
   // ── Workouts ───────────────────────────────────────────────────────────────
   const workouts = [
-    { employee_id: 'EMP001', date: DATE, activity: 'Running', duration_min: 35,
+    { employee_id: 'EMP001', date: DATE, start_time: `${DATE}T06:15:00Z`, end_time: `${DATE}T06:50:00Z`, activity: 'Running', duration_min: 35,
       strain: 9.2, calories: 320, max_hr: 172, avg_hr: 138,
       zone1_pct: 30, zone2_pct: 22, zone3_pct: 18, zone4_pct: 20, zone5_pct: 10 },
-    { employee_id: 'EMP002', date: DATE, activity: 'Yoga', duration_min: 42,
+    { employee_id: 'EMP002', date: DATE, start_time: `${DATE}T05:50:00Z`, end_time: `${DATE}T06:32:00Z`, activity: 'Yoga', duration_min: 42,
       strain: 4.2, calories: 158, max_hr: 124, avg_hr: 96,
       zone1_pct: 80, zone2_pct: 14, zone3_pct: 4, zone4_pct: 2, zone5_pct: 0 },
-    { employee_id: 'EMP003', date: DATE, activity: 'Weightlifting', duration_min: 48,
+    { employee_id: 'EMP003', date: DATE, start_time: `${DATE}T07:00:00Z`, end_time: `${DATE}T07:48:00Z`, activity: 'Weightlifting', duration_min: 48,
       strain: 8.7, calories: 272, max_hr: 159, avg_hr: 109,
       zone1_pct: 47, zone2_pct: 15, zone3_pct: 18, zone4_pct: 15, zone5_pct: 5 },
-    { employee_id: 'EMP004', date: DATE, activity: 'Cycling', duration_min: 55,
+    { employee_id: 'EMP004', date: DATE, start_time: `${DATE}T11:10:00Z`, end_time: `${DATE}T12:05:00Z`, activity: 'Cycling', duration_min: 55,
       strain: 11.8, calories: 458, max_hr: 177, avg_hr: 147,
       zone1_pct: 21, zone2_pct: 18, zone3_pct: 22, zone4_pct: 27, zone5_pct: 12 },
-    { employee_id: 'EMP005', date: DATE, activity: 'Walking', duration_min: 18,
+    { employee_id: 'EMP005', date: DATE, start_time: `${DATE}T10:20:00Z`, end_time: `${DATE}T10:38:00Z`, activity: 'Walking', duration_min: 18,
       strain: 3.1, calories: 88, max_hr: 142, avg_hr: 109,
       zone1_pct: 66, zone2_pct: 21, zone3_pct: 10, zone4_pct: 3, zone5_pct: 0 },
-    { employee_id: 'EMP006', date: DATE, activity: 'Running', duration_min: 36,
+    { employee_id: 'EMP006', date: DATE, start_time: `${DATE}T06:40:00Z`, end_time: `${DATE}T07:16:00Z`, activity: 'Running', duration_min: 36,
       strain: 9.1, calories: 316, max_hr: 170, avg_hr: 137,
       zone1_pct: 31, zone2_pct: 23, zone3_pct: 17, zone4_pct: 20, zone5_pct: 9 },
-    { employee_id: 'EMP007', date: DATE, activity: 'Yoga', duration_min: 45,
+    { employee_id: 'EMP007', date: DATE, start_time: `${DATE}T17:20:00Z`, end_time: `${DATE}T18:05:00Z`, activity: 'Yoga', duration_min: 45,
       strain: 4.7, calories: 160, max_hr: 121, avg_hr: 94,
       zone1_pct: 83, zone2_pct: 13, zone3_pct: 4, zone4_pct: 0, zone5_pct: 0 },
-    { employee_id: 'EMP009', date: DATE, activity: 'Weightlifting', duration_min: 44,
+    { employee_id: 'EMP009', date: DATE, start_time: `${DATE}T08:10:00Z`, end_time: `${DATE}T08:54:00Z`, activity: 'Weightlifting', duration_min: 44,
       strain: 8.3, calories: 260, max_hr: 161, avg_hr: 110,
       zone1_pct: 46, zone2_pct: 15, zone3_pct: 19, zone4_pct: 15, zone5_pct: 5 },
-    { employee_id: 'EMP010', date: DATE, activity: 'Running', duration_min: 30,
+    { employee_id: 'EMP010', date: DATE, start_time: `${DATE}T05:40:00Z`, end_time: `${DATE}T06:10:00Z`, activity: 'Running', duration_min: 30,
       strain: 7.9, calories: 267, max_hr: 168, avg_hr: 134,
       zone1_pct: 33, zone2_pct: 24, zone3_pct: 18, zone4_pct: 18, zone5_pct: 7 },
   ]
 
   const { error: woErr } = await supabase
     .from('workouts')
-    .upsert(workouts, { onConflict: 'employee_id,date' })
+    .upsert(workouts, { onConflict: 'employee_id,start_time' })
   if (woErr) { console.error('Workouts:', woErr); process.exit(1) }
   console.log('✅ Workouts seeded')
 
