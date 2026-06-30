@@ -192,6 +192,21 @@ alter table if exists workouts add column if not exists source_batch_id uuid ref
 alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
 alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
 
+-- ─── Import audit log ─────────────────────────────────────────────────────────
+
+create table if not exists import_logs (
+  id             uuid primary key default gen_random_uuid(),
+  imported_by    uuid references auth.users(id) on delete set null,
+  file_name      text not null,
+  imported_at    timestamptz default now(),
+  rows_processed int default 0,
+  rows_inserted  int default 0,
+  rows_updated   int default 0,
+  rows_skipped   int default 0,
+  rows_failed    int default 0,
+  error_detail   jsonb
+);
+
 -- ─── Row Level Security (optional — enable for multi-tenant) ──────────────────
 -- alter table employees enable row level security;
 -- alter table daily_wellness enable row level security;

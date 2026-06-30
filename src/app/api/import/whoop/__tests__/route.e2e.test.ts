@@ -4,7 +4,6 @@ import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
-import { persistWhoopImport } from '@/lib/whoop/persistence'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
@@ -25,14 +24,10 @@ jest.mock('@/lib/whoop/mappers', () => ({
   mapManualEntries: jest.fn(),
 }))
 
-jest.mock('@/lib/whoop/persistence', () => ({
-  persistWhoopImport: jest.fn(),
-}))
-
-function makeRequest(fileName = 'whoop-export.csv'): NextRequest {
+function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('workbook')], fileName, {
-    type: 'text/csv',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
   return {
@@ -51,7 +46,6 @@ describe('WHOOP import e2e flow (route-level)', () => {
   const mockMapExercise = mapExercise as jest.MockedFunction<typeof mapExercise>
   const mockMapWellness = mapWellness as jest.MockedFunction<typeof mapWellness>
   const mockMapManualEntries = mapManualEntries as jest.MockedFunction<typeof mapManualEntries>
-  const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -164,35 +158,40 @@ describe('WHOOP import e2e flow (route-level)', () => {
       ],
     })
 
-    const roleLookup = jest.fn(() => ({
-      maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+    const roleSingle = jest.fn(async () => ({ data: { role: 'admin' }, error: null }))
+    const workoutsLte = jest.fn(async () => ({
+      data: [{ employee_id: 'E1', start_time: '2024-01-15T08:00:00.000Z' }],
+      error: null,
     }))
-    mockPersistWhoopImport.mockResolvedValue({
-      batchId: 'batch-1',
-      status: 'completed',
-      success: true,
-      fileName: 'whoop-export.csv',
-      tabs: [
-        { tab: 'Exercise', processed: 2, inserted: 1, updated: 1, skipped: 0, failed: 0 },
-        { tab: 'Stress/Sleep', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
-        { tab: 'Manual Entries', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
-      ],
-      totals: {
-        processed: 4,
-        inserted: 3,
-        updated: 1,
-        skipped: 0,
-        failed: 0,
-      },
-      errors: [],
-    })
+    const workoutsGte = jest.fn(() => ({ lte: workoutsLte }))
+    const workoutsIn = jest.fn(() => ({ gte: workoutsGte }))
+    const workoutsSelect = jest.fn(() => ({ in: workoutsIn }))
+    const workoutsUpsert = jest.fn(async () => ({ error: null }))
+    const wellnessUpsert = jest.fn(async () => ({ error: null }))
+    const habitsUpsert = jest.fn(async () => ({ error: null }))
+    const auditInsert = jest.fn(async () => ({ error: null }))
 
     const supabase = {
       from: jest.fn((table: string) => {
         if (table === 'user_roles') {
           return {
-            select: jest.fn(() => ({ eq: roleLookup })),
+            select: jest.fn(() => ({ single: roleSingle })),
           }
+        }
+        if (table === 'workouts') {
+          return {
+            select: workoutsSelect,
+            upsert: workoutsUpsert,
+          }
+        }
+        if (table === 'daily_wellness') {
+          return { upsert: wellnessUpsert }
+        }
+        if (table === 'habits') {
+          return { upsert: habitsUpsert }
+        }
+        if (table === 'import_logs') {
+          return { insert: auditInsert }
         }
         throw new Error(`Unexpected table ${table}`)
       }),
@@ -204,7 +203,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const body = await response.json()
     expect(body.success).toBe(true)
-    expect(body.fileName).toBe('whoop-export.csv')
+    expect(body.fileName).toBe('whoop-export.xlsx')
     expect(body.totals).toEqual({
       processed: 4,
       inserted: 3,
@@ -213,17 +212,13 @@ describe('WHOOP import e2e flow (route-level)', () => {
       failed: 0,
     })
 
-    expect(body.batchId).toBe('batch-1')
-    expect(body.status).toBe('completed')
-    expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
-      supabase,
-      userId: 'user-1',
-      fileName: 'whoop-export.csv',
-      fileSize: expect.any(Number),
-      fileHash: expect.any(String),
-      exerciseResult: expect.objectContaining({ processed: 2 }),
-      wellnessResult: expect.objectContaining({ processed: 1 }),
-      habitsResult: expect.objectContaining({ processed: 1 }),
+    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
+      imported_by: 'user-1',
+      file_name: 'whoop-export.xlsx',
+      rows_processed: 4,
+      rows_inserted: 3,
+      rows_updated: 1,
+      rows_failed: 0,
     }))
   })
 })

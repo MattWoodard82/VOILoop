@@ -4,7 +4,6 @@ import { Upload, CheckCircle, XCircle, AlertCircle, Download, RotateCcw } from '
 import type { ImportResult, ImportRowError } from '@/lib/whoop/types'
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'partial' | 'error'
-const MAX_DISPLAYED_ERRORS = 100
 
 export function WhoopImportClient() {
   const [status, setStatus] = useState<UploadStatus>('idle')
@@ -14,10 +13,9 @@ export function WhoopImportClient() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(async (file: File) => {
-    const lowerFileName = file.name.toLowerCase()
-    if (!lowerFileName.endsWith('.xlsx') && !lowerFileName.endsWith('.csv')) {
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
       setStatus('error')
-      setStructureErrors(['Only .xlsx and .csv files are supported'])
+      setStructureErrors(['Only .xlsx files are supported'])
       return
     }
 
@@ -78,6 +76,7 @@ export function WhoopImportClient() {
       fileInputRef.current?.click()
     }
   }
+
   const downloadErrors = () => {
     if (!result?.errors.length) return
     const csv = [
@@ -90,7 +89,7 @@ export function WhoopImportClient() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `import-errors-${result.fileName.replace(/\.(csv|xlsx)$/i, '')}.csv`
+    a.download = `import-errors-${result.fileName.replace(/\.xlsx$/, '')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -107,7 +106,8 @@ export function WhoopImportClient() {
       {/* Instructions */}
       <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
-          <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP workbook (<code>.xlsx</code>) or WHOOP CSV (<code>.csv</code>) with WHOOP column headers.
+          <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP export workbook (<code>.xlsx</code>) with
+          tabs: <em>Exercise</em>, <em>Stress</em> and/or <em>Sleep</em>, and optionally <em>Manual Entries</em>.
           <br />
           <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same file is safe — records are upserted, not duplicated.
         </div>
@@ -145,13 +145,13 @@ export function WhoopImportClient() {
               <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
                 Drop your WHOOP export here
               </div>
-              <div style={{ color: '#A5ACAF', fontSize: 13 }}>or click to browse — .xlsx or .csv</div>
+              <div style={{ color: '#A5ACAF', fontSize: 13 }}>or click to browse — .xlsx files only</div>
             </>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+            accept=".xlsx"
             style={{ display: 'none' }}
             onChange={onInputChange}
             disabled={status === 'uploading'}
@@ -254,15 +254,15 @@ export function WhoopImportClient() {
                 </button>
               </div>
               <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #0a3560', borderRadius: 6 }}>
-                {result.errors.slice(0, MAX_DISPLAYED_ERRORS).map((e: ImportRowError, i: number) => (
+                {result.errors.slice(0, 100).map((e: ImportRowError, i: number) => (
                   <div key={i} style={{ padding: '7px 12px', borderBottom: '1px solid #0a3560', fontSize: 12 }}>
                     <span style={{ color: '#A5ACAF' }}>[{e.tab} row {e.row}]</span>{' '}
                     {e.field && <span style={{ color: '#eab308' }}>{e.field}: </span>}
                     <span style={{ color: '#fca5a5' }}>{e.message}</span>
                   </div>
                 ))}
-                {result.errors.length > MAX_DISPLAYED_ERRORS && (
-                  <div style={{ padding: '7px 12px', color: '#A5ACAF', fontSize: 12 }}>… and {result.errors.length - MAX_DISPLAYED_ERRORS} more (download CSV for full list)</div>
+                {result.errors.length > 100 && (
+                  <div style={{ padding: '7px 12px', color: '#A5ACAF', fontSize: 12 }}>… and {result.errors.length - 100} more (download CSV for full list)</div>
                 )}
               </div>
             </div>

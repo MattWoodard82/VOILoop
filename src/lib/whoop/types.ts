@@ -141,8 +141,6 @@ export interface ImportTabResult {
 }
 
 export interface ImportResult {
-  batchId?: string
-  status?: ImportBatchStatus
   success: boolean
   fileName: string
   tabs: ImportTabResult[]
@@ -155,5 +153,3 @@ export interface ImportResult {
   }
   errors: ImportRowError[]
 }
-
-export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed'
