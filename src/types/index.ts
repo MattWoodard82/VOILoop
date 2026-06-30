@@ -42,8 +42,6 @@ export interface Workout {
   id: string
   employee_id: string
   date: string
-  start_time: string
-  end_time: string | null
   activity: string | null
   duration_min: number | null
   strain: number | null
