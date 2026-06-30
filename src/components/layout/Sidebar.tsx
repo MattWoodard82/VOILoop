@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { BarChart2, Users, MessageSquare, Target, TrendingUp, Upload } from 'lucide-react'
+import { BarChart2, Users, MessageSquare, Target, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -13,9 +13,6 @@ const NAV = [
   { label: 'Programs', items: [
     { href: '/interventions', label: 'Interventions', icon: Target },
     { href: '/outcomes', label: 'Outcomes', icon: TrendingUp },
-  ]},
-  { label: 'Admin', items: [
-    { href: '/admin/import', label: 'WHOOP Import', icon: Upload },
   ]},
 ]
 

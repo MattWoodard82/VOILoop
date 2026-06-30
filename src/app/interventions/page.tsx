@@ -4,7 +4,7 @@ import { KpiCard, Card, Badge, Alert, TimelineItem } from '@/components/ui'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 60
 
 export default async function InterventionsPage() {
   const [interventions, employees] = await Promise.all([
