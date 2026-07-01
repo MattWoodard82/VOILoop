@@ -15,23 +15,29 @@ Seahawks brand: Navy #002244 · Action Green #69BE28 · Wolf Grey #A5ACAF
 npm install
 ```
 
-### 2. Set up Supabase
-1. Go to [supabase.com](https://supabase.com) → New project → name it `voiloop`
-2. Go to **Settings → API** and copy:
-   - Project URL
-   - anon public key
-3. Create `.env.local`:
+### 2. Set up Supabase (local)
+```bash
+npx supabase init
+npx supabase start
+```
+Use these local values in `.env.local`:
+- `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from supabase start output>`
+
+### 3. Create environment file
 ```bash
 cp .env.example .env.local
-# Paste your URL and key
+# PowerShell:
+# Copy-Item .env.example .env.local
+```
+Then update `NEXT_PUBLIC_SUPABASE_ANON_KEY` with your local anon key.
+
+### 4. Create the database schema
+```bash
+npx supabase db query --local -f supabase-schema.sql
 ```
 
-### 3. Create the database schema
-1. In Supabase → **SQL Editor → New query**
-2. Paste the contents of `supabase-schema.sql`
-3. Click **Run**
-
-### 4. Seed the database
+### 5. Seed the database
 ```bash
 npm run db:seed
 ```
@@ -41,7 +47,7 @@ This inserts:
 - 4 interventions (2 pending, 1 in progress, 1 monitoring)
 - Pulse survey responses for 9 employees
 
-### 5. Run the dev server
+### 6. Run the dev server
 ```bash
 npm run dev
 ```

@@ -5,6 +5,7 @@
 
 create table if not exists employees (
   id            text primary key,
+  auth_user_id  uuid unique,
   first_name    text not null,
   last_name     text not null,
   department    text,
@@ -32,7 +33,15 @@ create table if not exists upload_batches (
   rows_skipped     int not null default 0,
   rows_failed      int not null default 0
 );
+create table if not exists user_roles (
+  id         smallint primary key default 1 check (id = 1),
+  role       text not null check (role in ('admin', 'staff', 'employee')) default 'staff',
+  updated_at timestamptz default now()
+);
 
+insert into user_roles (id, role)
+values (1, 'staff')
+on conflict (id) do nothing;
 create table if not exists daily_wellness (
   id                 uuid primary key default gen_random_uuid(),
   employee_id        text references employees(id) on delete cascade,
