@@ -1,6 +1,6 @@
 import {
   toFloat, toInt, toBool, toISOString, toLocalDate, clampPct, nonNegative,
-  validateTabStructure, validateExerciseRow, validateWellnessRow, validateManualRow,
+  validateTabStructure, validateExerciseRow, validateWellnessRow, validateManualRow, resolveWellnessDate,
 } from '../validators'
 import type { ParsedWorkbook } from '../parser'
 import type { ImportRowError } from '../types'
@@ -168,6 +168,18 @@ describe('validateExerciseRow', () => {
     expect(result).not.toBeNull()
     expect(result!.zone1).toBeNull()
   })
+
+  test('accepts alternate HR zone column names from xlsx export', () => {
+    const errors: ImportRowError[] = []
+    const row = {
+      ...validRow,
+      'HR Zone 1 (% in zone)': undefined,
+      'HR Zone 1 %': 12,
+    }
+    const result = validateExerciseRow(row, 2, errors)
+    expect(result).not.toBeNull()
+    expect(result!.zone1).toBe(12)
+  })
 })
 
 describe('validateWellnessRow', () => {
@@ -196,6 +208,17 @@ describe('validateWellnessRow', () => {
     const result = validateWellnessRow('Stress', row, 2, errors)
     expect(result).not.toBeNull()
     expect(result!.recoveryScore).toBeNull()
+  })
+
+  test('derives the wellness date from wake onset when cycle start is obscured', () => {
+    const date = resolveWellnessDate({
+      'Cycle start time': '##########',
+      'Cycle end time': '##########',
+      'Cycle timezone': 'UTC-06:00',
+      'Wake onset': '2024-01-15 07:15:00',
+    })
+
+    expect(date).toBe('2024-01-15')
   })
 })
 

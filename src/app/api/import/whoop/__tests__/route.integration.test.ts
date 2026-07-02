@@ -4,6 +4,7 @@ import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
@@ -22,16 +23,23 @@ jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
 }))
 
+jest.mock('@/lib/whoop/workbook-context', () => ({
+  prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
+    workbook,
+    employeeProfiles: [],
+  })),
+}))
+
 jest.mock('@/lib/whoop/mappers', () => ({
   mapExercise: jest.fn(() => ({ workouts: [], errors: [], processed: 0 })),
   mapWellness: jest.fn(() => ({ wellness: [], errors: [], processed: 0 })),
   mapManualEntries: jest.fn(() => ({ habits: [], errors: [], processed: 0 })),
 }))
 
-function makeRequest(fileName = 'whoop.csv', contentType = 'multipart/form-data; boundary=test'): NextRequest {
+function makeRequest(fileName = 'whoop.xlsx', contentType = 'multipart/form-data; boundary=test'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('dummy')], fileName, {
-    type: 'text/csv',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
   return {
@@ -48,10 +56,16 @@ describe('POST /api/import/whoop integration', () => {
   const mockParseWorkbook = parseWorkbook as jest.MockedFunction<typeof parseWorkbook>
   const mockValidateTabStructure = validateTabStructure as jest.MockedFunction<typeof validateTabStructure>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
+  const mockPrepareWhoopWorkbookForImport =
+    prepareWhoopWorkbookForImport as jest.MockedFunction<typeof prepareWhoopWorkbookForImport>
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockPersistWhoopImport.mockReset()
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      employeeProfiles: [],
+    })
   })
 
   test('returns 401 for unauthenticated requests', async () => {
@@ -62,7 +76,7 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Unauthorized' })
   })
 
-  test('returns 403 for authenticated users without staff/admin role', async () => {
+  test('allows authenticated employee users through role verification', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
@@ -71,22 +85,25 @@ describe('POST /api/import/whoop integration', () => {
           eq: jest.fn(() => ({
             maybeSingle: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
           })),
+          single: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
         })),
       })),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest())
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' })
+    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid content type: expected multipart/form-data',
+    })
   })
 
-  test('returns 422 when csv structure is invalid', async () => {
+  test('returns 422 when workbook structure is invalid', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
       from: jest.fn((table: string) => {
-        if (table === 'user_roles') {
+        if (table === 'user_access') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
@@ -95,11 +112,22 @@ describe('POST /api/import/whoop integration', () => {
             })),
           }
         }
+        if (table === 'user_roles') {
+          return {
+            select: jest.fn(() => ({
+              single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+            })),
+          }
+        }
         return {}
       }),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
     mockParseWorkbook.mockReturnValue({} as never)
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      employeeProfiles: [],
+    })
     mockValidateTabStructure.mockReturnValue({
       valid: false,
       missingRequiredTabs: ['Exercise'],
@@ -111,7 +139,7 @@ describe('POST /api/import/whoop integration', () => {
 
     expect(response.status).toBe(422)
     const body = await response.json()
-    expect(body.error).toBe('Invalid CSV structure')
+    expect(body.error).toBe('Invalid workbook structure')
     expect(body.details).toContain('Missing required tabs: Exercise')
     expect(body.details).toContain('At least one of "Stress" or "Sleep" tabs must be present')
     expect(body.details).toContain('Tab "Sleep" missing columns: Cycle start time')
@@ -126,19 +154,20 @@ describe('POST /api/import/whoop integration', () => {
           eq: jest.fn(() => ({
             maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
           })),
+          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
         })),
       })),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.csv', 'application/json'))
+    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
       error: 'Invalid content type: expected multipart/form-data',
     })
   })
 
-  test('returns 400 for unsupported file extension uploads', async () => {
+  test('returns 400 for non-xlsx uploads', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
@@ -147,15 +176,16 @@ describe('POST /api/import/whoop integration', () => {
           eq: jest.fn(() => ({
             maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
           })),
+          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
         })),
       })),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.txt'))
+    const response = await POST(makeRequest('whoop.csv'))
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'Only .xlsx and .csv files are supported',
+      error: 'Only .xlsx WHOOP export files are supported',
     })
   })
 })

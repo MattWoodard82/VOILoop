@@ -1,7 +1,9 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { BarChart2, Users, MessageSquare, Target, TrendingUp, Upload } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { BarChart2, Users, MessageSquare, Target, TrendingUp } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -15,12 +17,47 @@ const NAV = [
     { href: '/outcomes', label: 'Outcomes', icon: TrendingUp },
   ]},
   { label: 'Admin', items: [
-    { href: '/admin/import', label: 'WHOOP Import', icon: Upload },
+    { href: '/admin/accounts', label: 'Account Provisioning', icon: Users },
   ]},
 ]
 
 export function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [signingOut, setSigningOut] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadUser() {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.getUser()
+      if (!mounted || error) return
+      setEmail(data.user?.email ?? '')
+    }
+
+    void loadUser()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const initials = useMemo(() => {
+    const source = email.trim()
+    if (!source) return 'U'
+    return source.slice(0, 2).toUpperCase()
+  }, [email])
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
+
   return (
     <aside className="w-[220px] min-w-[220px] flex flex-col"
       style={{ background: '#002244', borderRight: '1px solid #0a3560' }}>
@@ -62,15 +99,25 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="flex items-center gap-2 px-4 py-3"
+      <div className="px-4 py-3"
         style={{ borderTop: '1px solid #0a3560' }}>
-        <div style={{ width: 28, height: 28, borderRadius: 6, background: '#69BE28', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#002244', flexShrink: 0 }}>
-          TB
+        <div className="flex items-center gap-2">
+          <div style={{ width: 28, height: 28, borderRadius: 6, background: '#69BE28', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#002244', flexShrink: 0 }}>
+            {initials}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {email || 'Signed in'}
+            </div>
+          </div>
         </div>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 500, color: '#fff' }}>Travis Brandenburgh</div>
-          <div style={{ fontSize: 10, color: '#A5ACAF' }}>COO · Manager</div>
-        </div>
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          style={{ marginTop: 10, width: '100%', background: 'transparent', border: '1px solid #0a3560', borderRadius: 6, padding: '6px 10px', fontSize: 11, color: '#A5ACAF', cursor: signingOut ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif' }}
+        >
+          {signingOut ? 'Signing out...' : 'Sign out'}
+        </button>
       </div>
     </aside>
   )

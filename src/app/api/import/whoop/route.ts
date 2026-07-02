@@ -1,49 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
-import { TAB_EXERCISE, TAB_MANUAL, TAB_SLEEP, TAB_STRESS, parseWorkbook, type ParsedWorkbook } from '@/lib/whoop/parser'
+import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import {
+  prepareWhoopWorkbookForImport,
+  type WhoopEmployeeProfile,
+} from '@/lib/whoop/workbook-context'
 import { createHash } from 'crypto'
 
 export const runtime = 'nodejs'
 // Increase body size limit for WHOOP uploads
 export const maxDuration = 60
-const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   return 'unknown error'
 }
 
-function inferCsvWorkbookTabs(workbook: ParsedWorkbook): ParsedWorkbook {
-  const sheetNames = Object.keys(workbook)
-  const hasNamedWhoopTabs = [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => sheetNames.includes(tab))
-  if (hasNamedWhoopTabs) return workbook
-
-  const firstSheetName = sheetNames[0]
-  if (!firstSheetName) return workbook
-  const sourceRows = workbook[firstSheetName] ?? []
-  if (!sourceRows.length) return workbook
-
-  const columns = new Set(Object.keys(sourceRows[0]))
-  const hasExerciseColumns = columns.has('Workout start time') || columns.has('Activity name')
-  const hasWellnessColumns = columns.has('Cycle start time')
-  const hasManualColumns = columns.has('Question text') && columns.has('Answered yes')
-
-  const inferred: ParsedWorkbook = {}
-  if (hasExerciseColumns) inferred[TAB_EXERCISE] = sourceRows
-  if (hasWellnessColumns) inferred[TAB_SLEEP] = sourceRows
-  if (hasManualColumns) inferred[TAB_MANUAL] = sourceRows
-  return Object.keys(inferred).length ? inferred : workbook
-}
-
-function hasRecognizedCsvTab(workbook: ParsedWorkbook): boolean {
-  return [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL].some((tab) => workbook[tab]?.length)
-}
-
-function shouldAllowCsvWithPartialStructure(structure: ReturnType<typeof validateTabStructure>, workbook: ParsedWorkbook): boolean {
-  return hasRecognizedCsvTab(workbook) && Object.keys(structure.missingColumns).length === 0
+function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST205' || message.includes('user_access')
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -54,15 +33,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const supabase = createServerSupabaseClient()
-  const { data: roleData, error: roleError } = await supabase
-    .from('user_roles')
+  const { data: accessData, error: accessError } = await supabase
+    .from('user_access')
     .select('role')
     .eq('user_id', session.user.id)
     .maybeSingle()
-  if (roleError) {
-    return NextResponse.json({ error: `Failed to verify role: ${roleError.message}` }, { status: 500 })
+
+  let role = accessData?.role ?? null
+  if (accessError && !isMissingUserAccessTable(accessError)) {
+    return NextResponse.json({ error: `Failed to verify role: ${accessError.message}` }, { status: 500 })
   }
-  if (!roleData?.role || !WHOOP_IMPORT_ALLOWED_ROLES.has(roleData.role)) {
+
+  if (!role && accessError) {
+    const { data: legacyRoleData, error: legacyRoleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .single()
+    if (legacyRoleError) {
+      return NextResponse.json({ error: `Failed to verify role: ${legacyRoleError.message}` }, { status: 500 })
+    }
+    role = legacyRoleData?.role ?? null
+  }
+
+  if (!role) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -87,10 +80,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const fileName = file.name
-  const isCsv = fileName.toLowerCase().endsWith('.csv')
   const isXlsx = fileName.toLowerCase().endsWith('.xlsx')
-  if (!isCsv && !isXlsx) {
-    return NextResponse.json({ error: 'Only .xlsx and .csv files are supported' }, { status: 400 })
+  if (!isXlsx) {
+    return NextResponse.json({ error: 'Only .xlsx WHOOP export files are supported' }, { status: 400 })
   }
 
   // Read file buffer
@@ -105,35 +97,36 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Failed to parse file: ${toErrorMessage(error)}` }, { status: 400 })
   }
 
-  wb = inferCsvWorkbookTabs(wb)
-
   // Validate tab structure (FR-2, FR-3)
   const structure = validateTabStructure(wb)
   if (!structure.valid) {
-    if (isCsv && shouldAllowCsvWithPartialStructure(structure, wb)) {
-      // CSV imports can legitimately contain one WHOOP slice; allow row-level validators to handle data quality.
-    } else {
-      const details: string[] = []
-      if (structure.missingRequiredTabs.length) {
-        details.push(`Missing required tabs: ${structure.missingRequiredTabs.join(', ')}`)
-      }
-      if (structure.missingAtLeastOneTab) {
-        details.push('At least one of "Stress" or "Sleep" tabs must be present')
-      }
-      for (const [tab, cols] of Object.entries(structure.missingColumns)) {
-        details.push(`Tab "${tab}" missing columns: ${cols.join(', ')}`)
-      }
-      if (isCsv && !hasRecognizedCsvTab(wb)) {
-        details.push('CSV did not match recognized WHOOP export columns')
-      }
-      return NextResponse.json({ error: isCsv ? 'Invalid CSV structure' : 'Invalid workbook structure', details }, { status: 422 })
+    const details: string[] = []
+    if (structure.missingRequiredTabs.length) {
+      details.push(`Missing required tabs: ${structure.missingRequiredTabs.join(', ')}`)
     }
+    if (structure.missingAtLeastOneTab) {
+      details.push('At least one of "Stress" or "Sleep" tabs must be present')
+    }
+    for (const [tab, cols] of Object.entries(structure.missingColumns)) {
+      details.push(`Tab "${tab}" missing columns: ${cols.join(', ')}`)
+    }
+    return NextResponse.json({ error: 'Invalid workbook structure', details }, { status: 422 })
+  }
+
+  let preparedWorkbook = wb
+  let employeeProfiles: WhoopEmployeeProfile[] = []
+  try {
+    const prepared = await prepareWhoopWorkbookForImport(supabase, wb, session.user.id)
+    preparedWorkbook = prepared.workbook
+    employeeProfiles = prepared.employeeProfiles
+  } catch (error) {
+    return NextResponse.json({ error: toErrorMessage(error) }, { status: 422 })
   }
 
   // Map all tabs
-  const exerciseResult = mapExercise(wb)
-  const wellnessResult = mapWellness(wb)
-  const habitsResult = mapManualEntries(wb)
+  const exerciseResult = mapExercise(preparedWorkbook)
+  const wellnessResult = mapWellness(preparedWorkbook)
+  const habitsResult = mapManualEntries(preparedWorkbook)
 
   const fileHash = createHash('sha256').update(buffer).digest('hex')
 
@@ -147,6 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       exerciseResult,
       wellnessResult,
       habitsResult,
+      employeeProfiles,
     })
 
     return NextResponse.json(result, { status: 200 })

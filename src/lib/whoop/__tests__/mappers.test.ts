@@ -163,6 +163,57 @@ describe('mapWellness', () => {
     const { wellness } = mapWellness(wb)
     expect(wellness).toHaveLength(1)
   })
+
+  test('falls back to the matching sleep row when stress rows omit all date fields', () => {
+    const wb: ParsedWorkbook = {
+      Stress: [
+        {
+          'Employee Identifier': 'E1',
+          'Cycle start time': '##########',
+          'Cycle timezone': 'UTC-06:00',
+          'Sleep performance %': 88,
+          'Respiratory rate (rpm)': 14.3,
+          'Asleep duration (min)': 450,
+          'In bed duration (min)': 470,
+          'Light sleep duration (min)': 260,
+          'Deep (SWS) duration (min)': 90,
+          'REM duration (min)': 100,
+          'Awake duration (min)': 20,
+          'Sleep need (min)': 480,
+          'Sleep debt (min)': 15,
+          'Sleep efficiency %': 96,
+          'Sleep consistency %': 85,
+          'Day Strain': 14,
+        },
+      ],
+      Sleep: [
+        {
+          'Employee Identifier': 'E1',
+          'Cycle start time': '2024-01-14 22:41:02',
+          'Wake onset': '2024-01-15 07:15:00',
+          'Cycle timezone': 'UTC-06:00',
+          'Sleep performance %': 88,
+          'Respiratory rate (rpm)': 14.3,
+          'Asleep duration (min)': 450,
+          'In bed duration (min)': 470,
+          'Light sleep duration (min)': 260,
+          'Deep (SWS) duration (min)': 90,
+          'REM duration (min)': 100,
+          'Awake duration (min)': 20,
+          'Sleep need (min)': 480,
+          'Sleep debt (min)': 15,
+          'Sleep efficiency %': 96,
+          'Sleep consistency %': 85,
+        },
+      ],
+    }
+
+    const { wellness, errors } = mapWellness(wb)
+    expect(errors).toHaveLength(0)
+    expect(wellness).toHaveLength(1)
+    expect(wellness[0].date).toBe('2024-01-15')
+    expect(wellness[0].day_strain).toBe(14)
+  })
 })
 
 // ─── Manual entries mapper ────────────────────────────────────────────────────
@@ -202,5 +253,46 @@ describe('mapManualEntries', () => {
     const h = habits[0]
     expect(h.alcohol).toBeNull()
     expect(h.caffeine).toBeNull()
+  })
+
+  test('uses the sleep/stress cycle date for overnight manual entries', () => {
+    const wb: ParsedWorkbook = {
+      Sleep: [
+        {
+          'Employee Identifier': 'E1',
+          'Cycle start time': '2024-01-14 22:41:02',
+          'Cycle timezone': 'UTC-06:00',
+          'Wake onset': '2024-01-15 07:15:00',
+        },
+      ],
+      'Manual Entries': [
+        {
+          'Employee Identifier': 'E1',
+          'Cycle start time': '2024-01-14 22:41:02',
+          'Cycle timezone': 'UTC-06:00',
+          'Question text': 'Did you drink alcohol last night?',
+          'Answered yes': 'yes',
+        },
+      ],
+    }
+
+    const { habits } = mapManualEntries(wb)
+    expect(habits[0].date).toBe('2024-01-15')
+  })
+
+  test('maps the common ashwaganda spelling from WHOOP exports', () => {
+    const wb: ParsedWorkbook = {
+      'Manual Entries': [
+        {
+          'Employee Identifier': 'E1',
+          'Cycle start time': '2024-01-15 04:00:00',
+          'Question text': 'Took ashwaganda?',
+          'Answered yes': 'yes',
+        },
+      ],
+    }
+
+    const { habits } = mapManualEntries(wb)
+    expect(habits[0].ashwagandha).toBe(true)
   })
 })

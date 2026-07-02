@@ -5,6 +5,7 @@ import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
@@ -29,10 +30,17 @@ jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
 }))
 
-function makeRequest(fileName = 'whoop-export.csv'): NextRequest {
+jest.mock('@/lib/whoop/workbook-context', () => ({
+  prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
+    workbook,
+    employeeProfiles: [],
+  })),
+}))
+
+function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('workbook')], fileName, {
-    type: 'text/csv',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
   return {
@@ -52,9 +60,15 @@ describe('WHOOP import e2e flow (route-level)', () => {
   const mockMapWellness = mapWellness as jest.MockedFunction<typeof mapWellness>
   const mockMapManualEntries = mapManualEntries as jest.MockedFunction<typeof mapManualEntries>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
+  const mockPrepareWhoopWorkbookForImport =
+    prepareWhoopWorkbookForImport as jest.MockedFunction<typeof prepareWhoopWorkbookForImport>
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockPrepareWhoopWorkbookForImport.mockImplementation(async (_supabase, workbook) => ({
+      workbook,
+      employeeProfiles: [],
+    }))
   })
 
   test('imports valid workbook and returns processed summary', async () => {
@@ -164,14 +178,12 @@ describe('WHOOP import e2e flow (route-level)', () => {
       ],
     })
 
-    const roleLookup = jest.fn(() => ({
-      maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
-    }))
+    const roleSingle = jest.fn(async () => ({ data: { role: 'admin' }, error: null }))
     mockPersistWhoopImport.mockResolvedValue({
       batchId: 'batch-1',
       status: 'completed',
       success: true,
-      fileName: 'whoop-export.csv',
+      fileName: 'whoop-export.xlsx',
       tabs: [
         { tab: 'Exercise', processed: 2, inserted: 1, updated: 1, skipped: 0, failed: 0 },
         { tab: 'Stress/Sleep', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
@@ -189,9 +201,18 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const supabase = {
       from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: roleSingle,
+              })),
+            })),
+          }
+        }
         if (table === 'user_roles') {
           return {
-            select: jest.fn(() => ({ eq: roleLookup })),
+            select: jest.fn(() => ({ single: roleSingle })),
           }
         }
         throw new Error(`Unexpected table ${table}`)
@@ -204,7 +225,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const body = await response.json()
     expect(body.success).toBe(true)
-    expect(body.fileName).toBe('whoop-export.csv')
+    expect(body.fileName).toBe('whoop-export.xlsx')
     expect(body.totals).toEqual({
       processed: 4,
       inserted: 3,
@@ -215,15 +236,17 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     expect(body.batchId).toBe('batch-1')
     expect(body.status).toBe('completed')
+    expect(mockPrepareWhoopWorkbookForImport).toHaveBeenCalledWith(supabase, expect.any(Object), 'user-1')
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
-      fileName: 'whoop-export.csv',
+      fileName: 'whoop-export.xlsx',
       fileSize: expect.any(Number),
       fileHash: expect.any(String),
       exerciseResult: expect.objectContaining({ processed: 2 }),
       wellnessResult: expect.objectContaining({ processed: 1 }),
       habitsResult: expect.objectContaining({ processed: 1 }),
+      employeeProfiles: [],
     }))
   })
 })

@@ -6,6 +6,7 @@ import {
 } from './parser'
 import {
   validateExerciseRow, validateWellnessRow, validateManualRow,
+  getCycleLookupKey, resolveWellnessDate,
   type ValidatedWellnessRow,
 } from './validators'
 
@@ -59,6 +60,30 @@ export interface MappedWellness {
   wellness: WhoopWellness[]
   errors: ImportRowError[]
   processed: number
+}
+
+const WELLNESS_SIGNATURE_FIELDS = [
+  'Sleep performance %',
+  'Respiratory rate (rpm)',
+  'Asleep duration (min)',
+  'In bed duration (min)',
+  'Light sleep duration (min)',
+  'Deep (SWS) duration (min)',
+  'REM duration (min)',
+  'Awake duration (min)',
+  'Sleep need (min)',
+  'Sleep debt (min)',
+  'Sleep efficiency %',
+  'Sleep consistency %',
+] as const
+
+function getWellnessSignature(row: Record<string, unknown>): string | null {
+  const parts = WELLNESS_SIGNATURE_FIELDS.map((field) => {
+    const value = row[field]
+    return value === null || value === undefined || value === '' ? '' : String(value).trim()
+  })
+
+  return parts.some(Boolean) ? parts.join('|') : null
 }
 
 function mergeWellness(
@@ -118,13 +143,24 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
   // keyed by `${employeeId}|${date}`
   const stressMap = new Map<string, ValidatedWellnessRow>()
   const sleepMap = new Map<string, ValidatedWellnessRow>()
+  const sleepDateBySignature = new Map<string, string>()
   let processed = 0
+
+  for (const row of wb[TAB_SLEEP] ?? []) {
+    const signature = getWellnessSignature(row)
+    const date = resolveWellnessDate(row)
+    if (signature && date) {
+      sleepDateBySignature.set(signature, date)
+    }
+  }
 
   if (wb[TAB_STRESS]) {
     const rows = wb[TAB_STRESS]
     processed += rows.length
     for (let i = 0; i < rows.length; i++) {
-      const v = validateWellnessRow(TAB_STRESS, rows[i], i + 2, errors)
+      const signature = getWellnessSignature(rows[i])
+      const fallbackDate = signature ? sleepDateBySignature.get(signature) ?? null : null
+      const v = validateWellnessRow(TAB_STRESS, rows[i], i + 2, errors, fallbackDate)
       if (!v) continue
       const key = `${v.employeeId}|${v.date}`
       const existing = stressMap.get(key)
@@ -174,7 +210,7 @@ const QUESTION_MAP: [RegExp, keyof Omit<WhoopHabit, 'id' | 'employee_id' | 'date
   [/magnesium/i, 'magnesium'],
   [/theanine/i, 'theanine'],
   [/creatine/i, 'creatine'],
-  [/ashwagandha/i, 'ashwagandha'],
+  [/ashwagandha|ashwaganda/i, 'ashwagandha'],
   [/glp.?1/i, 'glp1'],
   [/calories tracked|tracked calories/i, 'tracked_calories'],
   [/dimmed lights/i, 'dimmed_lights'],
@@ -197,11 +233,22 @@ export function mapManualEntries(wb: ParsedWorkbook): MappedHabits {
 
   const rows = wb[TAB_MANUAL]
   const errors: ImportRowError[] = []
+  const cycleDateLookup = new Map<string, string>()
   // keyed by `${employeeId}|${date}`
   const habitMap = new Map<string, HabitFields>()
 
+  for (const tab of [TAB_STRESS, TAB_SLEEP] as const) {
+    for (const row of wb[tab] ?? []) {
+      const key = getCycleLookupKey(row['Cycle start time'])
+      const date = resolveWellnessDate(row)
+      if (key && date) {
+        cycleDateLookup.set(key, date)
+      }
+    }
+  }
+
   for (let i = 0; i < rows.length; i++) {
-    const v = validateManualRow(rows[i], i + 2, errors)
+    const v = validateManualRow(rows[i], i + 2, errors, cycleDateLookup)
     if (!v) continue
     const key = `${v.employeeId}|${v.date}`
     if (!habitMap.has(key)) {
