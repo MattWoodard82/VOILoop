@@ -14,9 +14,10 @@ export function WhoopImportClient() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.csv')) {
+    const lowerFileName = file.name.toLowerCase()
+    if (!lowerFileName.endsWith('.xlsx') && !lowerFileName.endsWith('.csv')) {
       setStatus('error')
-      setStructureErrors(['Only .csv files are supported'])
+      setStructureErrors(['Only .xlsx and .csv files are supported'])
       return
     }
 
@@ -89,7 +90,7 @@ export function WhoopImportClient() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `import-errors-${result.fileName.replace(/\.csv$/i, '')}.csv`
+    a.download = `import-errors-${result.fileName.replace(/\.(csv|xlsx)$/i, '')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -106,9 +107,9 @@ export function WhoopImportClient() {
       {/* Instructions */}
       <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
-          <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP export CSV (<code>.csv</code>) with WHOOP column headers.
+          <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP workbook (<code>.xlsx</code>) or WHOOP CSV (<code>.csv</code>) with WHOOP column headers.
           <br />
-          <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same CSV is safe — records are upserted, not duplicated.
+          <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same file is safe — records are upserted, not duplicated.
         </div>
       </div>
 
@@ -144,13 +145,13 @@ export function WhoopImportClient() {
               <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
                 Drop your WHOOP export here
               </div>
-              <div style={{ color: '#A5ACAF', fontSize: 13 }}>or click to browse — .csv files only</div>
+              <div style={{ color: '#A5ACAF', fontSize: 13 }}>or click to browse — .xlsx or .csv</div>
             </>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
             style={{ display: 'none' }}
             onChange={onInputChange}
             disabled={status === 'uploading'}

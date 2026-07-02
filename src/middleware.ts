@@ -52,7 +52,8 @@ export async function middleware(request: NextRequest) {
   const { data: roleData } = await supabase
     .from('user_roles')
     .select('role')
-    .single()
+    .eq('user_id', session.user.id)
+    .maybeSingle()
 
   const role = roleData?.role
 

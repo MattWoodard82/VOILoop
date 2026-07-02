@@ -25,6 +25,8 @@ interface BatchTotals {
   failed: number
 }
 
+const UPSERT_CHUNK_SIZE = 250
+
 function countByTabs(errors: ImportRowError[], tabs: string[]): number {
   return errors.filter((error) => tabs.includes(error.tab)).length
 }
@@ -60,46 +62,40 @@ async function upsertWorkouts(
   allErrors: ImportRowError[],
 ): Promise<ImportTabResult> {
   const tabResult = emptyTabResult(EXERCISE_TAB, mapped.processed, countByTabs(allErrors, [EXERCISE_TAB]))
+  const rows = mapped.workouts
 
-  for (const workout of mapped.workouts) {
-    const { data: existing, error: existingError } = await supabase
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
+    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const startTimes = Array.from(new Set(chunk.map((row) => row.start_time)))
+
+    const { data: existingRows, error: existingError } = await supabase
       .from('workouts')
-      .select('id')
-      .eq('employee_id', workout.employee_id)
-      .eq('start_time', workout.start_time)
-      .maybeSingle()
+      .select('employee_id,start_time')
+      .in('employee_id', employeeIds)
+      .in('start_time', startTimes)
 
     if (existingError) {
-      tabResult.failed++
+      tabResult.failed += chunk.length
       allErrors.push({ tab: EXERCISE_TAB, row: -1, message: existingError.message })
       continue
     }
 
-    if (existing) {
-      const { error } = await supabase
-        .from('workouts')
-        .update({ ...workout, source_batch_id: batchId })
-        .eq('id', existing.id)
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.start_time}`))
+    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const { error: upsertError } = await supabase
+      .from('workouts')
+      .upsert(chunkRows, { onConflict: 'employee_id,start_time' })
 
-      if (error) {
-        tabResult.failed++
-        allErrors.push({ tab: EXERCISE_TAB, row: -1, message: error.message })
-      } else {
-        tabResult.updated++
-      }
+    if (upsertError) {
+      tabResult.failed += chunk.length
+      allErrors.push({ tab: EXERCISE_TAB, row: -1, message: upsertError.message })
       continue
     }
 
-    const { error } = await supabase
-      .from('workouts')
-      .insert({ ...workout, source_batch_id: batchId })
-
-    if (error) {
-      tabResult.failed++
-      allErrors.push({ tab: EXERCISE_TAB, row: -1, message: error.message })
-    } else {
-      tabResult.inserted++
-    }
+    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.start_time}`)).length
+    tabResult.updated += updated
+    tabResult.inserted += chunk.length - updated
   }
 
   return tabResult
@@ -116,46 +112,40 @@ async function upsertDailyWellness(
     mapped.processed,
     countByTabs(allErrors, ['Stress', 'Sleep', WELLNESS_TAB]),
   )
+  const rows = mapped.wellness
 
-  for (const wellness of mapped.wellness) {
-    const { data: existing, error: existingError } = await supabase
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
+    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const dates = Array.from(new Set(chunk.map((row) => row.date)))
+
+    const { data: existingRows, error: existingError } = await supabase
       .from('daily_wellness')
-      .select('id')
-      .eq('employee_id', wellness.employee_id)
-      .eq('date', wellness.date)
-      .maybeSingle()
+      .select('employee_id,date')
+      .in('employee_id', employeeIds)
+      .in('date', dates)
 
     if (existingError) {
-      tabResult.failed++
+      tabResult.failed += chunk.length
       allErrors.push({ tab: WELLNESS_TAB, row: -1, message: existingError.message })
       continue
     }
 
-    if (existing) {
-      const { error } = await supabase
-        .from('daily_wellness')
-        .update({ ...wellness, source_batch_id: batchId })
-        .eq('id', existing.id)
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.date}`))
+    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const { error: upsertError } = await supabase
+      .from('daily_wellness')
+      .upsert(chunkRows, { onConflict: 'employee_id,date' })
 
-      if (error) {
-        tabResult.failed++
-        allErrors.push({ tab: WELLNESS_TAB, row: -1, message: error.message })
-      } else {
-        tabResult.updated++
-      }
+    if (upsertError) {
+      tabResult.failed += chunk.length
+      allErrors.push({ tab: WELLNESS_TAB, row: -1, message: upsertError.message })
       continue
     }
 
-    const { error } = await supabase
-      .from('daily_wellness')
-      .insert({ ...wellness, source_batch_id: batchId })
-
-    if (error) {
-      tabResult.failed++
-      allErrors.push({ tab: WELLNESS_TAB, row: -1, message: error.message })
-    } else {
-      tabResult.inserted++
-    }
+    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.date}`)).length
+    tabResult.updated += updated
+    tabResult.inserted += chunk.length - updated
   }
 
   return tabResult
@@ -168,46 +158,40 @@ async function upsertHabits(
   allErrors: ImportRowError[],
 ): Promise<ImportTabResult> {
   const tabResult = emptyTabResult(MANUAL_TAB, mapped.processed, countByTabs(allErrors, [MANUAL_TAB]))
+  const rows = mapped.habits
 
-  for (const habit of mapped.habits) {
-    const { data: existing, error: existingError } = await supabase
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
+    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const dates = Array.from(new Set(chunk.map((row) => row.date)))
+
+    const { data: existingRows, error: existingError } = await supabase
       .from('habits')
-      .select('id')
-      .eq('employee_id', habit.employee_id)
-      .eq('date', habit.date)
-      .maybeSingle()
+      .select('employee_id,date')
+      .in('employee_id', employeeIds)
+      .in('date', dates)
 
     if (existingError) {
-      tabResult.failed++
+      tabResult.failed += chunk.length
       allErrors.push({ tab: MANUAL_TAB, row: -1, message: existingError.message })
       continue
     }
 
-    if (existing) {
-      const { error } = await supabase
-        .from('habits')
-        .update({ ...habit, source_batch_id: batchId })
-        .eq('id', existing.id)
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.date}`))
+    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const { error: upsertError } = await supabase
+      .from('habits')
+      .upsert(chunkRows, { onConflict: 'employee_id,date' })
 
-      if (error) {
-        tabResult.failed++
-        allErrors.push({ tab: MANUAL_TAB, row: -1, message: error.message })
-      } else {
-        tabResult.updated++
-      }
+    if (upsertError) {
+      tabResult.failed += chunk.length
+      allErrors.push({ tab: MANUAL_TAB, row: -1, message: upsertError.message })
       continue
     }
 
-    const { error } = await supabase
-      .from('habits')
-      .insert({ ...habit, source_batch_id: batchId })
-
-    if (error) {
-      tabResult.failed++
-      allErrors.push({ tab: MANUAL_TAB, row: -1, message: error.message })
-    } else {
-      tabResult.inserted++
-    }
+    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.date}`)).length
+    tabResult.updated += updated
+    tabResult.inserted += chunk.length - updated
   }
 
   return tabResult

@@ -30,7 +30,10 @@ export async function GET(request: NextRequest) {
   if (token_hash && type) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any })
     if (!error) {
-      const { data: roleData } = await supabase.from('user_roles').select('role').single()
+      const { data: { session } } = await supabase.auth.getSession()
+      const { data: roleData } = session
+        ? await supabase.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle()
+        : { data: null }
       const role = roleData?.role
       if (role === 'employee') return NextResponse.redirect(new URL('/my', requestUrl.origin))
       return NextResponse.redirect(new URL('/executive', requestUrl.origin))
@@ -40,7 +43,10 @@ export async function GET(request: NextRequest) {
   // Handle code exchange (OAuth)
   if (code) {
     await supabase.auth.exchangeCodeForSession(code)
-    const { data: roleData } = await supabase.from('user_roles').select('role').single()
+    const { data: { session } } = await supabase.auth.getSession()
+    const { data: roleData } = session
+      ? await supabase.from('user_roles').select('role').eq('user_id', session.user.id).maybeSingle()
+      : { data: null }
     const role = roleData?.role
     if (role === 'employee') return NextResponse.redirect(new URL('/my', requestUrl.origin))
     return NextResponse.redirect(new URL('/executive', requestUrl.origin))

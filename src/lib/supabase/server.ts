@@ -28,10 +28,14 @@ export async function getSession() {
 
 export async function getUserRole(): Promise<string | null> {
   const supabase = createServerSupabaseClient()
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return null
+
   const { data } = await supabase
     .from('user_roles')
     .select('role')
-    .single()
+    .eq('user_id', session.user.id)
+    .maybeSingle()
   return data?.role ?? null
 }
 

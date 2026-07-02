@@ -57,7 +57,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { data: roleData, error: roleError } = await supabase
     .from('user_roles')
     .select('role')
-    .single()
+    .eq('user_id', session.user.id)
+    .maybeSingle()
   if (roleError) {
     return NextResponse.json({ error: `Failed to verify role: ${roleError.message}` }, { status: 500 })
   }
@@ -87,8 +88,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const fileName = file.name
   const isCsv = fileName.toLowerCase().endsWith('.csv')
-  if (!isCsv) {
-    return NextResponse.json({ error: 'Only .csv files are supported' }, { status: 400 })
+  const isXlsx = fileName.toLowerCase().endsWith('.xlsx')
+  if (!isCsv && !isXlsx) {
+    return NextResponse.json({ error: 'Only .xlsx and .csv files are supported' }, { status: 400 })
   }
 
   // Read file buffer

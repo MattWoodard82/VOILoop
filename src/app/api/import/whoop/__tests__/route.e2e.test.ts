@@ -164,7 +164,9 @@ describe('WHOOP import e2e flow (route-level)', () => {
       ],
     })
 
-    const roleSingle = jest.fn(async () => ({ data: { role: 'admin' }, error: null }))
+    const roleLookup = jest.fn(() => ({
+      maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+    }))
     mockPersistWhoopImport.mockResolvedValue({
       batchId: 'batch-1',
       status: 'completed',
@@ -189,7 +191,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       from: jest.fn((table: string) => {
         if (table === 'user_roles') {
           return {
-            select: jest.fn(() => ({ single: roleSingle })),
+            select: jest.fn(() => ({ eq: roleLookup })),
           }
         }
         throw new Error(`Unexpected table ${table}`)

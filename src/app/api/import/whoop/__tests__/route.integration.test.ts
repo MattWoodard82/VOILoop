@@ -68,7 +68,9 @@ describe('POST /api/import/whoop integration', () => {
     const mockSupabase = {
       from: jest.fn(() => ({
         select: jest.fn(() => ({
-          single: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
+          })),
         })),
       })),
     }
@@ -87,7 +89,9 @@ describe('POST /api/import/whoop integration', () => {
         if (table === 'user_roles') {
           return {
             select: jest.fn(() => ({
-              single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              })),
             })),
           }
         }
@@ -119,7 +123,9 @@ describe('POST /api/import/whoop integration', () => {
     const mockSupabase = {
       from: jest.fn(() => ({
         select: jest.fn(() => ({
-          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
         })),
       })),
     }
@@ -132,22 +138,24 @@ describe('POST /api/import/whoop integration', () => {
     })
   })
 
-  test('returns 400 for non-csv uploads', async () => {
+  test('returns 400 for unsupported file extension uploads', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
       from: jest.fn(() => ({
         select: jest.fn(() => ({
-          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
         })),
       })),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.xlsx'))
+    const response = await POST(makeRequest('whoop.txt'))
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'Only .csv files are supported',
+      error: 'Only .xlsx and .csv files are supported',
     })
   })
 })

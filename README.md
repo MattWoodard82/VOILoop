@@ -116,7 +116,7 @@ The importer now persists each upload as a tracked batch:
 ### Local verification runbook (no hosted demo changes)
 1. Use a local/dev Supabase project for schema testing.
 2. Apply `supabase-schema.sql` to that local/dev project.
-3. Run the app and import a WHOOP workbook from `/admin/import`.
+3. Run the app and import a WHOOP workbook (`.xlsx`) or WHOOP CSV (`.csv`) from `/admin/import`.
 4. Verify:
    - `upload_batches` has a run with `completed`, `partial`, or `failed` status.
    - Upserts landed in normalized tables with `source_batch_id` set.

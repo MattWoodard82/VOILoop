@@ -34,14 +34,11 @@ create table if not exists upload_batches (
   rows_failed      int not null default 0
 );
 create table if not exists user_roles (
-  id         smallint primary key default 1 check (id = 1),
+  user_id    uuid primary key references auth.users(id) on delete cascade,
   role       text not null check (role in ('admin', 'staff', 'employee')) default 'staff',
   updated_at timestamptz default now()
 );
-
-insert into user_roles (id, role)
-values (1, 'staff')
-on conflict (id) do nothing;
+create index if not exists idx_user_roles_role on user_roles(role);
 create table if not exists daily_wellness (
   id                 uuid primary key default gen_random_uuid(),
   employee_id        text references employees(id) on delete cascade,
