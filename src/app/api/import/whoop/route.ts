@@ -3,10 +3,11 @@ import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
-import type { ImportResult, ImportTabResult, ImportRowError } from '@/lib/whoop/types'
+import { persistWhoopImport } from '@/lib/whoop/persistence'
+import { createHash } from 'crypto'
 
 export const runtime = 'nodejs'
-// Increase body size limit for xlsx files (default 4MB is often too small)
+// Increase body size limit for WHOOP uploads
 export const maxDuration = 60
 const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
 
@@ -15,15 +16,10 @@ function toErrorMessage(error: unknown): string {
   return 'unknown error'
 }
 
-function countValidationFailures(errors: ImportRowError[], tabs: string[]): number {
-  const tabSet = new Set(tabs)
-  const failedRows = new Set<string>()
-  for (const error of errors) {
-    if (error.row >= 0 && tabSet.has(error.tab)) {
-      failedRows.add(`${error.tab}|${error.row}`)
-    }
-  }
-  return failedRows.size
+function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST205' || message.includes('user_access')
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -34,14 +30,29 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const supabase = createServerSupabaseClient()
-  const { data: roleData, error: roleError } = await supabase
-    .from('user_roles')
+  const { data: accessData, error: accessError } = await supabase
+    .from('user_access')
     .select('role')
-    .single()
-  if (roleError) {
-    return NextResponse.json({ error: `Failed to verify role: ${roleError.message}` }, { status: 500 })
+    .eq('user_id', session.user.id)
+    .maybeSingle()
+
+  let role = accessData?.role ?? null
+  if (accessError && !isMissingUserAccessTable(accessError)) {
+    return NextResponse.json({ error: `Failed to verify role: ${accessError.message}` }, { status: 500 })
   }
-  if (!roleData?.role || !WHOOP_IMPORT_ALLOWED_ROLES.has(roleData.role)) {
+
+  if (!role) {
+    const { data: legacyRoleData, error: legacyRoleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .single()
+    if (legacyRoleError) {
+      return NextResponse.json({ error: `Failed to verify role: ${legacyRoleError.message}` }, { status: 500 })
+    }
+    role = legacyRoleData?.role ?? null
+  }
+
+  if (!role || !WHOOP_IMPORT_ALLOWED_ROLES.has(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -49,7 +60,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!contentType.toLowerCase().includes('multipart/form-data')) {
     return NextResponse.json({ error: 'Invalid content type: expected multipart/form-data' }, { status: 400 })
   }
-
   // Parse multipart form
   let formData: FormData
   try {
@@ -67,8 +77,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const fileName = file.name
-  if (!fileName.toLowerCase().endsWith('.xlsx')) {
-    return NextResponse.json({ error: 'Only .xlsx files are supported' }, { status: 400 })
+  const isXlsx = fileName.toLowerCase().endsWith('.xlsx')
+  if (!isXlsx) {
+    return NextResponse.json({ error: 'Only .xlsx WHOOP export files are supported' }, { status: 400 })
   }
 
   // Read file buffer
@@ -104,153 +115,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const wellnessResult = mapWellness(wb)
   const habitsResult = mapManualEntries(wb)
 
-  const allErrors: ImportRowError[] = [
-    ...exerciseResult.errors,
-    ...wellnessResult.errors,
-    ...habitsResult.errors,
-  ]
-  const tabResults: ImportTabResult[] = []
+  const fileHash = createHash('sha256').update(buffer).digest('hex')
 
-  // ─── Upsert workouts (FR-5, FR-9, AC-4, AC-5) ───────────────────────────────
-  // Unique key: (employee_id, start_time)
-  {
-    const validationFailed = countValidationFailures(exerciseResult.errors, ['Exercise'])
-    const tabResult: ImportTabResult = {
-      tab: 'Exercise',
-      processed: exerciseResult.processed,
-      inserted: 0, updated: 0, skipped: 0, failed: 0,
-    }
-    tabResult.failed = validationFailed
+  try {
+    const result = await persistWhoopImport({
+      supabase,
+      userId: session.user.id,
+      fileName,
+      fileSize: file.size,
+      fileHash,
+      exerciseResult,
+      wellnessResult,
+      habitsResult,
+    })
 
-    if (exerciseResult.workouts.length > 0) {
-      const existingKeySet = new Set<string>()
-      const employeeIds = Array.from(new Set(exerciseResult.workouts.map((w) => w.employee_id)))
-      const startTimes = exerciseResult.workouts.map((w) => w.start_time)
-      const minStartTime = startTimes.reduce((min, cur) => (cur < min ? cur : min))
-      const maxStartTime = startTimes.reduce((max, cur) => (cur > max ? cur : max))
-
-      const { data: existingRows, error: existingError } = await supabase
-        .from('workouts')
-        .select('employee_id,start_time')
-        .in('employee_id', employeeIds)
-        .gte('start_time', minStartTime)
-        .lte('start_time', maxStartTime)
-
-      if (existingError) {
-        tabResult.failed += exerciseResult.workouts.length
-        allErrors.push({ tab: 'Exercise', row: -1, message: existingError.message })
-      } else {
-        for (const row of existingRows ?? []) {
-          existingKeySet.add(`${row.employee_id}|${row.start_time}`)
-        }
-
-        const { error: upsertError } = await supabase
-          .from('workouts')
-          .upsert(exerciseResult.workouts, { onConflict: 'employee_id,start_time' })
-
-        if (upsertError) {
-          tabResult.failed += exerciseResult.workouts.length
-          allErrors.push({ tab: 'Exercise', row: -1, message: upsertError.message })
-        } else {
-          const updatedCount = exerciseResult.workouts.reduce((count, workout) => {
-            const key = `${workout.employee_id}|${workout.start_time}`
-            return count + (existingKeySet.has(key) ? 1 : 0)
-          }, 0)
-          tabResult.updated += updatedCount
-          tabResult.inserted += exerciseResult.workouts.length - updatedCount
-        }
-      }
-    }
-    tabResults.push(tabResult)
+    return NextResponse.json(result, { status: 200 })
+  } catch (error) {
+    return NextResponse.json({
+      error: 'Failed to persist import batch',
+      detail: toErrorMessage(error),
+    }, { status: 500 })
   }
-
-  // ─── Upsert daily wellness (FR-6, FR-9) ─────────────────────────────────────
-  // Unique key: (employee_id, date)
-  {
-    const validationFailed = countValidationFailures(wellnessResult.errors, ['Stress', 'Sleep'])
-    const tabResult: ImportTabResult = {
-      tab: 'Stress/Sleep',
-      processed: wellnessResult.processed,
-      inserted: 0, updated: 0, skipped: 0, failed: 0,
-    }
-    tabResult.failed = validationFailed
-
-    for (const wellness of wellnessResult.wellness) {
-      const { error } = await supabase
-        .from('daily_wellness')
-        .upsert(wellness, { onConflict: 'employee_id,date' })
-      if (error) {
-        tabResult.failed++
-        allErrors.push({ tab: 'Stress/Sleep', row: -1, message: error.message })
-      } else {
-        tabResult.inserted++ // Supabase upsert doesn't distinguish insert vs update
-      }
-    }
-    tabResults.push(tabResult)
-  }
-
-  // ─── Upsert habits (FR-7, FR-9) ─────────────────────────────────────────────
-  // Unique key: (employee_id, date)
-  {
-    const validationFailed = countValidationFailures(habitsResult.errors, ['Manual Entries'])
-    const tabResult: ImportTabResult = {
-      tab: 'Manual Entries',
-      processed: habitsResult.processed,
-      inserted: 0, updated: 0, skipped: 0, failed: 0,
-    }
-    tabResult.failed = validationFailed
-
-    for (const habit of habitsResult.habits) {
-      const { error } = await supabase
-        .from('habits')
-        .upsert(habit, { onConflict: 'employee_id,date' })
-      if (error) {
-        tabResult.failed++
-        allErrors.push({ tab: 'Manual Entries', row: -1, message: error.message })
-      } else {
-        tabResult.inserted++
-      }
-    }
-    tabResults.push(tabResult)
-  }
-
-  // ─── Compute totals ──────────────────────────────────────────────────────────
-  const totals = tabResults.reduce(
-    (acc, t) => ({
-      processed: acc.processed + t.processed,
-      inserted: acc.inserted + t.inserted,
-      updated: acc.updated + t.updated,
-      skipped: acc.skipped + t.skipped,
-      failed: acc.failed + t.failed,
-    }),
-    { processed: 0, inserted: 0, updated: 0, skipped: 0, failed: 0 }
-  )
-
-  // ─── Persist audit log ───────────────────────────────────────────────────────
-  const { error: auditLogError } = await supabase.from('import_logs').insert({
-    imported_by: session.user.id,
-    file_name: fileName,
-    rows_processed: totals.processed,
-    rows_inserted: totals.inserted,
-    rows_updated: totals.updated,
-    rows_skipped: totals.skipped,
-    rows_failed: totals.failed,
-    error_detail: allErrors.length ? allErrors : null,
-  })
-  if (auditLogError) {
-    return NextResponse.json(
-      { error: `Failed to write import audit log: ${auditLogError.message}` },
-      { status: 500 }
-    )
-  }
-
-  const result: ImportResult = {
-    success: totals.failed < totals.processed || totals.processed === 0,
-    fileName,
-    tabs: tabResults,
-    totals,
-    errors: allErrors,
-  }
-
-  return NextResponse.json(result, { status: 200 })
 }

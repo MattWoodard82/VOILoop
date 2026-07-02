@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ImportResult, ImportRowError, ImportTabResult, ImportBatchStatus } from './types'
 import type { MappedExercise, MappedHabits, MappedWellness } from './mappers'
+import { logger } from '@/lib/logger'
 
 const EXERCISE_TAB = 'Exercise'
 const WELLNESS_TAB = 'Stress/Sleep'
@@ -46,6 +47,21 @@ function sumTabTotals(tabResults: ImportTabResult[]): BatchTotals {
     }),
     { processed: 0, inserted: 0, updated: 0, skipped: 0, failed: 0 },
   )
+}
+
+function logImportRowErrors(batchId: string, fileName: string, userId: string, errors: ImportRowError[]) {
+  errors.forEach((error) => {
+    logger.warn({
+      event: 'whoop_import_row_error',
+      batchId,
+      fileName,
+      userId,
+      tab: error.tab,
+      row: error.row,
+      field: error.field ?? null,
+      message: error.message,
+    })
+  })
 }
 
 export function deriveBatchStatus(totals: BatchTotals): ImportBatchStatus {
@@ -241,6 +257,8 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     const status = deriveBatchStatus(totals)
 
     if (allErrors.length) {
+      logImportRowErrors(batchId, fileName, userId, allErrors)
+
       const rowOutcomeRows = allErrors.map((error) => ({
         batch_id: batchId,
         tab_name: error.tab,
@@ -254,7 +272,16 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
         .from('import_row_outcomes')
         .insert(rowOutcomeRows)
 
-      if (rowOutcomeError) throw rowOutcomeError
+      if (rowOutcomeError) {
+        logger.error({
+          event: 'whoop_import_row_outcomes_persist_failed',
+          batchId,
+          fileName,
+          userId,
+          message: rowOutcomeError.message,
+        })
+        throw rowOutcomeError
+      }
     }
 
     const { error: batchUpdateError } = await supabase
@@ -270,7 +297,16 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
       })
       .eq('id', batchId)
 
-    if (batchUpdateError) throw batchUpdateError
+    if (batchUpdateError) {
+      logger.error({
+        event: 'whoop_import_batch_update_failed',
+        batchId,
+        fileName,
+        userId,
+        message: batchUpdateError.message,
+      })
+      throw batchUpdateError
+    }
 
     const { error: importLogError } = await supabase.from('import_logs').insert({
       batch_id: batchId,
@@ -284,7 +320,25 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
       error_detail: allErrors.length ? allErrors : null,
     })
 
-    if (importLogError) throw importLogError
+    if (importLogError) {
+      logger.error({
+        event: 'whoop_import_log_persist_failed',
+        batchId,
+        fileName,
+        userId,
+        message: importLogError.message,
+      })
+      throw importLogError
+    }
+
+    logger.info({
+      event: 'whoop_import_completed',
+      batchId,
+      fileName,
+      userId,
+      status,
+      totals,
+    })
 
     return {
       batchId,
@@ -303,6 +357,14 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
         completed_at: new Date().toISOString(),
       })
       .eq('id', batchId)
+
+    logger.error({
+      event: 'whoop_import_failed',
+      batchId,
+      fileName,
+      userId,
+      message: error instanceof Error ? error.message : String(error),
+    })
 
     throw error
   }
