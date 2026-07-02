@@ -140,7 +140,7 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse }
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
           {habits && (
             <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: '16px 18px' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 10 }}>Today's habits</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 10 }}>Today&apos;s habits</div>
               <div>
                 <HabitPill label="Hydrated" value={habits.hydrated} />
                 <HabitPill label="Protein" value={habits.protein} />

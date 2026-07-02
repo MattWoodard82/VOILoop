@@ -2,7 +2,7 @@ import { createClient } from './client'
 import type {
   Employee, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, EmployeeWithWellness, TeamStats,
-  RiskLevel, RecoveryStatus,
+  RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
 } from '@/types'
 
 export function getRecoveryStatus(score: number | null): RecoveryStatus {
@@ -96,11 +96,43 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
 
 export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
   const supabase = createClient()
-  let q = supabase.from('workouts').select('*').order('date', { ascending: false })
-  if (date) q = q.eq('date', date)
-  const { data, error } = await q
-  if (error) throw error
-  return data ?? []
+  const buildQuery = (includeStartTimeSort: boolean) => {
+    let q = supabase
+      .from('workouts')
+      .select('*')
+      .order('date', { ascending: false })
+    if (includeStartTimeSort) {
+      q = q.order('start_time', { ascending: false })
+    }
+    if (date) q = q.eq('date', date)
+    return q
+  }
+
+  const firstAttempt = await buildQuery(true)
+  if (firstAttempt.error && isMissingStartTimeColumnError(firstAttempt.error)) {
+    const fallbackAttempt = await buildQuery(false)
+    if (fallbackAttempt.error) throw fallbackAttempt.error
+    return fallbackAttempt.data ?? []
+  }
+
+  if (firstAttempt.error) throw firstAttempt.error
+  return firstAttempt.data ?? []
+}
+
+function isMissingStartTimeColumnError(error: { code?: string; message?: string }) {
+  const message = error.message?.toLowerCase() ?? ''
+  return (
+    error.code === '42703' ||
+    error.code === 'PGRST204' ||
+    (
+      message.includes('start_time') &&
+      (
+        message.includes('does not exist') ||
+        message.includes('schema cache') ||
+        message.includes('could not find')
+      )
+    )
+  )
 }
 
 export async function getLatestHabits(date?: string): Promise<Habit[]> {
@@ -196,7 +228,10 @@ export async function getTeamDashboard(): Promise<{
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.employee_id, w]))
-  const workoutMap = Object.fromEntries(workouts.map((w) => [w.employee_id, w]))
+  const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
+    if (!map[workout.employee_id]) map[workout.employee_id] = workout
+    return map
+  }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.employee_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.employee_id, p]))
 
@@ -228,4 +263,26 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { employees: enriched, stats, interventions }
+}
+
+export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('upload_batches')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOutcome[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('import_row_outcomes')
+    .select('*')
+    .eq('batch_id', batchId)
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return data ?? []
 }
