@@ -135,6 +135,59 @@ export function toLocalDate(isoTimestamp: string, timezone?: string | null): str
   return new Date(ms).toISOString().slice(0, 10)
 }
 
+function shiftDate(date: string, days: number): string {
+  const shifted = new Date(`${date}T00:00:00.000Z`)
+  shifted.setUTCDate(shifted.getUTCDate() + days)
+  return shifted.toISOString().slice(0, 10)
+}
+
+function getTimeComponents(isoTimestamp: string, timezone?: string | null): { date: string; hour: number } {
+  let offsetMinutes = 0
+  if (timezone) {
+    const match = timezone.match(/UTC([+-])(\d{1,2}):(\d{2})/)
+    if (match) {
+      const sign = match[1] === '+' ? 1 : -1
+      offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
+    }
+  }
+
+  const shifted = new Date(new Date(isoTimestamp).getTime() + offsetMinutes * 60_000)
+  return {
+    date: shifted.toISOString().slice(0, 10),
+    hour: shifted.getUTCHours(),
+  }
+}
+
+function deriveWhoopDateFromCycleStart(isoTimestamp: string, timezone?: string | null): string {
+  const { date, hour } = getTimeComponents(isoTimestamp, timezone)
+  return hour >= 18 ? shiftDate(date, 1) : date
+}
+
+function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (row[key] !== undefined) return row[key]
+  }
+  return null
+}
+
+export function getCycleLookupKey(value: unknown): string | null {
+  return toISOString(value)
+}
+
+export function resolveWellnessDate(row: Record<string, unknown>): string | null {
+  const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
+  const wakeOnsetIso = toISOString(row['Wake onset'])
+  if (wakeOnsetIso) return toLocalDate(wakeOnsetIso, timezone)
+
+  const cycleEndIso = toISOString(row['Cycle end time'])
+  if (cycleEndIso) return toLocalDate(cycleEndIso, timezone)
+
+  const cycleStartIso = toISOString(row['Cycle start time'])
+  if (!cycleStartIso) return null
+
+  return deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
+}
+
 /** Clamp a percentage value to [0, 100]; return null if out of range */
 export function clampPct(val: number | null): number | null {
   if (val === null) return null
@@ -201,11 +254,11 @@ export function validateExerciseRow(
     calories: nonNegative(toInt(row['Energy burned (cal)'])),
     maxHr: nonNegative(toInt(row['Max HR (bpm)'])),
     avgHr: nonNegative(toInt(row['Average HR (bpm)'])),
-    zone1: clampPct(toInt(row['HR Zone 1 (% in zone)'])),
-    zone2: clampPct(toInt(row['HR Zone 2 (% in zone)'])),
-    zone3: clampPct(toInt(row['HR Zone 3 (% in zone)'])),
-    zone4: clampPct(toInt(row['HR Zone 4 (% in zone)'])),
-    zone5: clampPct(toInt(row['HR Zone 5 (% in zone)'])),
+    zone1: clampPct(toInt(getRowValue(row, ['HR Zone 1 (% in zone)', 'HR Zone 1 %']))),
+    zone2: clampPct(toInt(getRowValue(row, ['HR Zone 2 (% in zone)', 'HR Zone 2 %']))),
+    zone3: clampPct(toInt(getRowValue(row, ['HR Zone 3 (% in zone)', 'HR Zone 3 %']))),
+    zone4: clampPct(toInt(getRowValue(row, ['HR Zone 4 (% in zone)', 'HR Zone 4 %']))),
+    zone5: clampPct(toInt(getRowValue(row, ['HR Zone 5 (% in zone)', 'HR Zone 5 %']))),
   }
 }
 
@@ -238,6 +291,7 @@ export function validateWellnessRow(
   row: Record<string, unknown>,
   rowIndex: number,
   errors: ImportRowError[],
+  fallbackDate?: string | null,
 ): ValidatedWellnessRow | null {
   const employeeId = String(row['Employee Identifier'] ?? '').trim()
   if (!employeeId) {
@@ -245,14 +299,11 @@ export function validateWellnessRow(
     return null
   }
 
-  const cycleStartIso = toISOString(row['Cycle start time'])
-  if (!cycleStartIso) {
-    errors.push({ tab: tabName, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing cycle start time' })
+  const date = resolveWellnessDate(row) ?? fallbackDate ?? null
+  if (!date) {
+    errors.push({ tab: tabName, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing WHOOP cycle date' })
     return null
   }
-
-  const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const date = toLocalDate(cycleStartIso, timezone)
 
   // Minutes → hours helper
   const minToHrs = (v: unknown) => {
@@ -296,6 +347,7 @@ export function validateManualRow(
   row: Record<string, unknown>,
   rowIndex: number,
   errors: ImportRowError[],
+  cycleDateLookup?: Map<string, string>,
 ): ValidatedManualRow | null {
   const employeeId = String(row['Employee Identifier'] ?? '').trim()
   if (!employeeId) {
@@ -316,7 +368,11 @@ export function validateManualRow(
   }
 
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const date = toLocalDate(cycleStartIso, timezone)
+  const cycleEndIso = toISOString(row['Cycle end time'])
+  const date =
+    cycleDateLookup?.get(cycleStartIso) ??
+    (cycleEndIso ? toLocalDate(cycleEndIso, timezone) : null) ??
+    deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
   const answeredYes = toBool(row['Answered yes']) ?? false
 
   return { employeeId, date, questionText, answeredYes }

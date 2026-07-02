@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { randomInt } from 'crypto'
 
 export const runtime = 'nodejs'
 
 interface ParsedCsv {
   emails: string[]
   invalidRows: string[]
+}
+
+interface EmployeeRecord {
+  id: string
+  auth_user_id: string | null
 }
 
 function parseCsvLine(line: string): string[] {
@@ -81,7 +87,7 @@ function randomPassword(length: number = 8): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
   let result = ''
   for (let i = 0; i < length; i++) {
-    result += chars[Math.floor(Math.random() * chars.length)]
+    result += chars[randomInt(chars.length)]
   }
   return result
 }
@@ -90,15 +96,108 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function deriveNameFromEmail(email: string): { firstName: string; lastName: string } {
+  const localPart = email.split('@')[0] ?? ''
+  const parts = localPart
+    .replace(/[^a-zA-Z0-9]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(toTitleCase)
+
+  if (parts.length === 0) {
+    return { firstName: 'Pilot', lastName: 'User' }
+  }
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: 'User' }
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  }
+}
+
+function getNextEmployeeNumber(existingEmployees: EmployeeRecord[]): number {
+  const maxEmployeeNumber = existingEmployees.reduce((max, employee) => {
+    const match = /^EMP(\d+)$/i.exec(employee.id)
+    if (!match) return max
+    return Math.max(max, Number(match[1]))
+  }, 0)
+
+  return maxEmployeeNumber + 1
+}
+
+function formatEmployeeId(employeeNumber: number): string {
+  return `EMP${String(employeeNumber).padStart(3, '0')}`
+}
+
+async function ensureEmployeeRecord(
+  adminClient: ReturnType<typeof createAdminSupabaseClient>,
+  existingEmployeesByAuthUserId: Map<string, EmployeeRecord>,
+  nextEmployeeNumberRef: { current: number },
+  userId: string,
+  email: string,
+): Promise<string> {
+  const existingEmployee = existingEmployeesByAuthUserId.get(userId)
+  if (existingEmployee) {
+    return existingEmployee.id
+  }
+
+  const employeeId = formatEmployeeId(nextEmployeeNumberRef.current)
+  nextEmployeeNumberRef.current += 1
+
+  const { firstName, lastName } = deriveNameFromEmail(email)
+  const today = new Date().toISOString().slice(0, 10)
+
+  const { error } = await adminClient
+    .from('employees')
+    .insert({
+      id: employeeId,
+      auth_user_id: userId,
+      first_name: firstName,
+      last_name: lastName,
+      department: 'Pilot',
+      title: 'Pilot Participant',
+      device_id: null,
+      consent: true,
+      enrolled_date: today,
+      status: 'Active',
+      is_exact_data: false,
+    })
+
+  if (error) {
+    throw error
+  }
+
+  const employeeRecord = { id: employeeId, auth_user_id: userId }
+  existingEmployeesByAuthUserId.set(userId, employeeRecord)
+  return employeeId
+}
+
 async function requireAdminUser(userId: string): Promise<boolean> {
   const supabase = createServerSupabaseClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_access')
     .select('role')
     .eq('user_id', userId)
     .maybeSingle()
 
   if (data?.role) return data.role === 'admin'
+  if (!error) return false
+
+  if (!isMissingUserAccessTable(error)) {
+    throw error
+  }
 
   const { data: legacyData } = await supabase
     .from('user_roles')
@@ -143,6 +242,21 @@ export async function POST(request: Request) {
   }
 
   const adminClient = createAdminSupabaseClient()
+  const { data: existingEmployees, error: employeesError } = await adminClient
+    .from('employees')
+    .select('id, auth_user_id')
+
+  if (employeesError) {
+    return NextResponse.json({ error: employeesError.message }, { status: 500 })
+  }
+
+  const existingEmployeesByAuthUserId = new Map<string, EmployeeRecord>()
+  for (const employee of (existingEmployees ?? []) as EmployeeRecord[]) {
+    if (employee.auth_user_id) {
+      existingEmployeesByAuthUserId.set(employee.auth_user_id, employee)
+    }
+  }
+  const nextEmployeeNumberRef = { current: getNextEmployeeNumber((existingEmployees ?? []) as EmployeeRecord[]) }
 
   const existingUsersByEmail = new Map<string, string>()
   let page = 1
@@ -160,15 +274,16 @@ export async function POST(request: Request) {
     page++
   }
 
-  const outputRows: Array<{ email: string; password: string; status: string }> = []
+  const outputRows: Array<{ email: string; employeeId: string; password: string; status: string }> = []
 
   for (const email of parsed.invalidRows) {
-    outputRows.push({ email, password: '', status: 'invalid-email' })
+    outputRows.push({ email, employeeId: '', password: '', status: 'invalid-email' })
   }
 
   for (const email of parsed.emails) {
     const password = randomPassword(8)
     let userId = existingUsersByEmail.get(email)
+    let employeeId = ''
     let status = 'created'
 
     if (userId) {
@@ -178,7 +293,7 @@ export async function POST(request: Request) {
         email_confirm: true,
       })
       if (error) {
-        outputRows.push({ email, password: '', status: `error:${error.message}` })
+        outputRows.push({ email, employeeId: '', password: '', status: `error:${error.message}` })
         continue
       }
     } else {
@@ -188,7 +303,7 @@ export async function POST(request: Request) {
         email_confirm: true,
       })
       if (error || !data.user?.id) {
-        outputRows.push({ email, password: '', status: `error:${error?.message ?? 'Failed to create user'}` })
+        outputRows.push({ email, employeeId: '', password: '', status: `error:${error?.message ?? 'Failed to create user'}` })
         continue
       }
       userId = data.user.id
@@ -204,16 +319,30 @@ export async function POST(request: Request) {
       }, { onConflict: 'user_id' })
 
     if (accessError) {
-      outputRows.push({ email, password: '', status: `error:${accessError.message}` })
+      outputRows.push({ email, employeeId: '', password, status: `error:${accessError.message}` })
       continue
     }
 
-    outputRows.push({ email, password, status })
+    try {
+      employeeId = await ensureEmployeeRecord(
+        adminClient,
+        existingEmployeesByAuthUserId,
+        nextEmployeeNumberRef,
+        userId,
+        email,
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create employee record'
+      outputRows.push({ email, employeeId: '', password, status: `error:${message}` })
+      continue
+    }
+
+    outputRows.push({ email, employeeId, password, status })
   }
 
   const outputCsv = [
-    'email,password,status',
-    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.password), csvEscape(row.status)].join(',')),
+    'email,employee_id,password,status',
+    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.employeeId), csvEscape(row.password), csvEscape(row.status)].join(',')),
   ].join('\n')
 
   return new NextResponse(outputCsv, {
@@ -223,4 +352,9 @@ export async function POST(request: Request) {
       'Content-Disposition': 'attachment; filename="pilot-user-passwords.csv"',
     },
   })
+}
+function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST205' || message.includes('user_access')
 }

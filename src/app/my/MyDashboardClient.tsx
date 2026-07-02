@@ -1,10 +1,12 @@
 'use client'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { WhoopImportClient } from '@/app/admin/import/WhoopImportClient'
 import type { Employee, DailyWellness, Habit, Workout, PulseSurvey } from '@/types'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 
 interface Props {
   employee: Employee
+  userEmail: string
   wellness: DailyWellness[]
   habits: Habit | null
   workout: Workout | null
@@ -44,7 +46,8 @@ function HabitPill({ label, value }: { label: string; value: boolean | null }) {
   )
 }
 
-export function MyDashboardClient({ employee, wellness, habits, workout, pulse }: Props) {
+export function MyDashboardClient({ employee, userEmail, wellness, habits, workout, pulse }: Props) {
+  const router = useRouter()
   const latest = wellness[0]
   const rc = latest?.recovery_score ?? null
   const recoveryColor = scoreColor(rc, 'recovery')
@@ -74,8 +77,11 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse }
           <span style={{ fontSize: 12, color: '#A5ACAF' }}>My Wellness</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 12, color: '#A5ACAF' }}>{employee.first_name} {employee.last_name}</span>
-          <SignOutButton />
+          <span style={{ fontSize: 12, color: '#A5ACAF' }}>{userEmail}</span>
+          <button onClick={handleSignOut}
+            style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#A5ACAF', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
+            Sign out
+          </button>
         </div>
       </div>
 
@@ -192,14 +198,27 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse }
           </div>
         )}
 
-        <div style={{ background: 'rgba(105,190,40,0.06)', border: '1px solid rgba(105,190,40,0.2)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Upload your WHOOP export</div>
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 16, lineHeight: 1.6 }}>
+            Upload the latest WHOOP workbook tied to your account to refresh your recovery, sleep, strain, and habit data.
+          </div>
+          <WhoopImportClient />
+        </div>
+
+        <div style={{ background: 'rgba(105,190,40,0.06)', border: '1px solid rgba(105,190,40,0.2)', borderRadius: 12, padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 3 }}>Monthly pulse survey</div>
-            <div style={{ fontSize: 11, color: '#A5ACAF' }}>Takes 2 minutes. Helps improve the wellness program for everyone.</div>
+            <div style={{ fontSize: 11, color: '#A5ACAF' }}>Not available in this pilot.</div>
           </div>
-          <a href="/survey" style={{ background: '#69BE28', color: '#002244', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 12, fontWeight: 700, cursor: 'pointer', textDecoration: 'none', fontFamily: 'Inter, sans-serif' }}>
+          <button
+            type="button"
+            disabled
+            title="not available in this pilot"
+            style={{ background: '#0a3560', color: '#A5ACAF', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 12, fontWeight: 700, cursor: 'not-allowed', fontFamily: 'Inter, sans-serif', opacity: 0.8 }}
+          >
             Take survey →
-          </a>
+          </button>
         </div>
 
       </div>

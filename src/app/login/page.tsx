@@ -1,30 +1,47 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const supabase = createClient()
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
 
-    if (signInError) {
-      setError(signInError.message)
+    const formData = new FormData(e.currentTarget)
+    const emailValue = String(formData.get('email') ?? '').trim()
+    const passwordValue = String(formData.get('password') ?? '')
+
+    if (!emailValue || !passwordValue) {
+      setError('Enter your email and password.')
       setLoading(false)
       return
     }
 
-    window.location.href = '/executive'
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: emailValue,
+        password: passwordValue,
+      }),
+    })
+
+    const body = await response.json().catch(() => ({ error: 'Sign-in failed.' }))
+    if (!response.ok) {
+      setError(body.error ?? 'Sign-in failed.')
+      setLoading(false)
+      return
+    }
+
+    router.replace(body.redirectTo ?? '/executive')
+    router.refresh()
   }
 
   return (
@@ -45,13 +62,16 @@ export default function LoginPage() {
         <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 32 }}>
           <h1 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Sign in to VOILoop</h1>
           <p style={{ fontSize: 13, color: '#A5ACAF', marginBottom: 24, lineHeight: 1.5 }}>Use your assigned email and password.</p>
-          <form onSubmit={handleLogin}>
+          <form method="post" action="/api/auth/login" onSubmit={handleLogin}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 11, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 6 }}>Email address</label>
               <input
                 type="email"
+                name="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+                autoComplete="email"
                 required
                 placeholder="you@company.com"
                 style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#fff', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }}
@@ -62,8 +82,11 @@ export default function LoginPage() {
               <label style={{ display: 'block', fontSize: 11, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 6 }}>Password</label>
               <input
                 type="password"
+                name="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
                 style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#fff', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }}
@@ -73,8 +96,8 @@ export default function LoginPage() {
             {error && <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 14 }}>{error}</div>}
             <button
               type="submit"
-              disabled={loading || !email || !password}
-              style={{ width: '100%', background: loading || !email || !password ? '#0a3560' : '#69BE28', color: loading || !email || !password ? '#A5ACAF' : '#002244', border: 'none', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 700, cursor: loading || !email || !password ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif' }}
+              disabled={loading}
+              style={{ width: '100%', background: loading ? '#0a3560' : '#69BE28', color: loading ? '#A5ACAF' : '#002244', border: 'none', borderRadius: 8, padding: '12px', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: 'Inter, sans-serif' }}
             >
               {loading ? 'Signing in...' : 'Sign in'}
             </button>

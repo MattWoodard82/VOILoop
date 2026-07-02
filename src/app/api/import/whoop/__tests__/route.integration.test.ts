@@ -4,6 +4,7 @@ import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
@@ -20,6 +21,13 @@ jest.mock('@/lib/whoop/validators', () => ({
 
 jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
+}))
+
+jest.mock('@/lib/whoop/workbook-context', () => ({
+  prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
+    workbook,
+    employeeProfiles: [],
+  })),
 }))
 
 jest.mock('@/lib/whoop/mappers', () => ({
@@ -48,10 +56,16 @@ describe('POST /api/import/whoop integration', () => {
   const mockParseWorkbook = parseWorkbook as jest.MockedFunction<typeof parseWorkbook>
   const mockValidateTabStructure = validateTabStructure as jest.MockedFunction<typeof validateTabStructure>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
+  const mockPrepareWhoopWorkbookForImport =
+    prepareWhoopWorkbookForImport as jest.MockedFunction<typeof prepareWhoopWorkbookForImport>
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockPersistWhoopImport.mockReset()
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      employeeProfiles: [],
+    })
   })
 
   test('returns 401 for unauthenticated requests', async () => {
@@ -62,7 +76,7 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Unauthorized' })
   })
 
-  test('returns 403 for authenticated users without staff/admin role', async () => {
+  test('allows authenticated employee users through role verification', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
@@ -77,9 +91,11 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest())
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' })
+    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid content type: expected multipart/form-data',
+    })
   })
 
   test('returns 422 when workbook structure is invalid', async () => {
@@ -108,6 +124,10 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
     mockParseWorkbook.mockReturnValue({} as never)
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      employeeProfiles: [],
+    })
     mockValidateTabStructure.mockReturnValue({
       valid: false,
       missingRequiredTabs: ['Exercise'],

@@ -156,8 +156,52 @@ create table if not exists interventions (
 -- Backfill/compatibility for environments that already created baseline tables.
 alter table if exists daily_wellness add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
 alter table if exists workouts add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists workouts add column if not exists start_time timestamptz;
+alter table if exists workouts add column if not exists end_time timestamptz;
 alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
 alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
+
+with ranked_workouts as (
+  select
+    id,
+    (
+      date::timestamp
+      + ((row_number() over (partition by employee_id, date order by id) - 1) * interval '1 minute')
+    ) at time zone 'UTC' as inferred_start_time
+  from workouts
+  where start_time is null
+)
+update workouts
+set start_time = ranked_workouts.inferred_start_time
+from ranked_workouts
+where workouts.id = ranked_workouts.id;
+
+alter table if exists workouts alter column start_time set not null;
+
+do $$
+begin
+  if exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'workouts'::regclass
+      and conname = 'workouts_employee_id_date_key'
+  ) then
+    alter table workouts drop constraint workouts_employee_id_date_key;
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'workouts'::regclass
+      and conname = 'workouts_employee_id_start_time_key'
+  ) then
+    alter table workouts
+      add constraint workouts_employee_id_start_time_key unique (employee_id, start_time);
+  end if;
+end $$;
 
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 

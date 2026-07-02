@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 export default function ChangePasswordPage() {
   const [password, setPassword] = useState('')
@@ -10,7 +9,7 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
     setSuccess('')
@@ -26,25 +25,21 @@ export default function ChangePasswordPage() {
     }
 
     setLoading(true)
-    const supabase = createClient()
-
-    const { error: updateError } = await supabase.auth.updateUser({ password })
-    if (updateError) {
-      setError(updateError.message)
-      setLoading(false)
-      return
-    }
-
-    const response = await fetch('/api/auth/mark-password-changed', { method: 'POST' })
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: 'Failed to finalize password change.' }))
       setError(body.error ?? 'Failed to finalize password change.')
       setLoading(false)
       return
     }
-
+    const body = await response.json().catch(() => ({ redirectTo: '/executive' }))
     setSuccess('Password updated. Redirecting…')
-    window.location.href = '/executive'
+    setSuccess('Password updated. Redirecting…')
+    window.location.assign(body.redirectTo ?? '/executive')
   }
 
   return (
@@ -55,15 +50,17 @@ export default function ChangePasswordPage() {
           Your temporary password must be changed before you can use VOILoop.
         </p>
 
-        <form onSubmit={handleSubmit}>
+        <form method="post" action="/api/auth/change-password" onSubmit={handleSubmit}>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontSize: 11, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 6 }}>New password</label>
             <input
               type="password"
+              name="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              autoComplete="new-password"
               style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#fff', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>
@@ -76,6 +73,7 @@ export default function ChangePasswordPage() {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               minLength={8}
+              autoComplete="new-password"
               style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: '#fff', fontFamily: 'Inter, sans-serif', outline: 'none', boxSizing: 'border-box' }}
             />
           </div>

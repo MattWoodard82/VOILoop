@@ -6,7 +6,7 @@ import { WhoopImportClient } from './WhoopImportClient'
 export const metadata = { title: 'WHOOP Import — VOILoop' }
 
 export default async function WhoopImportPage() {
-  const { redirect: redirectTo } = await requireAuth(['admin', 'staff'])
+  const { redirect: redirectTo } = await requireAuth()
   if (redirectTo) redirect(redirectTo)
 
   return (
