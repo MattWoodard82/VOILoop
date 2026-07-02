@@ -1,4 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { ensureEmployeeForAuthUser } from '@/lib/employee-linking'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
 import { SignOutButton } from '@/components/auth/SignOutButton'
@@ -10,8 +12,19 @@ export default async function MyPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: employee } = await supabase
+  let { data: employee } = await supabase
     .from('employees').select('*').eq('auth_user_id', user.id).single()
+
+  if (!employee && user.email) {
+    const adminClient = createAdminSupabaseClient()
+    const employeeId = await ensureEmployeeForAuthUser(adminClient, user.id, user.email)
+    const { data: linkedEmployee } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', employeeId)
+      .single()
+    employee = linkedEmployee
+  }
 
   if (!employee) {
     return (

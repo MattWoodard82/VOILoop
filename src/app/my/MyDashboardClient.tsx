@@ -47,7 +47,6 @@ function HabitPill({ label, value }: { label: string; value: boolean | null }) {
 }
 
 export function MyDashboardClient({ employee, userEmail, wellness, habits, workout, pulse }: Props) {
-  const router = useRouter()
   const latest = wellness[0]
   const rc = latest?.recovery_score ?? null
   const recoveryColor = scoreColor(rc, 'recovery')
@@ -78,10 +77,7 @@ export function MyDashboardClient({ employee, userEmail, wellness, habits, worko
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 12, color: '#A5ACAF' }}>{userEmail}</span>
-          <button onClick={handleSignOut}
-            style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#A5ACAF', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-            Sign out
-          </button>
+          <SignOutButton />
         </div>
       </div>
 

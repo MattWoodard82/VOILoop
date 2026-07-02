@@ -38,7 +38,6 @@ export default function ChangePasswordPage() {
     }
     const body = await response.json().catch(() => ({ redirectTo: '/executive' }))
     setSuccess('Password updated. Redirecting…')
-    setSuccess('Password updated. Redirecting…')
     window.location.assign(body.redirectTo ?? '/executive')
   }
 

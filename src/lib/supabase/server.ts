@@ -19,6 +19,12 @@ function isMissingUserAccessTable(error: { code?: string | null; message?: strin
   return error.code === 'PGRST205' || message.includes('user_access')
 }
 
+function isNoRowsError(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST116' || message.includes('not found')
+}
+
 export function createServerSupabaseClient() {
   const cookieStore = cookies()
   return createServerClient(
@@ -62,6 +68,10 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
     }
 
     if (!error) {
+      return { role: null, mustChangePassword: false }
+    }
+
+    if (isNoRowsError(error)) {
       return { role: null, mustChangePassword: false }
     }
 
@@ -167,12 +177,13 @@ export async function clearMustChangePassword(userId: string) {
 
 export async function setMustChangePassword(userId: string, mustChangePassword: boolean) {
   const supabase = createServerSupabaseClient()
+  const access = await getUserAccess(userId)
   const { error } = await supabase
     .from('user_access')
     .upsert({
       user_id: userId,
       must_change_password: mustChangePassword,
-      role: 'employee',
+      role: access.role ?? 'employee',
     }, { onConflict: 'user_id' })
   if (error) throw error
 }
