@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 
 export default function ChangePasswordPage() {
   const [password, setPassword] = useState('')
@@ -43,13 +44,17 @@ export default function ChangePasswordPage() {
       return
     }
 
+    const body = await response.json().catch(() => ({ redirectTo: '/executive' }))
     setSuccess('Password updated. Redirecting…')
-    window.location.href = '/executive'
+    window.location.href = body.redirectTo ?? '/executive'
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#0d1f35', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 460, background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 32 }}>
+      <div style={{ width: '100%', maxWidth: 460, background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 32, position: 'relative' }}>
+        <div style={{ position: 'absolute', top: 16, right: 16 }}>
+          <SignOutButton />
+        </div>
         <h1 style={{ fontSize: 20, fontWeight: 600, color: '#fff', marginBottom: 8 }}>Change your password</h1>
         <p style={{ fontSize: 13, color: '#A5ACAF', marginBottom: 24, lineHeight: 1.6 }}>
           Your temporary password must be changed before you can use VOILoop.

@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { createServerSupabaseClient } from './server'
 import type {
   Employee, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, EmployeeWithWellness, TeamStats,
@@ -25,8 +26,16 @@ export function avg(nums: (number | null)[]): number {
   return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
 }
 
+function getQueryClient() {
+  try {
+    return createServerSupabaseClient()
+  } catch {
+    return createClient()
+  }
+}
+
 export async function getEmployees(): Promise<Employee[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('employees')
     .select('*')
@@ -37,7 +46,7 @@ export async function getEmployees(): Promise<Employee[]> {
 }
 
 export async function getLatestWellness(date?: string): Promise<DailyWellness[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   let query = supabase
     .from('daily_wellness')
     .select('*')
@@ -59,7 +68,7 @@ export async function getLatestWellness(date?: string): Promise<DailyWellness[]>
 }
 
 export async function getWellnessTrend(employeeId: string, days: number = 30): Promise<DailyWellness[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const since = new Date()
   since.setDate(since.getDate() - days)
   const { data, error } = await supabase
@@ -73,7 +82,7 @@ export async function getWellnessTrend(employeeId: string, days: number = 30): P
 }
 
 export async function getTeamWellnessTrend(months: number = 6): Promise<{ month: string; avg_recovery: number }[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const since = new Date()
   since.setMonth(since.getMonth() - months)
   const { data, error } = await supabase
@@ -95,7 +104,7 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
 }
 
 export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const buildQuery = (includeStartTimeSort: boolean) => {
     let q = supabase
       .from('workouts')
@@ -136,7 +145,7 @@ function isMissingStartTimeColumnError(error: { code?: string; message?: string 
 }
 
 export async function getLatestHabits(date?: string): Promise<Habit[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   let q = supabase.from('habits').select('*').order('date', { ascending: false })
   if (date) q = q.eq('date', date)
   const { data, error } = await q
@@ -145,7 +154,7 @@ export async function getLatestHabits(date?: string): Promise<Habit[]> {
 }
 
 export async function getLatestPulse(): Promise<PulseSurvey[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data: latestDate } = await supabase
     .from('pulse_surveys')
     .select('date')
@@ -162,7 +171,7 @@ export async function getLatestPulse(): Promise<PulseSurvey[]> {
 }
 
 export async function getPulseTrend(): Promise<{ date: string; avg_wellbeing: number; avg_burnout: number }[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('pulse_surveys')
     .select('date, wellbeing_score, burnout_score')
@@ -182,7 +191,7 @@ export async function getPulseTrend(): Promise<{ date: string; avg_wellbeing: nu
 }
 
 export async function getInterventions(status?: string): Promise<Intervention[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   let q = supabase
     .from('interventions')
     .select('*')
@@ -194,7 +203,7 @@ export async function getInterventions(status?: string): Promise<Intervention[]>
 }
 
 export async function createIntervention(intervention: Omit<Intervention, 'id'>): Promise<Intervention> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('interventions')
     .insert(intervention)
@@ -205,7 +214,7 @@ export async function createIntervention(intervention: Omit<Intervention, 'id'>)
 }
 
 export async function updateIntervention(id: string, updates: Partial<Intervention>): Promise<void> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { error } = await supabase
     .from('interventions')
     .update(updates)
@@ -266,7 +275,7 @@ export async function getTeamDashboard(): Promise<{
 }
 
 export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('upload_batches')
     .select('*')
@@ -277,7 +286,7 @@ export async function getRecentImportBatches(limit: number = 20): Promise<Import
 }
 
 export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOutcome[]> {
-  const supabase = createClient()
+  const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('import_row_outcomes')
     .select('*')

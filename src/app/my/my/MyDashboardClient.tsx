@@ -1,8 +1,7 @@
 'use client'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { Employee, DailyWellness, Habit, Workout, PulseSurvey } from '@/types'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 
 interface Props {
   employee: Employee
@@ -46,7 +45,6 @@ function HabitPill({ label, value }: { label: string; value: boolean | null }) {
 }
 
 export function MyDashboardClient({ employee, wellness, habits, workout, pulse }: Props) {
-  const router = useRouter()
   const latest = wellness[0]
   const rc = latest?.recovery_score ?? null
   const recoveryColor = scoreColor(rc, 'recovery')
@@ -56,12 +54,6 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse }
     recovery: w.recovery_score,
     sleep: w.sleep_perf,
   }))
-
-  const handleSignOut = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#0d1f35', fontFamily: 'Inter, sans-serif' }}>
@@ -83,10 +75,7 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse }
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 12, color: '#A5ACAF' }}>{employee.first_name} {employee.last_name}</span>
-          <button onClick={handleSignOut}
-            style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 6, padding: '4px 10px', fontSize: 11, color: '#A5ACAF', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-            Sign out
-          </button>
+          <SignOutButton />
         </div>
       </div>
 

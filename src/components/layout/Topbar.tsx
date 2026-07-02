@@ -1,5 +1,6 @@
 'use client'
 import { Download } from 'lucide-react'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 
 interface TopbarProps {
   title: string
@@ -21,6 +22,7 @@ export function Topbar({ title, period = 'June 9 2026' }: TopbarProps) {
           <Download size={11} />
           Export
         </button>
+        <SignOutButton />
       </div>
     </header>
   )

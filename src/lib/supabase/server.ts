@@ -155,12 +155,13 @@ export async function clearMustChangePassword(userId: string) {
 
 export async function setMustChangePassword(userId: string, mustChangePassword: boolean) {
   const supabase = createServerSupabaseClient()
+  const access = await getUserAccess(userId)
   const { error } = await supabase
     .from('user_access')
     .upsert({
       user_id: userId,
       must_change_password: mustChangePassword,
-      role: 'employee',
+      role: access.role ?? 'employee',
     }, { onConflict: 'user_id' })
   if (error) throw error
 }

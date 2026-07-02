@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
+import { SignOutButton } from '@/components/auth/SignOutButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,10 @@ export default async function MyPage() {
   if (!employee) {
     return (
       <div style={{ minHeight: '100vh', background: '#0d1f35', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 36, maxWidth: 400, textAlign: 'center' }}>
+        <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 36, maxWidth: 400, textAlign: 'center', position: 'relative' }}>
+          <div style={{ position: 'absolute', top: 16, right: 16 }}>
+            <SignOutButton />
+          </div>
           <div style={{ fontSize: 32, marginBottom: 12 }}>👋</div>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>Account not linked yet</h2>
           <p style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>Your login is set up but has not been linked to your employee record. Contact your administrator.</p>
