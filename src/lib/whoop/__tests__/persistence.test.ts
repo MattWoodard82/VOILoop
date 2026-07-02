@@ -28,10 +28,14 @@ class FakeSupabase {
 }
 
 class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
-  private operation: 'select' | 'insert' | 'update' | null = null
+  private operation: 'select' | 'insert' | 'update' | 'upsert' | null = null
   private payload: TableRow | TableRow[] | null = null
-  private filters: Array<{ field: string; value: unknown }> = []
+  private filters: Array<
+    | { operator: 'eq'; field: string; value: unknown }
+    | { operator: 'in'; field: string; values: unknown[] }
+  > = []
   private selectedFields: string[] | null = null
+  private upsertConflictFields: string[] = []
 
   constructor(
     private readonly client: FakeSupabase,
@@ -58,8 +62,23 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
     return this
   }
 
+  upsert(payload: TableRow | TableRow[], options?: { onConflict?: string }) {
+    this.operation = 'upsert'
+    this.payload = payload
+    this.upsertConflictFields = (options?.onConflict ?? '')
+      .split(',')
+      .map((field) => field.trim())
+      .filter(Boolean)
+    return this
+  }
+
   eq(field: string, value: unknown) {
-    this.filters.push({ field, value })
+    this.filters.push({ operator: 'eq', field, value })
+    return this
+  }
+
+  in(field: string, values: unknown[]) {
+    this.filters.push({ operator: 'in', field, values })
     return this
   }
 
@@ -97,6 +116,8 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
         return this.executeInsert()
       case 'update':
         return this.executeUpdate()
+      case 'upsert':
+        return this.executeUpsert()
       default:
         return { data: null, error: null }
     }
@@ -132,9 +153,36 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
     }
   }
 
+  private executeUpsert() {
+    const inputRows = Array.isArray(this.payload) ? this.payload : [this.payload ?? {}]
+    const upsertedRows = inputRows.map((row) => {
+      const existingRow = this.client.tables[this.table].find((candidate) =>
+        this.upsertConflictFields.every((field) => candidate[field] === row[field]),
+      )
+
+      if (existingRow) {
+        Object.assign(existingRow, row)
+        return { ...existingRow }
+      }
+
+      const insertedRow = { ...row }
+      this.client.tables[this.table].push(insertedRow)
+      return insertedRow
+    })
+
+    return {
+      data: this.selectedFields ? this.applyProjection(upsertedRows) : null,
+      error: null,
+    }
+  }
+
   private matchingRows() {
     return this.client.tables[this.table].filter((row) =>
-      this.filters.every((filter) => row[filter.field] === filter.value),
+      this.filters.every((filter) =>
+        filter.operator === 'eq'
+          ? row[filter.field] === filter.value
+          : filter.values.includes(row[filter.field]),
+      ),
     )
   }
 
