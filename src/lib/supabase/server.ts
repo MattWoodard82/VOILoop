@@ -1,12 +1,22 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import type { Session } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 
 export type AppRole = 'admin' | 'staff' | 'employee'
 
 export interface UserAccess {
   role: AppRole | null
   mustChangePassword: boolean
+}
+
+export interface AuthenticatedUserSession {
+  user: User
+}
+
+function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST205' || message.includes('user_access')
 }
 
 export function createServerSupabaseClient() {
@@ -30,8 +40,9 @@ export function createServerSupabaseClient() {
 
 export async function getSession() {
   const supabase = createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
+  const { data, error } = await supabase.auth.getUser()
+  if (error || !data.user) return null
+  return { user: data.user } satisfies AuthenticatedUserSession
 }
 
 export async function getUserAccess(userId?: string): Promise<UserAccess> {
@@ -49,6 +60,14 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
         mustChangePassword: data.must_change_password ?? false,
       }
     }
+
+    if (!error) {
+      return { role: null, mustChangePassword: false }
+    }
+
+    if (!isMissingUserAccessTable(error)) {
+      throw error
+    }
   }
 
   const { data: legacyData } = await supabase
@@ -59,7 +78,7 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
   return { role: (legacyData?.role as AppRole) ?? null, mustChangePassword: false }
 }
 
-export async function getUserRole(session?: Session | null): Promise<AppRole | null> {
+export async function getUserRole(session?: AuthenticatedUserSession | null): Promise<AppRole | null> {
   const resolvedSession = session ?? await getSession()
   if (!resolvedSession) return null
   const access = await getUserAccess(resolvedSession.user.id)
@@ -99,14 +118,7 @@ export async function requireAdmin() {
 
 export async function isAdmin(userId: string): Promise<boolean> {
   const access = await getUserAccess(userId)
-  if (access.role) return access.role === 'admin'
-
-  const supabase = createServerSupabaseClient()
-  const { data } = await supabase
-    .from('user_roles')
-    .select('role')
-    .single()
-  return data?.role === 'admin'
+  return access.role === 'admin'
 }
 
 export async function getRedirectByRole(userId: string): Promise<string> {

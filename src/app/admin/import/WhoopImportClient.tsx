@@ -23,8 +23,8 @@ export function WhoopImportClient() {
     setStatus('uploading')
     setResult(null)
     setStructureErrors(null)
-
     const body = new FormData()
+    body.append('file', file)
     body.append('file', file)
 
     try {
@@ -107,6 +107,8 @@ export function WhoopImportClient() {
       <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
           <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP export workbook (<code>.xlsx</code>) with the standard WHOOP tabs.
+          <br />
+          <strong style={{ color: '#fff' }}>Account matching:</strong> Your upload is automatically tied to the employee record linked to your account.
           <br />
           <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same workbook is safe — records are upserted, not duplicated.
         </div>

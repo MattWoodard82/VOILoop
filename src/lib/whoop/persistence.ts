@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ImportResult, ImportRowError, ImportTabResult, ImportBatchStatus } from './types'
 import type { MappedExercise, MappedHabits, MappedWellness } from './mappers'
+import type { WhoopEmployeeProfile } from './workbook-context'
 import { logger } from '@/lib/logger'
 
 const EXERCISE_TAB = 'Exercise'
@@ -16,6 +17,7 @@ interface PersistWhoopImportParams {
   exerciseResult: MappedExercise
   wellnessResult: MappedWellness
   habitsResult: MappedHabits
+  employeeProfiles: WhoopEmployeeProfile[]
 }
 
 interface BatchTotals {
@@ -67,6 +69,93 @@ export function deriveBatchStatus(totals: BatchTotals): ImportBatchStatus {
   if (totals.failed === 0) return 'completed'
   if (successes === 0) return 'failed'
   return 'partial'
+}
+
+async function ensureEmployeesExist(
+  supabase: SupabaseClient,
+  employeeProfiles: WhoopEmployeeProfile[],
+): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10)
+  const uniqueProfiles = Array.from(
+    new Map(employeeProfiles.map((profile) => [profile.employeeId, profile])).values(),
+  )
+
+  for (const profile of uniqueProfiles) {
+    const { data: existingEmployee, error: existingEmployeeError } = await supabase
+      .from('employees')
+      .select('id, device_id')
+      .eq('id', profile.employeeId)
+      .maybeSingle()
+
+    if (existingEmployeeError) {
+      throw existingEmployeeError
+    }
+
+    if (!existingEmployee) {
+      const { error: insertEmployeeError } = await supabase
+        .from('employees')
+        .insert({
+          id: profile.employeeId,
+          first_name: profile.firstName,
+          last_name: profile.lastName,
+          department: profile.department,
+          title: 'WHOOP Participant',
+          device_id:
+            profile.sourceIdentifier && profile.sourceIdentifier !== profile.employeeId
+              ? profile.sourceIdentifier
+              : null,
+          consent: true,
+          enrolled_date: today,
+          status: 'Active',
+          is_exact_data: false,
+        })
+
+      if (insertEmployeeError) {
+        throw insertEmployeeError
+      }
+
+      continue
+    }
+
+    if (!existingEmployee.device_id && profile.sourceIdentifier && profile.sourceIdentifier !== profile.employeeId) {
+      const { error: updateEmployeeError } = await supabase
+        .from('employees')
+        .update({ device_id: profile.sourceIdentifier })
+        .eq('id', profile.employeeId)
+
+      if (updateEmployeeError) {
+        throw updateEmployeeError
+      }
+    }
+  }
+}
+
+function buildFallbackEmployeeProfiles(
+  exerciseResult: MappedExercise,
+  wellnessResult: MappedWellness,
+  habitsResult: MappedHabits,
+  employeeProfiles: WhoopEmployeeProfile[],
+): WhoopEmployeeProfile[] {
+  const profilesById = new Map(employeeProfiles.map((profile) => [profile.employeeId, profile]))
+  const employeeIds = new Set<string>()
+
+  exerciseResult.workouts.forEach((workout) => employeeIds.add(workout.employee_id))
+  wellnessResult.wellness.forEach((wellness) => employeeIds.add(wellness.employee_id))
+  habitsResult.habits.forEach((habit) => employeeIds.add(habit.employee_id))
+
+  for (const employeeId of Array.from(employeeIds)) {
+    if (profilesById.has(employeeId)) continue
+    profilesById.set(employeeId, {
+      employeeId,
+      sourceIdentifier: employeeId,
+      fullName: null,
+      firstName: 'WHOOP',
+      lastName: 'Participant',
+      department: null,
+    })
+  }
+
+  return Array.from(profilesById.values())
 }
 
 async function upsertWorkouts(
@@ -239,6 +328,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     exerciseResult,
     wellnessResult,
     habitsResult,
+    employeeProfiles,
   } = params
 
   const allErrors: ImportRowError[] = [
@@ -263,6 +353,11 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
   const batchId = createdBatch.id as string
 
   try {
+    await ensureEmployeesExist(
+      supabase,
+      buildFallbackEmployeeProfiles(exerciseResult, wellnessResult, habitsResult, employeeProfiles),
+    )
+
     const tabResults: ImportTabResult[] = [
       await upsertWorkouts(supabase, batchId, exerciseResult, allErrors),
       await upsertDailyWellness(supabase, batchId, wellnessResult, allErrors),

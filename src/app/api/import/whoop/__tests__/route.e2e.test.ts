@@ -5,6 +5,7 @@ import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
@@ -27,6 +28,13 @@ jest.mock('@/lib/whoop/mappers', () => ({
 
 jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
+}))
+
+jest.mock('@/lib/whoop/workbook-context', () => ({
+  prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
+    workbook,
+    employeeProfiles: [],
+  })),
 }))
 
 function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
@@ -52,9 +60,15 @@ describe('WHOOP import e2e flow (route-level)', () => {
   const mockMapWellness = mapWellness as jest.MockedFunction<typeof mapWellness>
   const mockMapManualEntries = mapManualEntries as jest.MockedFunction<typeof mapManualEntries>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
+  const mockPrepareWhoopWorkbookForImport =
+    prepareWhoopWorkbookForImport as jest.MockedFunction<typeof prepareWhoopWorkbookForImport>
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockPrepareWhoopWorkbookForImport.mockImplementation(async (_supabase, workbook) => ({
+      workbook,
+      employeeProfiles: [],
+    }))
   })
 
   test('imports valid workbook and returns processed summary', async () => {
@@ -222,6 +236,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     expect(body.batchId).toBe('batch-1')
     expect(body.status).toBe('completed')
+    expect(mockPrepareWhoopWorkbookForImport).toHaveBeenCalledWith(supabase, expect.any(Object), 'user-1')
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
@@ -231,6 +246,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       exerciseResult: expect.objectContaining({ processed: 2 }),
       wellnessResult: expect.objectContaining({ processed: 1 }),
       habitsResult: expect.objectContaining({ processed: 1 }),
+      employeeProfiles: [],
     }))
   })
 })

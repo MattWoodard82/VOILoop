@@ -4,12 +4,15 @@ import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
+import {
+  prepareWhoopWorkbookForImport,
+  type WhoopEmployeeProfile,
+} from '@/lib/whoop/workbook-context'
 import { createHash } from 'crypto'
 
 export const runtime = 'nodejs'
 // Increase body size limit for WHOOP uploads
 export const maxDuration = 60
-const WHOOP_IMPORT_ALLOWED_ROLES = new Set(['admin', 'staff'])
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Failed to verify role: ${accessError.message}` }, { status: 500 })
   }
 
-  if (!role) {
+  if (!role && accessError) {
     const { data: legacyRoleData, error: legacyRoleError } = await supabase
       .from('user_roles')
       .select('role')
@@ -52,7 +55,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     role = legacyRoleData?.role ?? null
   }
 
-  if (!role || !WHOOP_IMPORT_ALLOWED_ROLES.has(role)) {
+  if (!role) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -110,10 +113,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid workbook structure', details }, { status: 422 })
   }
 
+  let preparedWorkbook = wb
+  let employeeProfiles: WhoopEmployeeProfile[] = []
+  try {
+    const prepared = await prepareWhoopWorkbookForImport(supabase, wb, session.user.id)
+    preparedWorkbook = prepared.workbook
+    employeeProfiles = prepared.employeeProfiles
+  } catch (error) {
+    return NextResponse.json({ error: toErrorMessage(error) }, { status: 422 })
+  }
+
   // Map all tabs
-  const exerciseResult = mapExercise(wb)
-  const wellnessResult = mapWellness(wb)
-  const habitsResult = mapManualEntries(wb)
+  const exerciseResult = mapExercise(preparedWorkbook)
+  const wellnessResult = mapWellness(preparedWorkbook)
+  const habitsResult = mapManualEntries(preparedWorkbook)
 
   const fileHash = createHash('sha256').update(buffer).digest('hex')
 
@@ -127,6 +140,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       exerciseResult,
       wellnessResult,
       habitsResult,
+      employeeProfiles,
     })
 
     return NextResponse.json(result, { status: 200 })

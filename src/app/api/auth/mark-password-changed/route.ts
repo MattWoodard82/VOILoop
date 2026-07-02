@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { getSession, getUserAccess } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -9,12 +10,13 @@ export async function POST() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = createServerSupabaseClient()
-  const { error } = await supabase
+  const access = await getUserAccess(session.user.id)
+  const adminSupabase = createAdminSupabaseClient()
+  const { error } = await adminSupabase
     .from('user_access')
     .upsert({
       user_id: session.user.id,
-      role: 'employee',
+      role: access.role ?? 'employee',
       must_change_password: false,
     }, { onConflict: 'user_id' })
 

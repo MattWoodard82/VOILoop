@@ -6,11 +6,11 @@ export const dynamic = 'force-dynamic'
 
 export default async function MyPage() {
   const supabase = createServerSupabaseClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) redirect('/login')
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
   const { data: employee } = await supabase
-    .from('employees').select('*').eq('auth_user_id', session.user.id).single()
+    .from('employees').select('*').eq('auth_user_id', user.id).single()
 
   if (!employee) {
     return (
@@ -29,5 +29,5 @@ export default async function MyPage() {
   const { data: workouts } = await supabase.from('workouts').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(4)
 
-  return <MyDashboardClient employee={employee} wellness={wellness ?? []} habits={habits?.[0] ?? null} workout={workouts?.[0] ?? null} pulse={pulse ?? []} />
+  return <MyDashboardClient userEmail={user.email ?? ''} employee={employee} wellness={wellness ?? []} habits={habits?.[0] ?? null} workout={workouts?.[0] ?? null} pulse={pulse ?? []} />
 }
