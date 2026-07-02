@@ -16,6 +16,7 @@ const NAV = [
   ]},
   { label: 'Admin', items: [
     { href: '/admin/import', label: 'WHOOP Import', icon: Upload },
+    { href: '/admin/accounts', label: 'Account Provisioning', icon: Users },
   ]},
 ]
 

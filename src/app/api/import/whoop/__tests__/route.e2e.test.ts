@@ -29,10 +29,10 @@ jest.mock('@/lib/whoop/persistence', () => ({
   persistWhoopImport: jest.fn(),
 }))
 
-function makeRequest(fileName = 'whoop-export.csv'): NextRequest {
+function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('workbook')], fileName, {
-    type: 'text/csv',
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
   return {
@@ -169,7 +169,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       batchId: 'batch-1',
       status: 'completed',
       success: true,
-      fileName: 'whoop-export.csv',
+      fileName: 'whoop-export.xlsx',
       tabs: [
         { tab: 'Exercise', processed: 2, inserted: 1, updated: 1, skipped: 0, failed: 0 },
         { tab: 'Stress/Sleep', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
@@ -187,6 +187,15 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const supabase = {
       from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: roleSingle,
+              })),
+            })),
+          }
+        }
         if (table === 'user_roles') {
           return {
             select: jest.fn(() => ({ single: roleSingle })),
@@ -202,7 +211,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const body = await response.json()
     expect(body.success).toBe(true)
-    expect(body.fileName).toBe('whoop-export.csv')
+    expect(body.fileName).toBe('whoop-export.xlsx')
     expect(body.totals).toEqual({
       processed: 4,
       inserted: 3,
@@ -216,7 +225,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
-      fileName: 'whoop-export.csv',
+      fileName: 'whoop-export.xlsx',
       fileSize: expect.any(Number),
       fileHash: expect.any(String),
       exerciseResult: expect.objectContaining({ processed: 2 }),

@@ -23,6 +23,7 @@ npx supabase start
 Use these local values in `.env.local`:
 - `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY=<ANON_KEY from supabase start output>`
+- `SUPABASE_SERVICE_ROLE_KEY=<SERVICE_ROLE_KEY from supabase start output>`
 
 ### 3. Create environment file
 ```bash
@@ -30,7 +31,7 @@ cp .env.example .env.local
 # PowerShell:
 # Copy-Item .env.example .env.local
 ```
-Then update `NEXT_PUBLIC_SUPABASE_ANON_KEY` with your local anon key.
+Then update the Supabase keys in `.env.local`.
 
 ### 4. Create the database schema
 ```bash
@@ -52,6 +53,16 @@ This inserts:
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000)
+
+### 7. Bootstrap admin account
+```bash
+npm run admin:bootstrap
+```
+Default local credentials come from `.env.local`:
+- `PILOT_ADMIN_EMAIL` (default `admin@voiloop.local`)
+- `PILOT_ADMIN_PASSWORD` (default `Admin1234`)
+
+Login is email/password only. Users created through account provisioning are forced to change password on first login.
 
 ---
 
@@ -95,9 +106,9 @@ src/
 ## Adding Real Wearable Data
 
 ### Manual upload (Excel → Supabase)
-1. Export WHOOP/Oura CSV
-2. Map columns to `daily_wellness` schema
-3. Import via Supabase Dashboard → Table Editor → Import CSV
+1. Export the WHOOP workbook (`.xlsx`)
+2. Upload it through `/admin/import`
+3. Review the import summary and any row-level errors
 
 ### API integration (future)
 - WHOOP API: `https://api.prod.whoop.com/developer/v1/`

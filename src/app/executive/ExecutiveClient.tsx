@@ -19,7 +19,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
   }, [employees])
 
   const filtered = useMemo(() => {
-    let result = employees
+    let result = [...employees]
     if (deptFilter !== 'All') result = result.filter(e => e.department === deptFilter)
     if (personFilter !== 'All') result = result.filter(e => e.id === personFilter)
     return result
@@ -175,7 +175,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
           }))} />
         </Card>
         <Card title="Sleep debt flags">
-          {filtered
+        {[...filtered]
             .sort((a,b) => (b.latest_wellness?.sleep_debt ?? 0) - (a.latest_wellness?.sleep_debt ?? 0))
             .map(e => {
               const debt = e.latest_wellness?.sleep_debt ?? 0

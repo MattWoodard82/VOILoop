@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_ROUTES = ['/login']
+const PASSWORD_CHANGE_ROUTE = '/change-password'
 const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to staff; list it before ADMIN_ONLY so it takes priority
 const STAFF_ROUTES = ['/executive', '/team', '/pulse', '/interventions', '/outcomes', '/admin/import']
@@ -50,11 +51,29 @@ export async function middleware(request: NextRequest) {
   }
 
   const { data: roleData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .single()
+    .from('user_access')
+    .select('role, must_change_password')
+    .eq('user_id', session.user.id)
+    .maybeSingle()
 
-  const role = roleData?.role
+  let role = roleData?.role
+  const mustChangePassword = roleData?.must_change_password ?? false
+
+  if (!role) {
+    const { data: legacyRoleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .single()
+    role = legacyRoleData?.role
+  }
+
+  if (mustChangePassword && !isRouteMatch(pathname, PASSWORD_CHANGE_ROUTE)) {
+    return NextResponse.redirect(new URL(PASSWORD_CHANGE_ROUTE, request.url))
+  }
+
+  if (!mustChangePassword && isRouteMatch(pathname, PASSWORD_CHANGE_ROUTE)) {
+    return NextResponse.redirect(new URL(role === 'employee' ? '/my' : '/executive', request.url))
+  }
 
   // Check staff-accessible routes before admin-only routes so explicitly
   // whitelisted sub-paths (e.g. /admin/import) aren't blocked by the admin check.

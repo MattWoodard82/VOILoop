@@ -39,6 +39,14 @@ create table if not exists user_roles (
   updated_at timestamptz default now()
 );
 
+create table if not exists user_access (
+  user_id              uuid primary key references auth.users(id) on delete cascade,
+  role                 text not null check (role in ('admin', 'staff', 'employee')) default 'employee',
+  must_change_password boolean not null default true,
+  created_at           timestamptz not null default now(),
+  updated_at           timestamptz not null default now()
+);
+
 insert into user_roles (id, role)
 values (1, 'staff')
 on conflict (id) do nothing;
@@ -145,6 +153,12 @@ create table if not exists interventions (
   created_at        timestamptz default now()
 );
 
+-- Backfill/compatibility for environments that already created baseline tables.
+alter table if exists daily_wellness add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists workouts add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
+
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
 create index if not exists idx_wellness_emp_date    on daily_wellness(employee_id, date desc);
@@ -188,12 +202,7 @@ create table if not exists import_row_outcomes (
 
 create index if not exists idx_import_row_outcomes_batch on import_row_outcomes(batch_id);
 create index if not exists idx_import_row_outcomes_batch_tab on import_row_outcomes(batch_id, tab_name);
-
--- Backfill/compatibility for environments that already created baseline tables.
-alter table if exists daily_wellness add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
-alter table if exists workouts add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
-alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
-alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
+create index if not exists idx_user_access_role on user_access(role);
 
 -- ─── Row Level Security (optional — enable for multi-tenant) ──────────────────
 -- alter table employees enable row level security;
