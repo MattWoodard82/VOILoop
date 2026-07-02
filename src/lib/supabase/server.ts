@@ -25,6 +25,12 @@ function isNoRowsError(error: { code?: string | null; message?: string | null } 
   return error.code === 'PGRST116' || message.includes('not found')
 }
 
+function isMissingUserIdColumn(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return message.includes('user_id') && message.includes('column')
+}
+
 export function createServerSupabaseClient() {
   const cookieStore = cookies()
   return createServerClient(
@@ -80,10 +86,41 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
     }
   }
 
-  const { data: legacyData } = await supabase
+  if (!userId) {
+    const { data: singletonLegacyData, error: singletonLegacyError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .maybeSingle()
+
+    if (singletonLegacyError) {
+      throw singletonLegacyError
+    }
+
+    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false }
+  }
+
+  const { data: legacyData, error: legacyError } = await supabase
     .from('user_roles')
     .select('role')
-    .single()
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (legacyError && isMissingUserIdColumn(legacyError)) {
+    const { data: singletonLegacyData, error: singletonLegacyError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .maybeSingle()
+
+    if (singletonLegacyError) {
+      throw singletonLegacyError
+    }
+
+    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false }
+  }
+
+  if (legacyError) {
+    throw legacyError
+  }
 
   return { role: (legacyData?.role as AppRole) ?? null, mustChangePassword: false }
 }

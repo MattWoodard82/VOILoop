@@ -25,7 +25,6 @@ export function WhoopImportClient() {
     setStructureErrors(null)
     const body = new FormData()
     body.append('file', file)
-    body.append('file', file)
 
     try {
       const res = await fetch('/api/import/whoop', { method: 'POST', body })
@@ -89,7 +88,7 @@ export function WhoopImportClient() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `import-errors-${result.fileName.replace(/\.csv$/i, '')}.csv`
+    a.download = `import-errors-${result.fileName.replace(/\.[^.]+$/i, '')}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }

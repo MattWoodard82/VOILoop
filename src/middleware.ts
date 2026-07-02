@@ -18,8 +18,19 @@ function isMissingUserAccessTable(error: { code?: string | null; message?: strin
   return error.code === 'PGRST205' || message.includes('user_access')
 }
 
+function isMissingUserIdColumn(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return message.includes('user_id') && message.includes('column')
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
+  const pathname = request.nextUrl.pathname
+
+  if (isRouteMatch(pathname, '/api')) {
+    return response
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -42,7 +53,6 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
 
   async function getAccessForUser() {
     const { data: roleData, error: roleError } = await supabase
@@ -55,11 +65,28 @@ export async function middleware(request: NextRequest) {
     const mustChangePassword = roleData?.must_change_password ?? false
 
     if (roleError && isMissingUserAccessTable(roleError)) {
-      const { data: legacyRoleData } = await supabase
+      const { data: legacyRoleData, error: legacyRoleError } = await supabase
         .from('user_roles')
         .select('role')
-        .single()
-      role = legacyRoleData?.role
+        .eq('user_id', user!.id)
+        .maybeSingle()
+
+      if (legacyRoleError && isMissingUserIdColumn(legacyRoleError)) {
+        const { data: singletonRoleData, error: singletonRoleError } = await supabase
+          .from('user_roles')
+          .select('role')
+          .maybeSingle()
+
+        if (singletonRoleError) {
+          throw singletonRoleError
+        }
+
+        role = singletonRoleData?.role ?? null
+      } else if (legacyRoleError) {
+        throw legacyRoleError
+      } else {
+        role = legacyRoleData?.role ?? null
+      }
     } else if (roleError) {
       throw roleError
     }

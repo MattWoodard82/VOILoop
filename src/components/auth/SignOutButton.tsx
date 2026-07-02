@@ -1,15 +1,16 @@
 'use client'
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 interface SignOutButtonProps {
   label?: string
-  style?: React.CSSProperties
+  style?: CSSProperties
 }
 
-const defaultStyle: React.CSSProperties = {
+const defaultStyle: CSSProperties = {
   background: 'transparent',
   border: '1px solid #0a3560',
   borderRadius: 6,

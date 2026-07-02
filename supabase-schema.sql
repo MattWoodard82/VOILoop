@@ -47,9 +47,20 @@ create table if not exists user_access (
   updated_at           timestamptz not null default now()
 );
 
-insert into user_roles (id, role)
-values (1, 'staff')
-on conflict (id) do nothing;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_roles'
+      and column_name = 'id'
+  ) then
+    insert into user_roles (id, role)
+    values (1, 'staff')
+    on conflict (id) do nothing;
+  end if;
+end $$;
 create table if not exists daily_wellness (
   id                 uuid primary key default gen_random_uuid(),
   employee_id        text references employees(id) on delete cascade,
