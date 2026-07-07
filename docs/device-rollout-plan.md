@@ -114,14 +114,14 @@ It's technically possible to avoid building any native app by having users insta
 This path is documented here only so it isn't rediscovered later and mistaken for a shortcut.
 
 ### Mobile-only effort detail (person-weeks)
-| Work package | Human-only | Human + agentic | Notes |
-|---|---:|---:|---|
-| iOS HealthKit + Terra SDK integration | 2.0-3.0 | 1.2-2.0 | Permissions, linking, local testing |
-| Android Samsung Health + Terra SDK integration | 2.0-3.5 | 1.3-2.3 | Start with Health Connect path (no partner approval needed); direct Samsung SDK path adds calendar-blocking partner approval time on top, not just engineering hours |
-| Backend mobile event ingestion + reconciliation | 1.5-2.5 | 1.0-1.8 | Shared with both platforms |
-| Consent/revocation/audit controls | 1.0-1.5 | 0.7-1.0 | Legal + product workflow alignment |
-| QA + release hardening | 1.5-2.5 | 1.0-1.7 | Device matrix + edge cases |
-| **Total mobile-only track** | **8.0-13.0** | **5.2-8.8** | |
+| Work package | Cost estimate (person-weeks) | Notes |
+|---|---:|---|
+| iOS HealthKit + Terra SDK integration | 1.2-2.0 | Permissions, linking, local testing |
+| Android Samsung Health + Terra SDK integration | 1.3-2.3 | Start with Health Connect path (no partner approval needed); direct Samsung SDK path adds calendar-blocking partner approval time on top, not just engineering hours |
+| Backend mobile event ingestion + reconciliation | 1.0-1.8 | Shared with both platforms |
+| Consent/revocation/audit controls | 0.7-1.0 | Legal + product workflow alignment |
+| QA + release hardening | 1.0-1.7 | Device matrix + edge cases |
+| **Total mobile-only track** | **5.2-8.8** | |
 
 ---
 

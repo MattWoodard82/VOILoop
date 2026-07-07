@@ -120,15 +120,11 @@ gantt
 
 ```mermaid
 xychart-beta
-  title "Effort by phase (person-weeks)"
+  title "Cost estimate by phase (person-weeks)"
   x-axis [Foundation, WHOOP_API, Apple_Samsung, WebAPI_Wave, Hardening]
   y-axis "Person-weeks" 0 --> 8
-  bar [3.5, 2.0, 6.0, 3.5, 2.5]
-  line [2.0, 1.0, 4.0, 2.0, 1.5]
+  bar [2.0, 1.0, 4.0, 2.0, 1.5]
 ```
-
-- **Bars** = human-only midpoint
-- **Line** = human+agentic midpoint
 
 ---
 
