@@ -1,9 +1,7 @@
 # A La Carte Feature Estimate: Terra/Device Integration Build-Out
 
 ## How to read this doc
-Each feature below is scoped as if **one 20-year software architect** implements it solo, end-to-end (design, code, tests, docs), with no team to parallelize against. Two estimates are given:
-- **Human-only**: no AI coding agent, traditional IDE/tooling only.
-- **Agent-assisted**: same architect, working with a current-generation coding agent (e.g., this CLI) for scaffolding, boilerplate, test generation, and research lookups, while the architect retains all design decisions, review, and integration judgment.
+Each feature below is scoped as if **one 20-year software architect** implements it solo, end-to-end (design, code, tests, docs), with no team to parallelize against, working with a current-generation coding agent (e.g., this CLI) for scaffolding, boilerplate, test generation, and research lookups, while the architect retains all design decisions, review, and integration judgment.
 
 Cost = `hours x $100/hr`, shown explicitly per feature. All math is shown inline — no hidden multipliers. These are independent, granular estimates (not the team/person-week estimates in the other rollout docs), meant to support incremental "build vs. skip vs. defer" decisions per feature.
 
@@ -20,10 +18,8 @@ Implements the OAuth2 auth-code flow and a typed client for WHOOP's `/v2/recover
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 30 hrs | — |
-| Agent-assisted | 10 hrs | — |
-| Human-only cost | $3,000 | 30 hrs × $100/hr |
-| Agent-assisted cost | $1,000 | 10 hrs × $100/hr |
+| Cost estimate | 10 hrs | — |
+| Cost estimate ($) | $1,000 | 10 hrs × $100/hr |
 
 ---
 
@@ -36,10 +32,8 @@ Endpoint that accepts WHOOP's `recovery/sleep/workout updated/deleted` events an
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 14 hrs | — |
-| Agent-assisted | 5 hrs | — |
-| Human-only cost | $1,400 | 14 hrs × $100/hr |
-| Agent-assisted cost | $500 | 5 hrs × $100/hr |
+| Cost estimate | 5 hrs | — |
+| Cost estimate ($) | $500 | 5 hrs × $100/hr |
 
 ---
 
@@ -52,10 +46,8 @@ Scheduled job that polls WHOOP's REST endpoints to catch any records missed by w
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 16 hrs | — |
-| Agent-assisted | 6 hrs | — |
-| Human-only cost | $1,600 | 16 hrs × $100/hr |
-| Agent-assisted cost | $600 | 6 hrs × $100/hr |
+| Cost estimate | 6 hrs | — |
+| Cost estimate ($) | $600 | 6 hrs × $100/hr |
 
 ---
 
@@ -68,10 +60,8 @@ The `src/lib/integrations/` provider-registry pattern: a common interface each s
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 25 hrs | — |
-| Agent-assisted | 10 hrs | — |
-| Human-only cost | $2,500 | 25 hrs × $100/hr |
-| Agent-assisted cost | $1,000 | 10 hrs × $100/hr |
+| Cost estimate | 10 hrs | — |
+| Cost estimate ($) | $1,000 | 10 hrs × $100/hr |
 
 ---
 
@@ -84,10 +74,8 @@ Defines and enforces `CanonicalDailyWellness`, `CanonicalWorkout`, and `Canonica
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 20 hrs | — |
-| Agent-assisted | 8 hrs | — |
-| Human-only cost | $2,000 | 20 hrs × $100/hr |
-| Agent-assisted cost | $800 | 8 hrs × $100/hr |
+| Cost estimate | 8 hrs | — |
+| Cost estimate ($) | $800 | 8 hrs × $100/hr |
 
 ---
 
@@ -100,10 +88,8 @@ Native iOS integration embedding the Terra iOS SDK against HealthKit, since Appl
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 80 hrs | — |
-| Agent-assisted | 40 hrs | — |
-| Human-only cost | $8,000 | 80 hrs × $100/hr |
-| Agent-assisted cost | $4,000 | 40 hrs × $100/hr |
+| Cost estimate | 40 hrs | — |
+| Cost estimate ($) | $4,000 | 40 hrs × $100/hr |
 
 ---
 
@@ -116,10 +102,8 @@ Android integration using Terra's SDK against Health Connect — the recommended
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 50 hrs | — |
-| Agent-assisted | 22 hrs | — |
-| Human-only cost | $5,000 | 50 hrs × $100/hr |
-| Agent-assisted cost | $2,200 | 22 hrs × $100/hr |
+| Cost estimate | 22 hrs | — |
+| Cost estimate ($) | $2,200 | 22 hrs × $100/hr |
 
 ---
 
@@ -132,10 +116,8 @@ Engineering-only estimate to switch to Terra's Samsung-specific SDK dependency f
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 50 hrs | — |
-| Agent-assisted | 22 hrs | — |
-| Human-only cost | $5,000 | 50 hrs × $100/hr |
-| Agent-assisted cost | $2,200 | 22 hrs × $100/hr |
+| Cost estimate | 22 hrs | — |
+| Cost estimate ($) | $2,200 | 22 hrs × $100/hr |
 
 ---
 
@@ -148,10 +130,8 @@ User-facing consent screens plus backend audit logging and revocation processing
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 34 hrs | — |
-| Agent-assisted | 16 hrs | — |
-| Human-only cost | $3,400 | 34 hrs × $100/hr |
-| Agent-assisted cost | $1,600 | 16 hrs × $100/hr |
+| Cost estimate | 16 hrs | — |
+| Cost estimate ($) | $1,600 | 16 hrs × $100/hr |
 
 ---
 
@@ -164,10 +144,8 @@ Stable, auditable mapping between VOILoop employee/user records and Terra's per-
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 19 hrs | — |
-| Agent-assisted | 7 hrs | — |
-| Human-only cost | $1,900 | 19 hrs × $100/hr |
-| Agent-assisted cost | $700 | 7 hrs × $100/hr |
+| Cost estimate | 7 hrs | — |
+| Cost estimate ($) | $700 | 7 hrs × $100/hr |
 
 ---
 
@@ -180,10 +158,8 @@ Shared cross-source logic to prevent double-counting from duplicate or replayed 
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 16 hrs | — |
-| Agent-assisted | 7 hrs | — |
-| Human-only cost | $1,600 | 16 hrs × $100/hr |
-| Agent-assisted cost | $700 | 7 hrs × $100/hr |
+| Cost estimate | 7 hrs | — |
+| Cost estimate ($) | $700 | 7 hrs × $100/hr |
 
 ---
 
@@ -196,10 +172,8 @@ Device-matrix testing, crash/performance monitoring, and release-cadence process
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 51 hrs | — |
-| Agent-assisted | 25 hrs | — |
-| Human-only cost | $5,100 | 51 hrs × $100/hr |
-| Agent-assisted cost | $2,500 | 25 hrs × $100/hr |
+| Cost estimate | 25 hrs | — |
+| Cost estimate ($) | $2,500 | 25 hrs × $100/hr |
 
 ---
 
@@ -212,10 +186,8 @@ Server-side adapter for Garmin via Terra's web API path (no mobile app required)
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 19 hrs | — |
-| Agent-assisted | 7 hrs | — |
-| Human-only cost | $1,900 | 19 hrs × $100/hr |
-| Agent-assisted cost | $700 | 7 hrs × $100/hr |
+| Cost estimate | 7 hrs | — |
+| Cost estimate ($) | $700 | 7 hrs × $100/hr |
 
 ---
 
@@ -228,10 +200,8 @@ Server-side adapter for Fitbit via Terra's web API path.
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 16 hrs | — |
-| Agent-assisted | 6 hrs | — |
-| Human-only cost | $1,600 | 16 hrs × $100/hr |
-| Agent-assisted cost | $600 | 6 hrs × $100/hr |
+| Cost estimate | 6 hrs | — |
+| Cost estimate ($) | $600 | 6 hrs × $100/hr |
 
 ---
 
@@ -244,10 +214,8 @@ Server-side adapter for Oura via Terra's web API path.
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 14 hrs | — |
-| Agent-assisted | 5 hrs | — |
-| Human-only cost | $1,400 | 14 hrs × $100/hr |
-| Agent-assisted cost | $500 | 5 hrs × $100/hr |
+| Cost estimate | 5 hrs | — |
+| Cost estimate ($) | $500 | 5 hrs × $100/hr |
 
 ---
 
@@ -260,10 +228,8 @@ Server-side adapter for Withings via Terra's web API path.
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 16 hrs | — |
-| Agent-assisted | 6 hrs | — |
-| Human-only cost | $1,600 | 16 hrs × $100/hr |
-| Agent-assisted cost | $600 | 6 hrs × $100/hr |
+| Cost estimate | 6 hrs | — |
+| Cost estimate ($) | $600 | 6 hrs × $100/hr |
 
 ---
 
@@ -276,10 +242,8 @@ Server-side adapter for Polar via Terra's web API path.
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 19 hrs | — |
-| Agent-assisted | 7 hrs | — |
-| Human-only cost | $1,900 | 19 hrs × $100/hr |
-| Agent-assisted cost | $700 | 7 hrs × $100/hr |
+| Cost estimate | 7 hrs | — |
+| Cost estimate ($) | $700 | 7 hrs × $100/hr |
 
 ---
 
@@ -293,10 +257,8 @@ Derives `recovery_score`, `day_strain`, `sleep_need`, `sleep_debt`, workout stra
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 42 hrs | — |
-| Agent-assisted | 18 hrs | — |
-| Human-only cost | $4,200 | 42 hrs × $100/hr |
-| Agent-assisted cost | $1,800 | 18 hrs × $100/hr |
+| Cost estimate | 18 hrs | — |
+| Cost estimate ($) | $1,800 | 18 hrs × $100/hr |
 
 ---
 
@@ -309,10 +271,8 @@ Backend + UI treatment that labels every KPI value by trust tier so users never 
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 23 hrs | — |
-| Agent-assisted | 10 hrs | — |
-| Human-only cost | $2,300 | 23 hrs × $100/hr |
-| Agent-assisted cost | $1,000 | 10 hrs × $100/hr |
+| Cost estimate | 10 hrs | — |
+| Cost estimate ($) | $1,000 | 10 hrs × $100/hr |
 
 ---
 
@@ -325,10 +285,8 @@ Freshness, completeness, error, and synthetic-vs-direct parity dashboards used f
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 37 hrs | — |
-| Agent-assisted | 16 hrs | — |
-| Human-only cost | $3,700 | 37 hrs × $100/hr |
-| Agent-assisted cost | $1,600 | 16 hrs × $100/hr |
+| Cost estimate | 16 hrs | — |
+| Cost estimate ($) | $1,600 | 16 hrs × $100/hr |
 
 ---
 
@@ -341,44 +299,40 @@ Wires Terra's hosted authentication widget for the non-mobile-only sources (WHOO
 
 | Metric | Value | Math |
 |---|---:|---|
-| Human-only | 12 hrs | — |
-| Agent-assisted | 4 hrs | — |
-| Human-only cost | $1,200 | 12 hrs × $100/hr |
-| Agent-assisted cost | $400 | 4 hrs × $100/hr |
+| Cost estimate | 4 hrs | — |
+| Cost estimate ($) | $400 | 4 hrs × $100/hr |
 
 ---
 
 ## Summary rollup (all 21 features)
 
-| # | Feature | Human-only hrs | Agent-assisted hrs | Human-only cost | Agent-assisted cost |
-|---:|---|---:|---:|---:|---:|
-| 1 | WHOOP OAuth2 + Core API Client | 30 | 10 | $3,000 | $1,000 |
-| 2 | WHOOP Webhook Receiver + Signature Verification | 14 | 5 | $1,400 | $500 |
-| 3 | WHOOP Reconciliation/Polling Job | 16 | 6 | $1,600 | $600 |
-| 4 | Ingestion Gateway + Source Adapter Framework | 25 | 10 | $2,500 | $1,000 |
-| 5 | Canonical DTO Schema + Validation | 20 | 8 | $2,000 | $800 |
-| 6 | iOS Apple Health Integration | 80 | 40 | $8,000 | $4,000 |
-| 7 | Android Health Connect Integration | 50 | 22 | $5,000 | $2,200 |
-| 8 | Android Direct Samsung Health SDK | 50 | 22 | $5,000 | $2,200 |
-| 9 | Consent & Revocation Management | 34 | 16 | $3,400 | $1,600 |
-| 10 | Identity Linkage Service | 19 | 7 | $1,900 | $700 |
-| 11 | Webhook Idempotency & Dedupe Layer | 16 | 7 | $1,600 | $700 |
-| 12 | Mobile QA + Release Hardening | 51 | 25 | $5,100 | $2,500 |
-| 13 | Garmin Web API Adapter | 19 | 7 | $1,900 | $700 |
-| 14 | Fitbit Web API Adapter | 16 | 6 | $1,600 | $600 |
-| 15 | Oura Web API Adapter | 14 | 5 | $1,400 | $500 |
-| 16 | Withings Web API Adapter | 16 | 6 | $1,600 | $600 |
-| 17 | Polar Web API Adapter | 19 | 7 | $1,900 | $700 |
-| 18 | Synthetic Metrics Engine | 42 | 18 | $4,200 | $1,800 |
-| 19 | KPI Confidence & Quality Labeling | 23 | 10 | $2,300 | $1,000 |
-| 20 | Observability & Parity Dashboards | 37 | 16 | $3,700 | $1,600 |
-| 21 | Terra Widget Integration (web-API sources) | 12 | 4 | $1,200 | $400 |
-| **Total** | | **603** | **257** | **$60,300** | **$25,700** |
+| # | Feature | Cost estimate (hrs) | Cost estimate ($) |
+|---:|---|---:|---:|
+| 1 | WHOOP OAuth2 + Core API Client | 10 | $1,000 |
+| 2 | WHOOP Webhook Receiver + Signature Verification | 5 | $500 |
+| 3 | WHOOP Reconciliation/Polling Job | 6 | $600 |
+| 4 | Ingestion Gateway + Source Adapter Framework | 10 | $1,000 |
+| 5 | Canonical DTO Schema + Validation | 8 | $800 |
+| 6 | iOS Apple Health Integration | 40 | $4,000 |
+| 7 | Android Health Connect Integration | 22 | $2,200 |
+| 8 | Android Direct Samsung Health SDK | 22 | $2,200 |
+| 9 | Consent & Revocation Management | 16 | $1,600 |
+| 10 | Identity Linkage Service | 7 | $700 |
+| 11 | Webhook Idempotency & Dedupe Layer | 7 | $700 |
+| 12 | Mobile QA + Release Hardening | 25 | $2,500 |
+| 13 | Garmin Web API Adapter | 7 | $700 |
+| 14 | Fitbit Web API Adapter | 6 | $600 |
+| 15 | Oura Web API Adapter | 5 | $500 |
+| 16 | Withings Web API Adapter | 6 | $600 |
+| 17 | Polar Web API Adapter | 7 | $700 |
+| 18 | Synthetic Metrics Engine | 18 | $1,800 |
+| 19 | KPI Confidence & Quality Labeling | 10 | $1,000 |
+| 20 | Observability & Parity Dashboards | 16 | $1,600 |
+| 21 | Terra Widget Integration (web-API sources) | 4 | $400 |
+| **Total** | | **257** | **$25,700** |
 
 **Totals math:**
-- Human-only hours: 30+14+16+25+20+80+50+50+34+19+16+51+19+16+14+16+19+42+23+37+12 = **603 hrs**
-- Agent-assisted hours: 10+5+6+10+8+40+22+22+16+7+7+25+7+6+5+6+7+18+10+16+4 = **257 hrs**
-- Human-only cost: 603 hrs × $100/hr = **$60,300**
-- Agent-assisted cost: 257 hrs × $100/hr = **$25,700**
+- Hours: 10+5+6+10+8+40+22+22+16+7+7+25+7+6+5+6+7+18+10+16+4 = **257 hrs**
+- Cost: 257 hrs × $100/hr = **$25,700**
 
 > These are solo-architect, full-scope estimates — useful for "build it all myself" budgeting or for deciding which individual features to defer/cut. They are not directly comparable to the team-based person-week estimates in `device-rollout-plan.md` and `terra-buy-vs-build-recommendation.md`, which assume parallel specialists (mobile engineer, backend engineer, QA) rather than one person doing everything sequentially.
