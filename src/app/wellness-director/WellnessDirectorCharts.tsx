@@ -7,7 +7,7 @@ interface Props { type: 'recovery' | 'hrv' | 'strain'; data: ChartData[] }
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
 const GRID = '#0a3560'
 
-export function ExecutiveCharts({ type, data }: Props) {
+export function WellnessDirectorCharts({ type, data }: Props) {
   const height = type === 'recovery' ? 210 : 130
 
   if (type === 'recovery') {

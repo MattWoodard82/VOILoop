@@ -3,13 +3,13 @@ import { useState, useMemo } from 'react'
 import type { EmployeeWithWellness } from '@/types'
 import { Card, Badge, BarRow } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
-import { ExecutiveCharts } from './ExecutiveCharts'
+import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 
 interface Props {
   employees: EmployeeWithWellness[]
 }
 
-export function ExecutiveClient({ employees }: Props) {
+export function WellnessDirectorClient({ employees }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
 
@@ -125,7 +125,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginBottom: 14 }}>
         <Card title={`Recovery scores — ${deptFilter !== 'All' ? deptFilter : personFilter !== 'All' ? filtered[0]?.first_name : 'all employees'}`}
           badge={<Badge variant="wolf">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</Badge>}>
-          <ExecutiveCharts
+          <WellnessDirectorCharts
             type="recovery"
             data={filtered.map(e => ({
               name: e.first_name + (e.is_exact_data ? ' ★' : ''),
@@ -161,14 +161,14 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
         <Card title="HRV (ms)">
-          <ExecutiveCharts type="hrv" data={filtered.map(e => ({
+          <WellnessDirectorCharts type="hrv" data={filtered.map(e => ({
             name: e.first_name,
             value: e.latest_wellness?.hrv_ms ?? 0,
             color: e.is_exact_data ? '#69BE28' : '#A5ACAF',
           }))} />
         </Card>
         <Card title="Day strain">
-          <ExecutiveCharts type="strain" data={filtered.map(e => ({
+          <WellnessDirectorCharts type="strain" data={filtered.map(e => ({
             name: e.first_name,
             value: e.latest_wellness?.day_strain ?? 0,
             color: (e.latest_wellness?.day_strain ?? 0) > 14 ? '#ff6b6b' : (e.latest_wellness?.day_strain ?? 0) > 10 ? '#FFA500' : '#69BE28',

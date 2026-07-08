@@ -67,6 +67,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: accessError.message }, { status: 500 })
   }
 
-  const redirectTo = role === 'employee' ? '/my' : '/executive'
+  const redirectTo = role === 'employee' ? '/my' : '/wellness-director'
   return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
 }

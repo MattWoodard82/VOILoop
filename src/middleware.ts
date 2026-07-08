@@ -6,7 +6,7 @@ const PASSWORD_CHANGE_ROUTE = '/change-password'
 const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to any authenticated user; list it before ADMIN_ONLY so it takes priority
 const AUTHENTICATED_ROUTES = ['/admin/import']
-const STAFF_ROUTES = ['/executive', '/team', '/pulse', '/interventions', '/outcomes']
+const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/team', '/pulse', '/interventions', '/outcomes']
 
 function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -101,7 +101,7 @@ export async function middleware(request: NextRequest) {
         ? PASSWORD_CHANGE_ROUTE
         : role === 'employee' || !role
           ? '/my'
-          : '/executive'
+          : '/wellness-director'
       return NextResponse.redirect(new URL(redirectTo, request.url))
     }
     return response
@@ -120,14 +120,14 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!mustChangePassword && isRouteMatch(pathname, PASSWORD_CHANGE_ROUTE)) {
-    return NextResponse.redirect(new URL(role === 'employee' ? '/my' : '/executive', request.url))
+    return NextResponse.redirect(new URL(role === 'employee' ? '/my' : '/wellness-director', request.url))
   }
 
-  // Check staff-accessible routes before admin-only routes so explicitly
+  // Check wellness-director-accessible routes before admin-only routes so explicitly
   // whitelisted sub-paths (e.g. /admin/import) aren't blocked by the admin check.
   const isAuthenticatedRoute = AUTHENTICATED_ROUTES.some((r) => isRouteMatch(pathname, r))
-  const isStaffRoute = STAFF_ROUTES.some((r) => isRouteMatch(pathname, r))
-  const isAdminOnly = !isStaffRoute && ADMIN_ONLY.some((r) => isRouteMatch(pathname, r))
+  const isWellnessDirectorRoute = WELLNESS_DIRECTOR_ROUTES.some((r) => isRouteMatch(pathname, r))
+  const isAdminOnly = !isWellnessDirectorRoute && ADMIN_ONLY.some((r) => isRouteMatch(pathname, r))
 
   if (isAuthenticatedRoute) {
     return response
@@ -135,11 +135,11 @@ export async function middleware(request: NextRequest) {
 
   if (isAdminOnly) {
     if (role !== 'admin') {
-      return NextResponse.redirect(new URL('/executive', request.url))
+      return NextResponse.redirect(new URL('/wellness-director', request.url))
     }
   }
 
-  if (isStaffRoute) {
+  if (isWellnessDirectorRoute) {
     if (!role || role === 'employee') {
       return NextResponse.redirect(new URL('/my', request.url))
     }

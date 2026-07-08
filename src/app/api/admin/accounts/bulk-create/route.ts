@@ -5,6 +5,8 @@ import { randomInt } from 'crypto'
 
 export const runtime = 'nodejs'
 
+type AccountType = 'employee' | 'wellness_director'
+
 interface ParsedCsv {
   emails: string[]
   invalidRows: string[]
@@ -13,6 +15,25 @@ interface ParsedCsv {
 interface EmployeeRecord {
   id: string
   auth_user_id: string | null
+}
+
+interface ProvisioningConfig {
+  role: AccountType
+  downloadFileName: string
+  createsEmployeeRecord: boolean
+}
+
+const ACCOUNT_TYPE_CONFIG: Record<AccountType, ProvisioningConfig> = {
+  employee: {
+    role: 'employee',
+    downloadFileName: 'employee-passwords.csv',
+    createsEmployeeRecord: true,
+  },
+  wellness_director: {
+    role: 'wellness_director',
+    downloadFileName: 'wellness-director-passwords.csv',
+    createsEmployeeRecord: false,
+  },
 }
 
 function parseCsvLine(line: string): string[] {
@@ -141,6 +162,14 @@ function formatEmployeeId(employeeNumber: number): string {
   return `EMP${String(employeeNumber).padStart(3, '0')}`
 }
 
+function parseAccountType(value: FormDataEntryValue | null): AccountType | null {
+  if (value !== 'employee' && value !== 'wellness_director') {
+    return null
+  }
+
+  return value
+}
+
 async function ensureEmployeeRecord(
   adminClient: ReturnType<typeof createAdminSupabaseClient>,
   existingEmployeesByAuthUserId: Map<string, EmployeeRecord>,
@@ -231,6 +260,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'CSV file is required.' }, { status: 400 })
   }
 
+  const accountType = parseAccountType(formData.get('accountType'))
+  if (!accountType) {
+    return NextResponse.json({ error: 'A valid account type is required.' }, { status: 400 })
+  }
+
   if (!file.name.toLowerCase().endsWith('.csv')) {
     return NextResponse.json({ error: 'Only .csv files are supported.' }, { status: 400 })
   }
@@ -242,21 +276,28 @@ export async function POST(request: Request) {
   }
 
   const adminClient = createAdminSupabaseClient()
-  const { data: existingEmployees, error: employeesError } = await adminClient
-    .from('employees')
-    .select('id, auth_user_id')
+  const config = ACCOUNT_TYPE_CONFIG[accountType]
+  let existingEmployees: EmployeeRecord[] = []
 
-  if (employeesError) {
-    return NextResponse.json({ error: employeesError.message }, { status: 500 })
+  if (config.createsEmployeeRecord) {
+    const { data, error: employeesError } = await adminClient
+      .from('employees')
+      .select('id, auth_user_id')
+
+    if (employeesError) {
+      return NextResponse.json({ error: employeesError.message }, { status: 500 })
+    }
+
+    existingEmployees = (data ?? []) as EmployeeRecord[]
   }
 
   const existingEmployeesByAuthUserId = new Map<string, EmployeeRecord>()
-  for (const employee of (existingEmployees ?? []) as EmployeeRecord[]) {
+  for (const employee of existingEmployees) {
     if (employee.auth_user_id) {
       existingEmployeesByAuthUserId.set(employee.auth_user_id, employee)
     }
   }
-  const nextEmployeeNumberRef = { current: getNextEmployeeNumber((existingEmployees ?? []) as EmployeeRecord[]) }
+  const nextEmployeeNumberRef = { current: getNextEmployeeNumber(existingEmployees) }
 
   const existingUsersByEmail = new Map<string, string>()
   let page = 1
@@ -274,10 +315,10 @@ export async function POST(request: Request) {
     page++
   }
 
-  const outputRows: Array<{ email: string; employeeId: string; password: string; status: string }> = []
+  const outputRows: Array<{ email: string; accountType: AccountType; employeeId: string; password: string; status: string }> = []
 
   for (const email of parsed.invalidRows) {
-    outputRows.push({ email, employeeId: '', password: '', status: 'invalid-email' })
+    outputRows.push({ email, accountType, employeeId: '', password: '', status: 'invalid-email' })
   }
 
   for (const email of parsed.emails) {
@@ -293,7 +334,7 @@ export async function POST(request: Request) {
         email_confirm: true,
       })
       if (error) {
-        outputRows.push({ email, employeeId: '', password: '', status: `error:${error.message}` })
+        outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${error.message}` })
         continue
       }
     } else {
@@ -303,7 +344,7 @@ export async function POST(request: Request) {
         email_confirm: true,
       })
       if (error || !data.user?.id) {
-        outputRows.push({ email, employeeId: '', password: '', status: `error:${error?.message ?? 'Failed to create user'}` })
+        outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${error?.message ?? 'Failed to create user'}` })
         continue
       }
       userId = data.user.id
@@ -314,42 +355,44 @@ export async function POST(request: Request) {
       .from('user_access')
       .upsert({
         user_id: userId,
-        role: 'employee',
+        role: config.role,
         must_change_password: true,
       }, { onConflict: 'user_id' })
 
     if (accessError) {
-      outputRows.push({ email, employeeId: '', password, status: `error:${accessError.message}` })
+      outputRows.push({ email, accountType, employeeId: '', password, status: `error:${accessError.message}` })
       continue
     }
 
-    try {
-      employeeId = await ensureEmployeeRecord(
-        adminClient,
-        existingEmployeesByAuthUserId,
-        nextEmployeeNumberRef,
-        userId,
-        email,
-      )
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create employee record'
-      outputRows.push({ email, employeeId: '', password, status: `error:${message}` })
-      continue
+    if (config.createsEmployeeRecord) {
+      try {
+        employeeId = await ensureEmployeeRecord(
+          adminClient,
+          existingEmployeesByAuthUserId,
+          nextEmployeeNumberRef,
+          userId,
+          email,
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to create employee record'
+        outputRows.push({ email, accountType, employeeId: '', password, status: `error:${message}` })
+        continue
+      }
     }
 
-    outputRows.push({ email, employeeId, password, status })
+    outputRows.push({ email, accountType, employeeId, password, status })
   }
 
   const outputCsv = [
-    'email,employee_id,password,status',
-    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.employeeId), csvEscape(row.password), csvEscape(row.status)].join(',')),
+    'email,account_type,employee_id,password,status',
+    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.accountType), csvEscape(row.employeeId), csvEscape(row.password), csvEscape(row.status)].join(',')),
   ].join('\n')
 
   return new NextResponse(outputCsv, {
     status: 200,
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="pilot-user-passwords.csv"',
+      'Content-Disposition': `attachment; filename="${config.downloadFileName}"`,
     },
   })
 }

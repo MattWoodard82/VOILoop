@@ -93,7 +93,7 @@ The repository includes a CI workflow at `.github/workflows/ci.yml` with these g
 
 **Required:** lint, typecheck, build, and full test execution.
 
-**Non-blocking for now:** route smoke check for demo paths (`/`, `/executive`, `/team`, `/interventions`, `/outcomes`, `/admin/import`) so demo regressions are visible while pilot infrastructure is still being finalized.
+**Non-blocking for now:** route smoke check for demo paths (`/`, `/wellness-director`, `/team`, `/interventions`, `/outcomes`, `/admin/import`) so demo regressions are visible while pilot infrastructure is still being finalized.
 
 **Build env requirement:** CI build needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` configured as repository variables or secrets, because pages fetch Supabase data during build/prerender.
 
@@ -112,7 +112,7 @@ To protect live demo production while PRs are in flight:
 ```
 src/
 ├── app/
-│   ├── executive/        # Executive dashboard (KPIs, recovery, burnout)
+│   ├── wellness-director/ # Wellness Director dashboard (KPIs, recovery, burnout)
 │   ├── team/             # Team roster with click-through employee detail
 │   ├── pulse/            # Pulse survey scores and question breakdown
 │   ├── interventions/    # Intervention log and recommendations

@@ -40,7 +40,7 @@ export default function LoginPage() {
       return
     }
 
-    router.replace(body.redirectTo ?? '/executive')
+    router.replace(body.redirectTo ?? '/wellness-director')
     router.refresh()
   }
 
