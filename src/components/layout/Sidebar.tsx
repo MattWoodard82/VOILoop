@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 
 const NAV = [
   { label: 'Dashboards', items: [
-    { href: '/executive', label: 'Executive', icon: BarChart2 },
+    { href: '/wellness-director', label: 'Wellness Director', icon: BarChart2 },
     { href: '/team', label: 'Team Roster', icon: Users },
     { href: '/pulse', label: 'Pulse Surveys', icon: MessageSquare },
   ]},

@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     ? '/change-password'
     : !access.role || access.role === 'employee'
       ? '/my'
-      : '/executive'
+      : '/wellness-director'
 
   return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
 }

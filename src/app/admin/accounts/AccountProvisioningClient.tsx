@@ -3,12 +3,44 @@
 import { useRef, useState } from 'react'
 import { Upload, Download } from 'lucide-react'
 
+type AccountType = 'employee' | 'wellness_director'
+
+const ACCOUNT_TYPE_COPY: Record<AccountType, {
+  title: string
+  successLabel: string
+  description: string
+  downloadName: string
+  buttonLabel: string
+}> = {
+  employee: {
+    title: 'Employee accounts',
+    successLabel: 'employee',
+    description: 'Upload a CSV of user emails. Each account is created as an employee, receives a generated password, and is required to change that password at first login.',
+    downloadName: 'employee-passwords.csv',
+    buttonLabel: 'Generate Employee Password CSV',
+  },
+  wellness_director: {
+    title: 'Wellness Director accounts',
+    successLabel: 'Wellness Director',
+    description: 'Upload a CSV of user emails. Each account is created as a Wellness Director, receives a generated password, and is required to change that password at first login.',
+    downloadName: 'wellness-director-passwords.csv',
+    buttonLabel: 'Generate Wellness Director Password CSV',
+  },
+}
+
+function getDownloadName(contentDisposition: string | null, fallback: string): string {
+  const match = contentDisposition?.match(/filename="([^"]+)"/i)
+  return match?.[1] ?? fallback
+}
+
 export function AccountProvisioningClient() {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [accountType, setAccountType] = useState<AccountType>('employee')
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const accountCopy = ACCOUNT_TYPE_COPY[accountType]
 
   const handleUpload = async () => {
     const file = fileInputRef.current?.files?.[0]
@@ -28,6 +60,7 @@ export function AccountProvisioningClient() {
 
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('accountType', accountType)
 
     try {
       const response = await fetch('/api/admin/accounts/bulk-create', {
@@ -47,11 +80,11 @@ export function AccountProvisioningClient() {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = 'pilot-user-passwords.csv'
+      anchor.download = getDownloadName(response.headers.get('Content-Disposition'), accountCopy.downloadName)
       anchor.click()
       URL.revokeObjectURL(url)
 
-      setSuccess('Accounts processed. Downloaded password CSV.')
+      setSuccess(`Accounts processed. Downloaded ${accountCopy.successLabel} password CSV.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Account creation failed.'
       setError(message)
@@ -64,13 +97,51 @@ export function AccountProvisioningClient() {
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
-          Upload a CSV of user emails. The output CSV includes generated 8-character alphanumeric passwords.
-          <br />
-          Users are set to <strong style={{ color: '#fff' }}>employee</strong> role and required to change password at first login.
+          {accountCopy.description}
         </div>
       </div>
 
       <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 20 }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 12, fontSize: 12, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+            Account type
+          </div>
+          <div role="radiogroup" aria-label="Account type" style={{ display: 'flex', gap: 10 }}>
+            {(['employee', 'wellness_director'] as const).map((option) => {
+              const selected = accountType === option
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setAccountType(option)}
+                  disabled={loading}
+                  style={{
+                    flex: 1,
+                    textAlign: 'left',
+                    background: selected ? 'rgba(105,190,40,0.12)' : '#001a33',
+                    border: selected ? '1px solid #69BE28' : '1px solid #0a3560',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    color: '#fff',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
+                    {ACCOUNT_TYPE_COPY[option].title}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.5 }}>
+                    {option === 'employee'
+                      ? 'Creates employee accounts and employee records.'
+                      : 'Creates dashboard-viewer accounts without employee records.'}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div style={{ marginBottom: 12, fontSize: 12, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
           Input CSV
         </div>
@@ -93,7 +164,7 @@ export function AccountProvisioningClient() {
           style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: loading ? '#0a3560' : '#69BE28', color: loading ? '#A5ACAF' : '#002244', border: 'none', borderRadius: 8, padding: '10px 16px', fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}
         >
           {loading ? <Upload size={14} /> : <Download size={14} />}
-          {loading ? 'Processing...' : 'Generate Password CSV'}
+          {loading ? 'Processing...' : accountCopy.buttonLabel}
         </button>
       </div>
     </div>

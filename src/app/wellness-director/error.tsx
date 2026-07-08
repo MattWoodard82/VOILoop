@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 
-export default function ExecutiveError({
+export default function WellnessDirectorError({
   error,
   reset,
 }: {
@@ -18,9 +18,9 @@ export default function ExecutiveError({
     <main style={{ minHeight: '100vh', background: '#002244', padding: '48px 20px', fontFamily: 'Inter, sans-serif' }}>
       <div style={{ maxWidth: 840, margin: '0 auto', background: '#001a33', border: '1px solid #7f1d1d', borderRadius: 12, padding: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#fca5a5', marginBottom: 10 }}>
-          Executive dashboard error
+          Wellness Director dashboard error
         </div>
-        <h1 style={{ margin: 0, color: '#fff', fontSize: 24 }}>The executive page could not load</h1>
+        <h1 style={{ margin: 0, color: '#fff', fontSize: 24 }}>The Wellness Director page could not load</h1>
         <p style={{ margin: '12px 0 0', color: '#f3f4f6', lineHeight: 1.6 }}>
           {error.message || 'A server-side error interrupted dashboard loading.'}
         </p>

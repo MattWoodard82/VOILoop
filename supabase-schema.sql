@@ -35,17 +35,43 @@ create table if not exists upload_batches (
 );
 create table if not exists user_roles (
   id         smallint primary key default 1 check (id = 1),
-  role       text not null check (role in ('admin', 'staff', 'employee')) default 'staff',
+  role       text not null check (role in ('admin', 'wellness_director', 'employee')) default 'wellness_director',
   updated_at timestamptz default now()
 );
 
 create table if not exists user_access (
   user_id              uuid primary key references auth.users(id) on delete cascade,
-  role                 text not null check (role in ('admin', 'staff', 'employee')) default 'employee',
+  role                 text not null check (role in ('admin', 'wellness_director', 'employee')) default 'employee',
   must_change_password boolean not null default true,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now()
 );
+
+alter table if exists user_roles
+  drop constraint if exists user_roles_role_check;
+
+alter table if exists user_roles
+  alter column role set default 'wellness_director';
+
+update user_roles
+set role = 'wellness_director'
+where role = 'staff';
+
+alter table if exists user_roles
+  add constraint user_roles_role_check check (role in ('admin', 'wellness_director', 'employee'));
+
+alter table if exists user_access
+  drop constraint if exists user_access_role_check;
+
+alter table if exists user_access
+  alter column role set default 'employee';
+
+update user_access
+set role = 'wellness_director'
+where role = 'staff';
+
+alter table if exists user_access
+  add constraint user_access_role_check check (role in ('admin', 'wellness_director', 'employee'));
 
 do $$
 begin
@@ -57,7 +83,7 @@ begin
       and column_name = 'id'
   ) then
     insert into user_roles (id, role)
-    values (1, 'staff')
+    values (1, 'wellness_director')
     on conflict (id) do nothing;
   end if;
 end $$;

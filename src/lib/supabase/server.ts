@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 
-export type AppRole = 'admin' | 'staff' | 'employee'
+export type AppRole = 'admin' | 'wellness_director' | 'employee'
 
 export interface UserAccess {
   role: AppRole | null
@@ -11,6 +11,11 @@ export interface UserAccess {
 
 export interface AuthenticatedUserSession {
   user: User
+}
+
+function getRedirectPathForRole(role: AppRole | null): string {
+  if (!role || role === 'employee') return '/my'
+  return '/wellness-director'
 }
 
 function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
@@ -159,7 +164,7 @@ export async function requireAdmin() {
   if (access.mustChangePassword) {
     return { redirect: '/change-password' }
   }
-  if (access.role !== 'admin') return { redirect: '/executive' }
+  if (access.role !== 'admin') return { redirect: getRedirectPathForRole(access.role) }
   return { session, role: access.role }
 }
 
@@ -170,8 +175,7 @@ export async function isAdmin(userId: string): Promise<boolean> {
 
 export async function getRedirectByRole(userId: string): Promise<string> {
   const access = await getUserAccess(userId)
-  if (!access.role || access.role === 'employee') return '/my'
-  return '/executive'
+  return getRedirectPathForRole(access.role)
 }
 
 export async function requireAuthenticatedSession() {

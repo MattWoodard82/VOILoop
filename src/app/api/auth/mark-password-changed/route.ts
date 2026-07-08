@@ -26,6 +26,6 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    redirectTo: role === 'employee' ? '/my' : '/executive',
+    redirectTo: role === 'employee' ? '/my' : '/wellness-director',
   })
 }

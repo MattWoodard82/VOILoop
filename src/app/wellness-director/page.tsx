@@ -2,11 +2,11 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getTeamDashboard } from '@/lib/supabase/queries'
 import { KpiCard, Alert } from '@/components/ui'
 import { AlertTriangle } from 'lucide-react'
-import { ExecutiveClient } from './ExecutiveClient'
+import { WellnessDirectorClient } from './WellnessDirectorClient'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ExecutivePage() {
+export default async function WellnessDirectorPage() {
   const { employees, stats, interventions } = await getTeamDashboard()
   const highRisk = employees.filter(e => e.risk_level === 'High')
 
@@ -39,7 +39,7 @@ export default async function ExecutivePage() {
   })
 
   return (
-    <DashboardShell title="Executive Dashboard">
+    <DashboardShell title="Wellness Director Dashboard">
       {highRisk.length > 0 && (
         <Alert variant="warn" icon={<AlertTriangle size={14} />}>
           <strong style={{ color: '#fff' }}>{highRisk.length} employee{highRisk.length > 1 ? 's' : ''} flagged: </strong>
@@ -54,7 +54,7 @@ export default async function ExecutivePage() {
         <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta="+2ms vs May" deltaDir="up" />
       </div>
 
-      <ExecutiveClient employees={employees} />
+      <WellnessDirectorClient employees={employees} />
 
       {deptSuggestions.length > 0 && (
         <div style={{ marginTop: 24 }}>

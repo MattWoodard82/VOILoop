@@ -25,7 +25,7 @@ describe('POST /api/auth/mark-password-changed', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Unauthorized' })
   })
 
-  test('preserves admin role and redirects to executive', async () => {
+  test('preserves admin role and redirects to the wellness director dashboard', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: true })
 
@@ -45,7 +45,7 @@ describe('POST /api/auth/mark-password-changed', () => {
     }, { onConflict: 'user_id' })
     expect(body).toMatchObject({
       success: true,
-      redirectTo: '/executive',
+      redirectTo: '/wellness-director',
     })
   })
 
@@ -75,7 +75,7 @@ describe('POST /api/auth/mark-password-changed', () => {
 
   test('returns 500 when the user_access update fails', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-3' } } as never)
-    mockGetUserAccess.mockResolvedValue({ role: 'staff', mustChangePassword: true })
+    mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: true })
 
     const upsert = jest.fn(async () => ({ error: { message: 'db failed' } }))
     mockCreateServerSupabaseClient.mockReturnValue({
