@@ -13,6 +13,11 @@ export interface AuthenticatedUserSession {
   user: User
 }
 
+function getRedirectPathForRole(role: AppRole | null): string {
+  if (!role || role === 'employee') return '/my'
+  return '/wellness-director'
+}
+
 function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
   if (!error) return false
   const message = (error.message ?? '').toLowerCase()
@@ -159,7 +164,7 @@ export async function requireAdmin() {
   if (access.mustChangePassword) {
     return { redirect: '/change-password' }
   }
-  if (access.role !== 'admin') return { redirect: '/wellness-director' }
+  if (access.role !== 'admin') return { redirect: getRedirectPathForRole(access.role) }
   return { session, role: access.role }
 }
 
@@ -170,8 +175,7 @@ export async function isAdmin(userId: string): Promise<boolean> {
 
 export async function getRedirectByRole(userId: string): Promise<string> {
   const access = await getUserAccess(userId)
-  if (!access.role || access.role === 'employee') return '/my'
-  return '/wellness-director'
+  return getRedirectPathForRole(access.role)
 }
 
 export async function requireAuthenticatedSession() {

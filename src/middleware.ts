@@ -7,6 +7,7 @@ const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to any authenticated user; list it before ADMIN_ONLY so it takes priority
 const AUTHENTICATED_ROUTES = ['/admin/import']
 const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/team', '/pulse', '/interventions', '/outcomes']
+const LEGACY_EXECUTIVE_ROUTE = '/executive'
 
 function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -27,6 +28,13 @@ function isMissingUserIdColumn(error: { code?: string | null; message?: string |
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
   const pathname = request.nextUrl.pathname
+
+  if (isRouteMatch(pathname, LEGACY_EXECUTIVE_ROUTE)) {
+    const url = request.nextUrl.clone()
+    const suffix = pathname.slice(LEGACY_EXECUTIVE_ROUTE.length)
+    url.pathname = `/wellness-director${suffix}`
+    return NextResponse.redirect(url)
+  }
 
   if (isRouteMatch(pathname, '/api')) {
     return response
@@ -135,7 +143,7 @@ export async function middleware(request: NextRequest) {
 
   if (isAdminOnly) {
     if (role !== 'admin') {
-      return NextResponse.redirect(new URL('/wellness-director', request.url))
+      return NextResponse.redirect(new URL(role === 'employee' || !role ? '/my' : '/wellness-director', request.url))
     }
   }
 

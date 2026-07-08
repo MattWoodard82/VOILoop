@@ -7,18 +7,21 @@ type AccountType = 'employee' | 'wellness_director'
 
 const ACCOUNT_TYPE_COPY: Record<AccountType, {
   title: string
+  successLabel: string
   description: string
   downloadName: string
   buttonLabel: string
 }> = {
   employee: {
     title: 'Employee accounts',
+    successLabel: 'employee',
     description: 'Upload a CSV of user emails. Each account is created as an employee, receives a generated password, and is required to change that password at first login.',
     downloadName: 'employee-passwords.csv',
     buttonLabel: 'Generate Employee Password CSV',
   },
   wellness_director: {
     title: 'Wellness Director accounts',
+    successLabel: 'Wellness Director',
     description: 'Upload a CSV of user emails. Each account is created as a Wellness Director, receives a generated password, and is required to change that password at first login.',
     downloadName: 'wellness-director-passwords.csv',
     buttonLabel: 'Generate Wellness Director Password CSV',
@@ -81,7 +84,7 @@ export function AccountProvisioningClient() {
       anchor.click()
       URL.revokeObjectURL(url)
 
-      setSuccess(`Accounts processed. Downloaded ${accountCopy.title.toLowerCase()} password CSV.`)
+      setSuccess(`Accounts processed. Downloaded ${accountCopy.successLabel} password CSV.`)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Account creation failed.'
       setError(message)
@@ -103,13 +106,15 @@ export function AccountProvisioningClient() {
           <div style={{ marginBottom: 12, fontSize: 12, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
             Account type
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div role="radiogroup" aria-label="Account type" style={{ display: 'flex', gap: 10 }}>
             {(['employee', 'wellness_director'] as const).map((option) => {
               const selected = accountType === option
               return (
                 <button
                   key={option}
                   type="button"
+                  role="radio"
+                  aria-checked={selected}
                   onClick={() => setAccountType(option)}
                   disabled={loading}
                   style={{
