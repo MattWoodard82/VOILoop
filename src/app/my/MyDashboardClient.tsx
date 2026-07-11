@@ -11,6 +11,19 @@ interface Props {
   habits: Habit | null
   workout: Workout | null
   pulse: PulseSurvey[]
+  challenge: {
+    visibility_state: 'none' | 'ineligible' | 'eligible'
+    data: {
+      id: string
+      name: string
+      threshold_value: number
+      progress_value: number
+      completed: boolean
+      completed_at: string | null
+      last_computed_at: string | null
+      status: 'active' | 'cancelled' | 'completed' | 'draft'
+    } | null
+  } | null
 }
 
 function scoreColor(v: number | null, type: 'recovery' | 'sleep' = 'recovery') {
@@ -46,7 +59,7 @@ function HabitPill({ label, value }: { label: string; value: boolean | null }) {
   )
 }
 
-export function MyDashboardClient({ employee, userEmail, wellness, habits, workout, pulse }: Props) {
+export function MyDashboardClient({ employee, userEmail, wellness, habits, workout, pulse, challenge }: Props) {
   const latest = wellness[0]
   const rc = latest?.recovery_score ?? null
   const recoveryColor = scoreColor(rc, 'recovery')
@@ -87,6 +100,43 @@ export function MyDashboardClient({ employee, userEmail, wellness, habits, worko
           <div style={{ fontSize: 20, fontWeight: 600, color: '#fff', marginBottom: 4 }}>
             Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {employee.first_name} 👋
           </div>
+
+          {challenge && challenge.visibility_state !== 'none' && challenge.data && (
+            <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: '16px 18px', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{challenge.data.name}</div>
+                <div style={{ fontSize: 10, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Challenge
+                </div>
+              </div>
+              {challenge.visibility_state === 'ineligible' ? (
+                <div style={{ fontSize: 12, color: '#A5ACAF' }}>
+                  You are not eligible for the current active challenge.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8 }}>
+                    Progress: <strong style={{ color: '#fff' }}>{challenge.data.progress_value}</strong> / {challenge.data.threshold_value}
+                  </div>
+                  <div style={{ height: 7, background: '#0a3560', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
+                    <div
+                      style={{
+                        width: `${Math.min((challenge.data.progress_value / challenge.data.threshold_value) * 100, 100)}%`,
+                        height: '100%',
+                        background: challenge.data.completed ? '#69BE28' : '#378ADD',
+                      }}
+                    />
+                  </div>
+                  <div style={{ fontSize: 11, color: challenge.data.completed ? '#69BE28' : '#A5ACAF' }}>
+                    {challenge.data.completed
+                      ? `Completed ${challenge.data.completed_at ? new Date(challenge.data.completed_at).toLocaleString() : ''}`
+                      : 'In progress'}
+                    {challenge.data.last_computed_at ? ` · Updated ${new Date(challenge.data.last_computed_at).toLocaleString()}` : ''}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div style={{ fontSize: 13, color: '#A5ACAF' }}>{employee.department} · {employee.title}</div>
         </div>
 

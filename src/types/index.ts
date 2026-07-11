@@ -158,3 +158,52 @@ export interface ImportRowOutcome {
   message: string
   created_at: string
 }
+
+export type ChallengeStatus = 'draft' | 'active' | 'completed' | 'cancelled'
+export type ChallengeMetricType = 'actions_count'
+export type ChallengeEligibilityMode = 'all_employees' | 'filtered'
+export type ChallengeVisibilityState = 'none' | 'ineligible' | 'eligible'
+
+export interface ChallengeEligibilityDefinition {
+  department_ids?: string[]
+  location_ids?: string[]
+  employment_type?: Array<'full_time' | 'part_time' | 'contractor'>
+  min_tenure_days?: number
+}
+
+export interface Challenge {
+  id: string
+  name: string
+  description: string | null
+  status: ChallengeStatus
+  metric_type: ChallengeMetricType
+  threshold_value: number
+  window_start_at: string
+  window_end_at: string
+  eligibility_mode: ChallengeEligibilityMode
+  eligibility_definition: ChallengeEligibilityDefinition | null
+  activation_at: string | null
+  completed_at: string | null
+  cancelled_at: string | null
+  created_by: string | null
+  updated_by: string | null
+  created_at: string
+  updated_at: string
+  version: number
+}
+
+export interface ChallengeParticipant {
+  id: string
+  challenge_id: string
+  employee_id: string
+  is_eligible: boolean
+  eligibility_reason: string | null
+  progress_value: number
+  progress_last_event_at: string | null
+  completed: boolean
+  completed_at: string | null
+  completion_source: 'event' | 'scheduled_recompute' | 'manual_repair' | null
+  completion_idempotency_key: string | null
+  created_at: string
+  updated_at: string
+}

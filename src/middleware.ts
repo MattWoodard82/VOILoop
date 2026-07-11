@@ -6,7 +6,7 @@ const PASSWORD_CHANGE_ROUTE = '/change-password'
 const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to any authenticated user; list it before ADMIN_ONLY so it takes priority
 const AUTHENTICATED_ROUTES = ['/admin/import']
-const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/team', '/pulse', '/interventions', '/outcomes']
+const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/team', '/pulse', '/interventions', '/outcomes', '/admin/challenges']
 const LEGACY_EXECUTIVE_ROUTE = '/executive'
 
 function isRouteMatch(pathname: string, route: string): boolean {

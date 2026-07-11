@@ -190,6 +190,96 @@ create table if not exists interventions (
   created_at        timestamptz default now()
 );
 
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'challenge_status') then
+    create type challenge_status as enum ('draft', 'active', 'completed', 'cancelled');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'challenge_metric_type') then
+    create type challenge_metric_type as enum ('actions_count');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'challenge_eligibility_mode') then
+    create type challenge_eligibility_mode as enum ('all_employees', 'filtered');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'challenge_completion_source') then
+    create type challenge_completion_source as enum ('event', 'scheduled_recompute', 'manual_repair');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'challenge_audit_action') then
+    create type challenge_audit_action as enum ('create', 'update', 'activate', 'cancel', 'complete', 'recompute', 'repair');
+  end if;
+end $$;
+
+create table if not exists challenges (
+  id                    uuid primary key default gen_random_uuid(),
+  name                  text not null check (length(name) between 3 and 120),
+  description           text check (description is null or length(description) <= 1000),
+  status                challenge_status not null default 'draft',
+  metric_type           challenge_metric_type not null default 'actions_count',
+  threshold_value       int not null check (threshold_value > 0),
+  window_start_at       timestamptz not null,
+  window_end_at         timestamptz not null check (window_end_at > window_start_at),
+  eligibility_mode      challenge_eligibility_mode not null default 'all_employees',
+  eligibility_definition jsonb,
+  activation_at         timestamptz,
+  completed_at          timestamptz,
+  cancelled_at          timestamptz,
+  created_by            uuid references auth.users(id) on delete set null,
+  updated_by            uuid references auth.users(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  version               int not null default 1 check (version > 0),
+  check (
+    eligibility_mode = 'all_employees'
+    or eligibility_definition is not null
+  )
+);
+
+create table if not exists challenge_participants (
+  id                         uuid primary key default gen_random_uuid(),
+  challenge_id               uuid not null references challenges(id) on delete cascade,
+  employee_id                text not null references employees(id) on delete cascade,
+  is_eligible                boolean not null default true,
+  eligibility_reason         text,
+  progress_value             int not null default 0 check (progress_value >= 0),
+  progress_last_event_at     timestamptz,
+  completed                  boolean not null default false,
+  completed_at               timestamptz,
+  completion_source          challenge_completion_source,
+  completion_idempotency_key text,
+  created_at                 timestamptz not null default now(),
+  updated_at                 timestamptz not null default now(),
+  unique (challenge_id, employee_id),
+  unique (completion_idempotency_key),
+  check (completed = false or completed_at is not null)
+);
+
+create table if not exists challenge_audit_log (
+  id          uuid primary key default gen_random_uuid(),
+  challenge_id uuid not null references challenges(id) on delete cascade,
+  actor_id    uuid references auth.users(id) on delete set null,
+  action      challenge_audit_action not null,
+  before      jsonb,
+  after       jsonb,
+  context     jsonb not null default '{}'::jsonb,
+  created_at  timestamptz not null default now()
+);
+
 -- Backfill/compatibility for environments that already created baseline tables.
 alter table if exists daily_wellness add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
 alter table if exists workouts add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
@@ -253,6 +343,10 @@ create index if not exists idx_interventions_emp    on interventions(employee_id
 create index if not exists idx_interventions_status on interventions(outcome);
 create index if not exists idx_upload_batches_status_started_at on upload_batches(status, started_at desc);
 create index if not exists idx_upload_batches_file_hash on upload_batches(file_hash_sha256);
+create index if not exists idx_challenges_status on challenges(status);
+create index if not exists idx_challenges_window on challenges(window_start_at, window_end_at);
+create index if not exists idx_challenge_participants_challenge_completed on challenge_participants(challenge_id, completed);
+create unique index if not exists idx_challenges_single_active on challenges(status) where status = 'active';
 
 -- ─── Import audit log ─────────────────────────────────────────────────────────
 
