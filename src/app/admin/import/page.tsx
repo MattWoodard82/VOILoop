@@ -10,7 +10,7 @@ export default async function WhoopImportPage() {
   if (redirectTo) redirect(redirectTo)
 
   return (
-    <DashboardShell title="WHOOP Data Import">
+    <DashboardShell title="WHOOP Data Import" showPeriodFilter={false} showExport={false} showSignOut={false}>
       <WhoopImportClient />
     </DashboardShell>
   )

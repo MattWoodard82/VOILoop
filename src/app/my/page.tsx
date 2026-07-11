@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { ensureEmployeeForAuthUser } from '@/lib/employee-linking'
+import { DashboardShell } from '@/components/layout/DashboardShell'
+import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
 import { SignOutButton } from '@/components/auth/SignOutButton'
@@ -45,6 +47,31 @@ export default async function MyPage() {
   const { data: habits } = await supabase.from('habits').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: workouts } = await supabase.from('workouts').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(4)
+  const { data: importBatches } = await supabase
+    .from('upload_batches')
+    .select('*')
+    .eq('imported_by', user.id)
+    .order('started_at', { ascending: false })
+    .limit(5)
 
-  return <MyDashboardClient userEmail={user.email ?? ''} employee={employee} wellness={wellness ?? []} habits={habits?.[0] ?? null} workout={workouts?.[0] ?? null} pulse={pulse ?? []} />
+  const latestWellnessDate = wellness?.[0]?.date ? formatDate(wellness[0].date) : null
+
+  return (
+    <DashboardShell
+      title="My Wellness Dashboard"
+      period={latestWellnessDate}
+      showPeriodFilter={false}
+      showExport={false}
+      showSignOut={false}
+    >
+      <MyDashboardClient
+        employee={employee}
+        wellness={wellness ?? []}
+        habits={habits?.[0] ?? null}
+        workout={workouts?.[0] ?? null}
+        pulse={pulse ?? []}
+        importBatches={importBatches ?? []}
+      />
+    </DashboardShell>
+  )
 }

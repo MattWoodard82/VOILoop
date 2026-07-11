@@ -2,11 +2,13 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart2, Users, MessageSquare, Target, TrendingUp } from 'lucide-react'
+import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Upload, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-const NAV = [
+type NavRole = 'admin' | 'wellness_director' | 'employee' | null
+
+const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
     { href: '/wellness-director', label: 'Wellness Director', icon: BarChart2 },
     { href: '/team', label: 'Team Roster', icon: Users },
@@ -16,8 +18,19 @@ const NAV = [
     { href: '/interventions', label: 'Interventions', icon: Target },
     { href: '/outcomes', label: 'Outcomes', icon: TrendingUp },
   ]},
+]
+
+const ADMIN_NAV = [
+  ...LEADERSHIP_NAV,
   { label: 'Admin', items: [
     { href: '/admin/accounts', label: 'Account Provisioning', icon: Users },
+  ]},
+]
+
+const EMPLOYEE_NAV = [
+  { label: 'My Dashboard', items: [
+    { href: '/my', label: 'My Wellness', icon: Activity },
+    { href: '/admin/import', label: 'Import WHOOP Data', icon: Upload },
   ]},
 ]
 
@@ -25,6 +38,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState<NavRole>(null)
   const [signingOut, setSigningOut] = useState(false)
 
   useEffect(() => {
@@ -35,6 +49,18 @@ export function Sidebar() {
       const { data, error } = await supabase.auth.getUser()
       if (!mounted || error) return
       setEmail(data.user?.email ?? '')
+
+      if (!data.user?.id) return
+
+      const { data: access } = await supabase
+        .from('user_access')
+        .select('role')
+        .eq('user_id', data.user.id)
+        .maybeSingle()
+
+      if (mounted) {
+        setRole((access?.role as NavRole | undefined) ?? null)
+      }
     }
 
     void loadUser()
@@ -49,6 +75,13 @@ export function Sidebar() {
     if (!source) return 'U'
     return source.slice(0, 2).toUpperCase()
   }, [email])
+
+  const nav = useMemo(() => {
+    if (role === 'admin') return ADMIN_NAV
+    if (role === 'wellness_director') return LEADERSHIP_NAV
+    if (role === 'employee') return EMPLOYEE_NAV
+    return pathname.startsWith('/my') ? EMPLOYEE_NAV : LEADERSHIP_NAV
+  }, [pathname, role])
 
   const handleSignOut = async () => {
     setSigningOut(true)
@@ -79,7 +112,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 p-2">
-        {NAV.map((section) => (
+        {nav.map((section) => (
           <div key={section.label}>
             <div style={{ fontSize: 9, color: '#A5ACAF', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '10px 8px 4px', fontWeight: 600 }}>
               {section.label}
