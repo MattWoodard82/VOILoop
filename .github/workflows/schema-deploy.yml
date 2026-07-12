@@ -73,7 +73,9 @@ jobs:
           if [[ "$db_url" =~ @([^:/?]+) ]]; then
             host="${BASH_REMATCH[1]}"
             if [[ "$host" == db.*.supabase.co ]]; then
-              echo "::warning::SUPABASE_DB_URL points to a direct host (${host}). GitHub-hosted runners often cannot reach IPv6-only direct hosts. Prefer the Supabase Session Pooler URL (*.pooler.supabase.com)."
+              echo "SUPABASE_DB_URL points to direct host (${host}), which is typically unreachable from GitHub-hosted runners."
+              echo "Set SUPABASE_DB_URL to the Supabase Session Pooler connection string host (*.pooler.supabase.com) for environment ${{ inputs.environment }}."
+              exit 1
             fi
           fi
 
