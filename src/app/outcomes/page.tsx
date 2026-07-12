@@ -6,80 +6,76 @@ import { OutcomesCharts } from './OutcomesCharts'
 
 export const dynamic = 'force-dynamic'
 
-// Resolved interventions with before/after data
-const RESOLVED = [
-  { name: 'Caleb Stone', before: 52, after: 66, metric: 'Recovery Score' },
-  { name: 'Kyle Schuppan', before: 55, after: 71, metric: 'Recovery Score' },
-  { name: 'Frank Anderson', before: 38, after: 59, metric: 'Recovery Score' },
-  { name: 'Charlie Davis', before: 44, after: 63, metric: 'Recovery Score' },
-]
-
-const LOOP_STEPS = [
-  { step: '01 · Insight', title: '2 employees flagged', desc: 'Blambic & Stephenson below recovery threshold', active: true },
-  { step: '02 · Action', title: 'Interventions deployed', desc: '1:1 check-in + sleep hygiene campaign assigned', active: false },
-  { step: '03 · Validate', title: 'Track at week 4', desc: 'Wearable data + pulse re-survey to confirm change', active: false },
-  { step: '04 · Optimize', title: 'Scale what worked', desc: 'Expand to full department if validated', active: false },
-]
-
 export default async function OutcomesPage() {
-  const [{ employees, stats }, trend] = await Promise.all([
+  const [{ employees, stats, interventions }, trend] = await Promise.all([
     getTeamDashboard(),
     getTeamWellnessTrend(5),
   ])
 
-  const travis = employees.find((e) => e.is_exact_data)
-  const avgResolved = Math.round(
-    RESOLVED.reduce((sum, r) => sum + Math.round(((r.after - r.before) / r.before) * 100), 0) / RESOLVED.length
-  )
+  const benchmark = employees.find((e) => e.is_exact_data)
+  const employeeMap = Object.fromEntries(employees.map((e) => [e.id, e]))
+  const pending = interventions.filter((i) => i.outcome === 'Pending')
+  const inProgress = interventions.filter((i) => i.outcome === 'In Progress')
+  const monitoring = interventions.filter((i) => i.outcome === 'Monitoring')
+  const resolved = interventions.filter((i) => i.outcome === 'Resolved')
+  const openInterventions = pending.length + inProgress.length + monitoring.length
+  const highRisk = employees.filter((e) => e.risk_level === 'High')
 
   return (
     <DashboardShell title="Outcomes Validation">
       <Alert variant="good" icon={<Check size={14} />}>
-        <strong style={{ color: '#fff' }}>Travis Brandenburgh (COO) baseline locked.</strong>{' '}
-        Recovery {travis?.latest_wellness?.recovery_score ?? 72} · HRV {travis?.latest_wellness?.hrv_ms ?? 37}ms · Sleep {travis?.latest_wellness?.sleep_perf ?? 89}% · Strain {travis?.latest_wellness?.day_strain ?? 10.4} — team benchmark for all intervention comparisons.
+        {benchmark ? (
+          <>
+            <strong style={{ color: '#fff' }}>
+              {benchmark.first_name} {benchmark.last_name} baseline profile available.
+            </strong>{' '}
+            Recovery {benchmark.latest_wellness?.recovery_score ?? '—'} · HRV {benchmark.latest_wellness?.hrv_ms ?? '—'}ms ·
+            Sleep {benchmark.latest_wellness?.sleep_perf ?? '—'}% · Strain {benchmark.latest_wellness?.day_strain ?? '—'}.
+          </>
+        ) : (
+          <>
+            <strong style={{ color: '#fff' }}>No benchmark profile is flagged.</strong>{' '}
+            Outcomes are shown from current team-wide biometric and intervention data.
+          </>
+        )}
       </Alert>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Team avg recovery" value={stats.avg_recovery} color="#69BE28" delta={`COO benchmark: ${travis?.latest_wellness?.recovery_score ?? 72}`} deltaDir="neutral" />
-        <KpiCard label="Gap vs benchmark" value={`–${(travis?.latest_wellness?.recovery_score ?? 72) - stats.avg_recovery} pts`} color="#ff6b6b" delta="2 employees below 50" deltaDir="down" />
-        <KpiCard label="Resolved interventions" value={RESOLVED.length} color="#69BE28" delta={`Avg +${avgResolved}% improvement`} deltaDir="up" />
-        <KpiCard label="Est. cost avoided" value="$82K" color="#69BE28" delta="Absenteeism + turnover" deltaDir="up" />
+        <KpiCard label="Team avg recovery" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_employees} active employees`} deltaDir="neutral" />
+        <KpiCard label="High risk employees" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map((e) => e.first_name).join(' · ') : 'No high-risk employees'} deltaDir="neutral" />
+        <KpiCard label="Open interventions" value={openInterventions} color="#FFA500" delta={`Pending ${pending.length} · In progress ${inProgress.length} · Monitoring ${monitoring.length}`} deltaDir="neutral" />
+        <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${interventions.length} total intervention records`} deltaDir="neutral" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        {/* Before/after table */}
-        <Card title="Before vs after — validated interventions" badge={<Badge variant="green">{RESOLVED.length} validated</Badge>}>
+        <Card title="Intervention outcome distribution" badge={<Badge variant="wolf">{interventions.length} total</Badge>}>
           <table className="data-table">
             <thead>
               <tr>
-                <th>Employee</th>
-                <th style={{ textAlign: 'center' }}>Before</th>
-                <th style={{ textAlign: 'center' }}>After</th>
-                <th style={{ textAlign: 'right' }}>Change</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Count</th>
+                <th style={{ textAlign: 'right' }}>Share</th>
               </tr>
             </thead>
             <tbody>
-              {RESOLVED.map((r) => {
-                const delta = Math.round(((r.after - r.before) / r.before) * 100)
-                return (
-                  <tr key={r.name}>
-                    <td style={{ fontWeight: 600 }}>{r.name}</td>
-                    <td style={{ textAlign: 'center', color: '#A5ACAF' }}>{r.before}</td>
-                    <td style={{ textAlign: 'center', fontWeight: 700, color: '#69BE28' }}>{r.after}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#69BE28' }}>+{delta}%</td>
-                  </tr>
-                )
-              })}
+              {[
+                { label: 'Pending', count: pending.length },
+                { label: 'In Progress', count: inProgress.length },
+                { label: 'Monitoring', count: monitoring.length },
+                { label: 'Resolved', count: resolved.length },
+              ].map((item) => (
+                <tr key={item.label}>
+                  <td style={{ fontWeight: 600 }}>{item.label}</td>
+                  <td style={{ textAlign: 'right', color: '#fff' }}>{item.count}</td>
+                  <td style={{ textAlign: 'right', color: '#A5ACAF' }}>
+                    {interventions.length > 0 ? `${Math.round((item.count / interventions.length) * 100)}%` : '0%'}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
-
-          {/* Before/after bar chart */}
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #0a3560' }}>
-            <OutcomesCharts type="comparison" data={RESOLVED} />
-          </div>
         </Card>
 
-        {/* Trend + loop */}
         <Card title="Team recovery trend">
           <OutcomesCharts
             type="trend"
@@ -88,26 +84,42 @@ export default async function OutcomesPage() {
               value: t.avg_recovery,
             }))}
           />
+        </Card>
+      </div>
 
-          {/* VOILoop cycle */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginTop: 14 }}>
-            {LOOP_STEPS.map((s) => (
-              <div key={s.step} style={{
-                background: s.active ? 'rgba(105,190,40,0.1)' : '#001a33',
-                border: `1px solid ${s.active ? 'rgba(105,190,40,0.4)' : '#0a3560'}`,
-                borderRadius: 8, padding: 12,
-              }}>
-                <div style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#69BE28', marginBottom: 5, fontWeight: 700 }}>
-                  {s.step}
-                </div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: '#fff', marginBottom: 3 }}>{s.title}</div>
-                <div style={{ fontSize: 10, color: '#A5ACAF', lineHeight: 1.4 }}>{s.desc}</div>
-              </div>
-            ))}
-          </div>
+      <div style={{ marginTop: 14 }}>
+        <Card title="Recently resolved interventions" badge={<Badge variant="green">{resolved.length} resolved</Badge>}>
+          {resolved.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#A5ACAF' }}>No resolved interventions yet.</div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Department</th>
+                  <th>Trigger</th>
+                  <th>Intervention</th>
+                  <th style={{ textAlign: 'right' }}>Resolved date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resolved.slice(0, 10).map((entry) => {
+                  const employee = employeeMap[entry.employee_id]
+                  return (
+                    <tr key={entry.id}>
+                      <td style={{ fontWeight: 600 }}>{employee ? `${employee.first_name} ${employee.last_name}` : entry.employee_id}</td>
+                      <td>{entry.department ?? '—'}</td>
+                      <td>{entry.trigger_metric ?? '—'}</td>
+                      <td>{entry.intervention_type ?? '—'}</td>
+                      <td style={{ textAlign: 'right', color: '#A5ACAF' }}>{entry.date_resolved ?? entry.date_actioned ?? '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </Card>
       </div>
     </DashboardShell>
   )
 }
-// Update resolved employee names

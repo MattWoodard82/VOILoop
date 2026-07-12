@@ -1,4 +1,12 @@
 import { redirect } from 'next/navigation'
-export default function HomePage() {
-  redirect('/wellness-director')
+import { getRoleAndSession } from '@/lib/supabase/server'
+
+export default async function HomePage() {
+  const { session, role } = await getRoleAndSession()
+
+  if (!session) {
+    redirect('/login')
+  }
+
+  redirect(!role || role === 'employee' ? '/my' : '/wellness-director')
 }

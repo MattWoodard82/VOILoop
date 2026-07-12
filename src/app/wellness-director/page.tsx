@@ -48,10 +48,10 @@ export default async function WellnessDirectorPage() {
       )}
       <div className="sec-label">Workforce snapshot — {employees.length} employees</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta="+4 pts vs May" deltaDir="up" />
-        <KpiCard label="High burnout risk" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.map(e => e.first_name).join(' · ')} deltaDir="down" />
-        <KpiCard label="Avg sleep performance" value={`${stats.avg_sleep_perf}%`} color="#A5ACAF" delta="+3% vs May" deltaDir="up" />
-        <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta="+2ms vs May" deltaDir="up" />
+        <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_employees} employees tracked`} deltaDir="neutral" />
+        <KpiCard label="High burnout risk" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map(e => e.first_name).join(' · ') : 'No high-risk employees today'} deltaDir="neutral" />
+        <KpiCard label="Avg sleep performance" value={`${stats.avg_sleep_perf}%`} color="#A5ACAF" delta={`Pulse participation ${stats.participation_rate}%`} deltaDir="neutral" />
+        <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${employees.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
       </div>
 
       <WellnessDirectorClient employees={employees} />
