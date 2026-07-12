@@ -1,0 +1,65 @@
+name: Deploy Supabase Schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment to deploy schema to
+        required: true
+        type: choice
+        default: demo-prod
+        options:
+          - demo-prod
+      confirm:
+        description: Type APPLY to run production schema deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-schema:
+    name: Apply schema to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "APPLY" ]; then
+            echo "Refusing to deploy. Input confirm must equal APPLY."
+            exit 1
+          fi
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "Missing required secret SUPABASE_DB_URL in environment ${{ inputs.environment }}."
+            exit 1
+          fi
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase@latest
+
+      - name: Apply supabase-schema.sql
+        run: supabase db query --db-url "$SUPABASE_DB_URL" -f supabase-schema.sql
+
+      - name: Publish deployment summary
+        run: |
+          {
+            echo "## Supabase schema deploy complete"
+            echo ""
+            echo "- Environment: \`${{ inputs.environment }}\`"
+            echo "- Schema file: \`supabase-schema.sql\`"
+            echo "- Triggered by: \`${{ github.actor }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
