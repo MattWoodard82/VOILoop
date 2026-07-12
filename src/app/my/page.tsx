@@ -6,13 +6,18 @@ import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
 import { SignOutButton } from '@/components/auth/SignOutButton'
+import { getRoleAndSession } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MyPage() {
+  const { session, role, mustChangePassword } = await getRoleAndSession()
+  if (!session) redirect('/login')
+  if (mustChangePassword) redirect('/change-password')
+  if (role && role !== 'employee') redirect('/wellness-director')
+
+  const user = session.user
   const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
 
   let { data: employee } = await supabase
     .from('employees').select('*').eq('auth_user_id', user.id).single()
@@ -43,7 +48,28 @@ export default async function MyPage() {
     )
   }
 
-  const { data: wellness } = await supabase.from('daily_wellness').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(8)
+  const trendWindowStart = new Date()
+  trendWindowStart.setDate(trendWindowStart.getDate() - 28)
+  const trendWindowStartDate = trendWindowStart.toISOString().slice(0, 10)
+
+  let { data: wellness } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .eq('employee_id', employee.id)
+    .gte('date', trendWindowStartDate)
+    .order('date', { ascending: false })
+
+  if (!wellness?.length) {
+    const { data: latestWellness } = await supabase
+      .from('daily_wellness')
+      .select('*')
+      .eq('employee_id', employee.id)
+      .order('date', { ascending: false })
+      .limit(1)
+
+    wellness = latestWellness ?? []
+  }
+
   const { data: habits } = await supabase.from('habits').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: workouts } = await supabase.from('workouts').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(4)

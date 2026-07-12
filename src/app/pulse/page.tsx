@@ -30,9 +30,9 @@ export default async function PulsePage() {
     <DashboardShell title="Pulse Survey Dashboard">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
         <KpiCard label="Response rate" value={`${Math.round((responded / employees.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${employees.length} responded`} deltaDir="up" />
-        <KpiCard label="Avg wellbeing" value={`${avgWellbeing}/10`} color="#fff" delta="+0.6 vs May" deltaDir="up" />
-        <KpiCard label="Burnout index" value={`${avgBurnout}/10`} color="#ff6b6b" delta="–0.3 improving" deltaDir="down" />
-        <KpiCard label="Psych safety" value={`${avgPsychSafety}/10`} color="#fff" delta="+0.9 vs May" deltaDir="up" />
+        <KpiCard label="Avg wellbeing" value={`${avgWellbeing}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Burnout index" value={`${avgBurnout}/10`} color="#ff6b6b" delta="Lower is better" deltaDir="neutral" />
+        <KpiCard label="Psych safety" value={`${avgPsychSafety}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
@@ -60,7 +60,7 @@ export default async function PulsePage() {
             })}
         </Card>
 
-        <Card title="Question breakdown — June survey">
+        <Card title="Question breakdown">
           {questions.map((q) => {
             const avg = safeAvg(pulse.map((p) => p[q.key]))
             const color = avg >= 7 ? '#69BE28' : avg >= 5 ? '#FFA500' : '#ff6b6b'

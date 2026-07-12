@@ -12,7 +12,7 @@ interface TopbarProps {
 
 export function Topbar({
   title,
-  period = 'June 9 2026',
+  period = null,
   showPeriodFilter = true,
   showExport = true,
   showSignOut = true,
@@ -26,16 +26,12 @@ export function Topbar({
       {hasActions ? (
         <div className="flex items-center gap-2">
           {showPeriodFilter && period ? (
-            <select className="form-select" defaultValue={period}>
-              <option>{period}</option>
-              <option>May 2026</option>
-              <option>Q2 2026</option>
-            </select>
+            <span className="badge badge-wolf">{period}</span>
           ) : null}
           {showExport ? (
-            <button className="btn-primary flex items-center gap-1">
+            <button className="btn-primary flex items-center gap-1" type="button" disabled title="Export not available in this pilot">
               <Download size={11} />
-              Export
+              Export (coming soon)
             </button>
           ) : null}
           {showSignOut ? <SignOutButton /> : null}
