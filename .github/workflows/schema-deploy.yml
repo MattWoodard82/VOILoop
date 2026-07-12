@@ -82,19 +82,16 @@ jobs:
           echo "::add-mask::$db_url"
           echo "SUPABASE_DB_URL_NORMALIZED=$db_url" >> "$GITHUB_ENV"
 
-      - name: Install psql client
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
-
-      - name: Apply supabase-schema.sql
-        run: psql "$SUPABASE_DB_URL_NORMALIZED" -v ON_ERROR_STOP=1 -f supabase-schema.sql
+      - name: Push Supabase migrations
+        run: npx supabase@latest db push --db-url "$SUPABASE_DB_URL_NORMALIZED" --yes
 
       - name: Publish deployment summary
         run: |
           {
-            echo "## Supabase schema deploy complete"
+            echo "## Supabase migration deploy complete"
             echo ""
             echo "- Environment: \`${{ inputs.environment }}\`"
-            echo "- Schema file: \`supabase-schema.sql\`"
+            echo "- Migrations folder: \`supabase/migrations/\`"
             echo "- Triggered by: \`${{ github.actor }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

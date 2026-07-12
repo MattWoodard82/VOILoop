@@ -33,10 +33,11 @@ cp .env.example .env.local
 ```
 Then update the Supabase keys in `.env.local`.
 
-### 4. Create the database schema
+### 4. Apply the database migrations
 ```bash
-npx supabase db query --local -f supabase-schema.sql
+npx supabase db reset
 ```
+This applies the versioned SQL files in `supabase/migrations/` to your local Supabase instance.
 
 ### 5. Seed the database
 ```bash
@@ -82,10 +83,11 @@ gh repo create voiloop --public --push
 1. **App-only bugfix release (no schema change):**
    - Merge PR to `main` and let Vercel deploy Production from `main`.
 2. **Schema + app release:**
+   - Create a new migration in `supabase/migrations/` and commit it with the app change.
    - Run GitHub Actions workflow **Deploy Supabase Schema** with:
      - `environment=demo-prod`
      - `confirm=APPLY`
-   - After schema deploy succeeds, merge PR to `main`.
+   - After the workflow applies the migrations, merge PR to `main`.
 3. **Rollback approach:**
    - App rollback: promote a previous Vercel production deployment.
    - DB rollback: use Supabase backup/PITR restore process.
@@ -95,10 +97,13 @@ gh repo create voiloop --public --push
 - Secret: `SUPABASE_DB_URL` — the **Session Pooler** connection string for the Supabase project.
 
 **Why Session Pooler?**  
-GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.supabase.co`) because it is IPv6-only. The Session Pooler endpoint (`aws-0-<region>.pooler.supabase.com`) uses IPv4 and supports DDL/migrations (unlike Transaction Pooler mode).
+GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.supabase.co`) because it is IPv6-only. The Session Pooler endpoint (`*.pooler.supabase.com`) uses IPv4 and supports DDL/migrations.
 
 **How to get the correct URL:**  
 In the Supabase dashboard → Project Settings → Database → **Session pooler** — copy the connection string and use it as the secret value. The workflow automatically appends `sslmode=require` if it is not already present.
+
+**How to add future schema changes:**  
+Create a new migration with `npx supabase migration new <name>`, edit the generated file under `supabase/migrations/`, and let the deploy workflow apply it with `supabase db push`. Never edit an existing committed migration; append a new one instead.
 
 The workflow fails immediately if the URL points to a direct `db.*.supabase.co` host.
 
@@ -178,7 +183,7 @@ The importer now persists each upload as a tracked batch:
 
 ### Local verification runbook (no hosted demo changes)
 1. Use a local/dev Supabase project for schema testing.
-2. Apply `supabase-schema.sql` to that local/dev project.
+2. Apply the versioned migrations locally with `npx supabase db reset`.
 3. Run the app and import a WHOOP workbook (`.xlsx`) or WHOOP CSV (`.csv`) from `/admin/import`.
 4. Verify:
    - `upload_batches` has a run with `completed`, `partial`, or `failed` status.
@@ -208,3 +213,5 @@ The importer now persists each upload as a tracked batch:
 | Day Strain | 10.4 |
 | Workout | Running 35min |
 | Calories | 2,100 |
+
+
