@@ -82,28 +82,11 @@ jobs:
           echo "::add-mask::$db_url"
           echo "SUPABASE_DB_URL_NORMALIZED=$db_url" >> "$GITHUB_ENV"
 
-      - name: Install Supabase CLI
-        run: npm install -g supabase@latest
+      - name: Install psql client
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends postgresql-client
 
       - name: Apply supabase-schema.sql
-        shell: bash
-        run: |
-          attempts=0
-          until [ "$attempts" -ge 3 ]
-          do
-            attempts=$((attempts + 1))
-            if supabase db query --db-url "$SUPABASE_DB_URL_NORMALIZED" -f supabase-schema.sql; then
-              exit 0
-            fi
-            if [ "$attempts" -lt 3 ]; then
-              echo "Schema apply attempt $attempts failed; retrying..."
-              sleep 5
-            fi
-          done
-
-          echo "Failed to connect to Supabase after 3 attempts."
-          echo "Verify SUPABASE_DB_URL uses the Supabase Session Pooler connection string for this environment."
-          exit 1
+        run: psql "$SUPABASE_DB_URL_NORMALIZED" -v ON_ERROR_STOP=1 -f supabase-schema.sql
 
       - name: Publish deployment summary
         run: |

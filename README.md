@@ -92,10 +92,15 @@ gh repo create voiloop --public --push
 
 ### Required GitHub environment secret for schema deploy
 - Environment: `demo-prod`
-- Secret: `SUPABASE_DB_URL` (Supabase Postgres connection string for the demo production database)
-- Use the **Session Pooler** connection string (`*.pooler.supabase.com`) rather than the direct `db.<project-ref>.supabase.co` host.
-- Include `sslmode=require` in the query string (the workflow appends it automatically if omitted).
-- The deploy workflow now fails fast when `SUPABASE_DB_URL` uses a direct `db.<project-ref>.supabase.co` host.
+- Secret: `SUPABASE_DB_URL` — the **Session Pooler** connection string for the Supabase project.
+
+**Why Session Pooler?**  
+GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.supabase.co`) because it is IPv6-only. The Session Pooler endpoint (`aws-0-<region>.pooler.supabase.com`) uses IPv4 and supports DDL/migrations (unlike Transaction Pooler mode).
+
+**How to get the correct URL:**  
+In the Supabase dashboard → Project Settings → Database → **Session pooler** — copy the connection string and use it as the secret value. The workflow automatically appends `sslmode=require` if it is not already present.
+
+The workflow fails immediately if the URL points to a direct `db.*.supabase.co` host.
 
 ---
 
