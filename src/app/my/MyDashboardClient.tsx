@@ -16,7 +16,7 @@ interface Props {
 }
 
 function getRecoverySummary(score: number | null) {
-  if (!score) {
+  if (score == null) {
     return { label: 'No recovery data yet', detail: 'Upload a WHOOP export to populate your dashboard.' }
   }
 
@@ -29,6 +29,13 @@ function getRecoverySummary(score: number | null) {
   }
 
   return { label: 'Red recovery', detail: 'Recovery is low today. Prioritize rest and lower-intensity activity.' }
+}
+
+function recoveryBadgeVariant(score: number | null): 'green' | 'amber' | 'red' | 'wolf' {
+  if (score == null) return 'wolf'
+  if (score >= 67) return 'green'
+  if (score >= 34) return 'amber'
+  return 'red'
 }
 
 function statusVariant(status: ImportBatch['status']) {
@@ -148,7 +155,7 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
-          <Badge variant={(latest?.recovery_score ?? 0) >= 67 ? 'green' : (latest?.recovery_score ?? 0) >= 34 ? 'amber' : 'red'}>
+          <Badge variant={recoveryBadgeVariant(latest?.recovery_score ?? null)}>
             Recovery {latest?.recovery_score ?? '—'}
           </Badge>
           <Badge variant="wolf">

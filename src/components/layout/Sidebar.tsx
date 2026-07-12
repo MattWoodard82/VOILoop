@@ -80,7 +80,7 @@ export function Sidebar() {
     if (role === 'admin') return ADMIN_NAV
     if (role === 'wellness_director') return LEADERSHIP_NAV
     if (role === 'employee') return EMPLOYEE_NAV
-    return pathname.startsWith('/my') ? EMPLOYEE_NAV : LEADERSHIP_NAV
+    return pathname.startsWith('/my') || pathname.startsWith('/admin/import') ? EMPLOYEE_NAV : LEADERSHIP_NAV
   }, [pathname, role])
 
   const handleSignOut = async () => {
