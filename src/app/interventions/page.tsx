@@ -24,15 +24,15 @@ export default async function InterventionsPage() {
   return (
     <DashboardShell title="Intervention Tracking">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Triggered this month" value={pending.length + inProgress.length} color="#ff6b6b" delta="Blambic · Stephenson · Stone" deltaDir="down" />
-        <KpiCard label="Pending action" value={pending.length} color="#FFA500" delta="Wellness Director review needed" deltaDir="neutral" />
-        <KpiCard label="In progress" value={inProgress.length} color="#A5ACAF" delta="Caleb Todd Stone" deltaDir="neutral" />
-        <KpiCard label="Resolved this quarter" value={resolved.length} color="#69BE28" delta="+2 vs Q1" deltaDir="up" />
+        <KpiCard label="Triggered interventions" value={pending.length + inProgress.length} color="#ff6b6b" delta={`${interventions.length} total records`} deltaDir="neutral" />
+        <KpiCard label="Pending action" value={pending.length} color="#FFA500" delta={pending.length > 0 ? 'Wellness Director review needed' : 'No pending records'} deltaDir="neutral" />
+        <KpiCard label="In progress" value={inProgress.length} color="#A5ACAF" delta={monitoring.length > 0 ? `${monitoring.length} in monitoring` : 'No monitoring records'} deltaDir="neutral" />
+        <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${Math.max(interventions.length - resolved.length, 0)} still open`} deltaDir="neutral" />
       </div>
 
       <Card title="Active intervention log" badge={
-        <button className="btn-primary" style={{ fontSize: 10, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Plus size={10} /> Log new
+        <button className="btn-primary" style={{ fontSize: 10, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4 }} type="button" disabled title="Intervention creation is not wired yet">
+          <Plus size={10} /> Log new (coming soon)
         </button>
       }>
         <table className="data-table">
@@ -111,7 +111,7 @@ export default async function InterventionsPage() {
             <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
               <span style={{ fontSize: 11, color: '#A5ACAF', width: 100 }}>{s.label}</span>
               <div style={{ flex: 1, height: 8, background: '#0a3560', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{ width: `${(s.count / interventions.length) * 100}%`, height: '100%', background: s.color, borderRadius: 4 }} />
+                <div style={{ width: `${interventions.length > 0 ? (s.count / interventions.length) * 100 : 0}%`, height: '100%', background: s.color, borderRadius: 4 }} />
               </div>
               <span style={{ fontSize: 12, fontWeight: 700, color: s.color, width: 20, textAlign: 'right' }}>{s.count}</span>
             </div>

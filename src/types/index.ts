@@ -107,8 +107,10 @@ export interface Intervention {
   intervention_type: string | null
   assigned_to: string | null
   date_actioned: string | null
+  date_resolved: string | null
   outcome: InterventionStatus
   notes: string | null
+  wd_notes: string | null
 }
 
 // Joined types for dashboard use

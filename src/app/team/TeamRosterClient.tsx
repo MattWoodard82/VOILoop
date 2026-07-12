@@ -131,7 +131,7 @@ export function TeamRosterClient({ employees }: { employees: EmployeeWithWellnes
           className="mt-4">
           {selected.is_exact_data && (
             <div style={{ marginBottom: 12, padding: '6px 10px', background: 'rgba(105,190,40,0.08)', border: '1px solid rgba(105,190,40,0.2)', borderRadius: 6, fontSize: 10, color: '#69BE28' }}>
-              ★ Exact WHOOP data — June 9 2026
+              ★ Exact WHOOP data
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 8, marginBottom: 16 }}>
@@ -159,7 +159,7 @@ export function TeamRosterClient({ employees }: { employees: EmployeeWithWellnes
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             <div>
-              <div className="sec-label">Habits — June 9</div>
+              <div className="sec-label">Habits</div>
               {HABITS.map(([key, label]) => {
                 const val = selected.latest_habits?.[key as keyof typeof selected.latest_habits]
                 return (

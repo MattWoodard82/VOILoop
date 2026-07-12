@@ -78,6 +78,22 @@ gh repo create voiloop --public --push
 # 3. Deploy
 ```
 
+### Pilot release runbook (fast path)
+1. **App-only bugfix release (no schema change):**
+   - Merge PR to `main` and let Vercel deploy Production from `main`.
+2. **Schema + app release:**
+   - Run GitHub Actions workflow **Deploy Supabase Schema** with:
+     - `environment=demo-prod`
+     - `confirm=APPLY`
+   - After schema deploy succeeds, merge PR to `main`.
+3. **Rollback approach:**
+   - App rollback: promote a previous Vercel production deployment.
+   - DB rollback: use Supabase backup/PITR restore process.
+
+### Required GitHub environment secret for schema deploy
+- Environment: `demo-prod`
+- Secret: `SUPABASE_DB_URL` (Supabase Postgres connection string for the demo production database)
+
 ---
 
 ## CI Build & Demo Checks
