@@ -93,6 +93,8 @@ gh repo create voiloop --public --push
 ### Required GitHub environment secret for schema deploy
 - Environment: `demo-prod`
 - Secret: `SUPABASE_DB_URL` (Supabase Postgres connection string for the demo production database)
+- Use the **Session Pooler** connection string (`*.pooler.supabase.com`) rather than the direct `db.<project-ref>.supabase.co` host.
+- Include `sslmode=require` in the query string (the workflow appends it automatically if omitted).
 
 ---
 
