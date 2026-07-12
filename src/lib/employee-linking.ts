@@ -25,8 +25,8 @@ function deriveNamesFromEmail(email: string): { firstName: string; lastName: str
     .map(normalizeNameToken)
     .filter(Boolean)
 
-  const first = parts[0] ?? 'pilot'
-  const last = parts[1] ?? 'user'
+  const first = parts[0] ?? 'user'
+  const last = parts[1] ?? 'account'
   return {
     firstName: toTitleCase(first),
     lastName: toTitleCase(last),

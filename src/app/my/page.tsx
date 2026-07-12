@@ -1,16 +1,24 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { ensureEmployeeForAuthUser } from '@/lib/employee-linking'
+import { DashboardShell } from '@/components/layout/DashboardShell'
+import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
 import { SignOutButton } from '@/components/auth/SignOutButton'
+import { getRoleAndSession } from '@/lib/supabase/server'
+import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
 export default async function MyPage() {
+  const { session, role, mustChangePassword } = await getRoleAndSession()
+  if (!session) redirect('/login')
+  if (mustChangePassword) redirect('/change-password')
+  if (role && role !== 'employee') redirect('/wellness-director')
+
+  const user = session.user
   const supabase = createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
 
   let { data: employee } = await supabase
     .from('employees').select('*').eq('auth_user_id', user.id).single()
@@ -41,10 +49,116 @@ export default async function MyPage() {
     )
   }
 
-  const { data: wellness } = await supabase.from('daily_wellness').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(8)
+  const trendWindowStart = new Date()
+  trendWindowStart.setDate(trendWindowStart.getDate() - 28)
+  const trendWindowStartDate = trendWindowStart.toISOString().slice(0, 10)
+
+  let { data: wellness } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .eq('employee_id', employee.id)
+    .gte('date', trendWindowStartDate)
+    .order('date', { ascending: false })
+
+  if (!wellness?.length) {
+    const { data: latestWellness } = await supabase
+      .from('daily_wellness')
+      .select('*')
+      .eq('employee_id', employee.id)
+      .order('date', { ascending: false })
+      .limit(1)
+
+    wellness = latestWellness ?? []
+  }
+
   const { data: habits } = await supabase.from('habits').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: workouts } = await supabase.from('workouts').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(4)
+  const { data: importBatches } = await supabase
+    .from('upload_batches')
+    .select('*')
+    .eq('imported_by', user.id)
+    .order('started_at', { ascending: false })
+    .limit(5)
 
-  return <MyDashboardClient userEmail={user.email ?? ''} employee={employee} wellness={wellness ?? []} habits={habits?.[0] ?? null} workout={workouts?.[0] ?? null} pulse={pulse ?? []} />
+  let challenge: {
+    visibility_state: 'none' | 'ineligible' | 'eligible'
+    data: {
+      id: string
+      name: string
+      threshold_value: number
+      progress_value: number
+      completed: boolean
+      completed_at: string | null
+      last_computed_at: string | null
+      status: 'active' | 'cancelled' | 'completed' | 'draft'
+    } | null
+  } | null = null
+
+  if (isPilotChallengesBasicEnabled()) {
+    const { data: activeChallenge } = await supabase
+      .from('challenges')
+      .select('id, name, status, threshold_value')
+      .eq('status', 'active')
+      .maybeSingle()
+
+    let visibleChallenge = activeChallenge
+    if (!visibleChallenge) {
+      const { data: terminalChallenge } = await supabase
+        .from('challenges')
+        .select('id, name, status, threshold_value')
+        .in('status', ['cancelled', 'completed'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      visibleChallenge = terminalChallenge
+    }
+
+    if (visibleChallenge) {
+      const { data: participant } = await supabase
+        .from('challenge_participants')
+        .select('is_eligible, progress_value, completed, completed_at, updated_at')
+        .eq('challenge_id', visibleChallenge.id)
+        .eq('employee_id', employee.id)
+        .maybeSingle()
+
+      challenge = {
+        visibility_state: participant?.is_eligible ? 'eligible' : 'ineligible',
+        data: {
+          id: visibleChallenge.id,
+          name: visibleChallenge.name,
+          status: visibleChallenge.status,
+          threshold_value: visibleChallenge.threshold_value,
+          progress_value: participant?.is_eligible ? (participant.progress_value ?? 0) : 0,
+          completed: Boolean(participant?.completed),
+          completed_at: participant?.completed_at ?? null,
+          last_computed_at: participant?.updated_at ?? null,
+        },
+      }
+    } else {
+      challenge = { visibility_state: 'none', data: null }
+    }
+  }
+
+  const latestWellnessDate = wellness?.[0]?.date ? formatDate(wellness[0].date) : null
+
+  return (
+    <DashboardShell
+      title="My Wellness Dashboard"
+      period={latestWellnessDate}
+      showPeriodFilter={false}
+      showExport={false}
+      showSignOut={false}
+    >
+      <MyDashboardClient
+        employee={employee}
+        wellness={wellness ?? []}
+        habits={habits?.[0] ?? null}
+        workout={workouts?.[0] ?? null}
+        pulse={pulse ?? []}
+        challenge={challenge}
+        importBatches={importBatches ?? []}
+      />
+    </DashboardShell>
+  )
 }
