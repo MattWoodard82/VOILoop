@@ -7,6 +7,8 @@ export interface Employee {
   first_name: string
   last_name: string
   department: string
+  location_id: string | null
+  employment_type: string | null
   title: string
   device_id: string | null
   consent: boolean

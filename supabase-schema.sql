@@ -9,6 +9,8 @@ create table if not exists employees (
   first_name    text not null,
   last_name     text not null,
   department    text,
+  location_id   text,
+  employment_type text,
   title         text,
   device_id     text,
   consent       boolean default true,
@@ -266,7 +268,10 @@ create table if not exists challenge_participants (
   updated_at                 timestamptz not null default now(),
   unique (challenge_id, employee_id),
   unique (completion_idempotency_key),
-  check (completed = false or completed_at is not null)
+  check (
+    (completed = true and completed_at is not null)
+    or (completed = false and completed_at is null)
+  )
 );
 
 create table if not exists challenge_audit_log (
@@ -287,6 +292,8 @@ alter table if exists workouts add column if not exists start_time timestamptz;
 alter table if exists workouts add column if not exists end_time timestamptz;
 alter table if exists habits add column if not exists source_batch_id uuid references upload_batches(id) on delete set null;
 alter table if exists import_logs add column if not exists batch_id uuid references upload_batches(id) on delete set null;
+alter table if exists employees add column if not exists location_id text;
+alter table if exists employees add column if not exists employment_type text;
 
 with ranked_workouts as (
   select

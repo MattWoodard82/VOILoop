@@ -111,6 +111,10 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const status = (url.searchParams.get('status') ?? '').trim()
+  const allowedStatuses = new Set(['draft', 'active', 'completed', 'cancelled'])
+  if (status && !allowedStatuses.has(status)) {
+    return NextResponse.json({ error: 'INVALID_STATUS', code: 'INVALID_STATUS' }, { status: 400 })
+  }
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? '50')))
   const offset = Math.max(0, Number(url.searchParams.get('offset') ?? '0'))
 

@@ -95,7 +95,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
   const { data: employees, error: employeesError } = await supabase
     .from('employees')
-    .select('id, department, enrolled_date')
+    .select('id, department, location_id, employment_type, enrolled_date')
     .eq('status', 'Active')
 
   if (employeesError) return NextResponse.json({ error: employeesError.message }, { status: 500 })
@@ -104,6 +104,8 @@ export async function POST(request: Request, { params }: { params: { id: string 
     const eligibility = evaluateEligibility(
       {
         department: employee.department,
+        location_id: employee.location_id,
+        employment_type: employee.employment_type,
         enrolled_date: employee.enrolled_date,
       },
       activated.eligibility_mode,

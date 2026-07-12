@@ -22,7 +22,7 @@ describe('recomputeActiveChallengeProgress', () => {
   })
 
   test('recomputes participant progress from workouts and marks completion once threshold is reached', async () => {
-    const participantUpdates: Array<Record<string, unknown>> = []
+    const participantUpdates: Array<Array<Record<string, unknown>>> = []
     const auditEvents: Array<Record<string, unknown>> = []
 
     const supabase = {
@@ -71,11 +71,9 @@ describe('recomputeActiveChallengeProgress', () => {
                 }),
               }),
             }),
-            update: (payload: Record<string, unknown>) => {
+            upsert: (payload: Array<Record<string, unknown>>) => {
               participantUpdates.push(payload)
-              return {
-                eq: async () => ({ error: null }),
-              }
+              return Promise.resolve({ error: null })
             },
           }
         }
@@ -121,14 +119,14 @@ describe('recomputeActiveChallengeProgress', () => {
       finalized: false,
     })
 
-    expect(participantUpdates).toHaveLength(2)
-    expect(participantUpdates[0]).toMatchObject({
+    expect(participantUpdates).toHaveLength(1)
+    expect(participantUpdates[0][0]).toMatchObject({
       progress_value: 2,
       completed: true,
       completion_source: 'event',
       completion_idempotency_key: 'challenge:challenge-1:employee:EMP001:completion',
     })
-    expect(participantUpdates[1]).toMatchObject({
+    expect(participantUpdates[0][1]).toMatchObject({
       progress_value: 1,
     })
 

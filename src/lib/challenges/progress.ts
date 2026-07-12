@@ -61,12 +61,13 @@ export async function recomputeActiveChallengeProgress(
     counts.set(employeeId, (counts.get(employeeId) ?? 0) + 1)
   }
 
-  let updatedParticipants = 0
-  for (const participant of participants ?? []) {
+  const participantRows = (participants ?? []) as ChallengeParticipantRow[]
+  const updateRequests = participantRows.map((participant) => {
     const progressValue = counts.get(participant.employee_id) ?? 0
     const isCompleteNow = progressValue >= activeChallenge.threshold_value
 
     const updatePayload: Record<string, unknown> = {
+      id: participant.id,
       progress_value: progressValue,
       updated_at: now,
     }
@@ -78,18 +79,20 @@ export async function recomputeActiveChallengeProgress(
       updatePayload.completion_idempotency_key = buildCompletionIdempotencyKey(activeChallenge.id, participant.employee_id)
     }
 
+    return updatePayload
+  })
+  const batchSize = 500
+  for (let i = 0; i < updateRequests.length; i += batchSize) {
+    const batch = updateRequests.slice(i, i + batchSize)
     const { error: updateError } = await supabase
       .from('challenge_participants')
-      .update(updatePayload)
-      .eq('id', participant.id)
+      .upsert(batch, { onConflict: 'id' })
 
-    if (updateError) {
-      throw new Error(updateError.message)
-    }
-    updatedParticipants += 1
+    if (updateError) throw new Error(updateError.message)
   }
+  const updatedParticipants = updateRequests.length
 
-  const maxLastComputedAt = ((participants ?? []) as ChallengeParticipantRow[])
+  const maxLastComputedAt = participantRows
     .map((participant) => String(participant.updated_at ?? ''))
     .filter(Boolean)
     .sort()
@@ -99,7 +102,9 @@ export async function recomputeActiveChallengeProgress(
     : 0
 
   let finalized = false
-  if (now >= activeChallenge.window_end_at) {
+  const nowMs = new Date(now).getTime()
+  const windowEndMs = new Date(activeChallenge.window_end_at).getTime()
+  if (Number.isFinite(windowEndMs) && nowMs >= windowEndMs) {
     const { data: finalizedChallenge, error: finalizeError } = await supabase
       .from('challenges')
       .update({

@@ -46,10 +46,6 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   if (body.window_start_at !== undefined) updatePayload.window_start_at = String(body.window_start_at)
   if (body.window_end_at !== undefined) updatePayload.window_end_at = String(body.window_end_at)
   if (body.eligibility_mode !== undefined) updatePayload.eligibility_mode = String(body.eligibility_mode)
-  if (body.eligibility_definition !== undefined) {
-    const mode = (updatePayload.eligibility_mode as 'all_employees' | 'filtered' | undefined) ?? 'filtered'
-    updatePayload.eligibility_definition = normalizeEligibilityDefinition(mode, body.eligibility_definition)
-  }
 
   if (!Object.keys(updatePayload).length) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
@@ -71,6 +67,12 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
   if (isTerminalChallengeStatus(challenge.status)) {
     return NextResponse.json({ error: 'Challenge is immutable in terminal state' }, { status: 400 })
+  }
+
+  if (body.eligibility_definition !== undefined) {
+    const effectiveMode = (updatePayload.eligibility_mode as 'all_employees' | 'filtered' | undefined)
+      ?? challenge.eligibility_mode
+    updatePayload.eligibility_definition = normalizeEligibilityDefinition(effectiveMode, body.eligibility_definition)
   }
 
   if (challenge.status === 'active') {
