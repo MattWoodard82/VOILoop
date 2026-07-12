@@ -47,8 +47,13 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Install Supabase CLI
-        run: npm install -g supabase@latest
+        run: npm install -g supabase@2.109.1
 
       - name: Apply supabase-schema.sql
         run: supabase db query --db-url "$SUPABASE_DB_URL" -f supabase-schema.sql
