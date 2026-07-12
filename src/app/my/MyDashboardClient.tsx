@@ -12,6 +12,19 @@ interface Props {
   habits: Habit | null
   workout: Workout | null
   pulse: PulseSurvey[]
+  challenge: {
+    visibility_state: 'none' | 'ineligible' | 'eligible'
+    data: {
+      id: string
+      name: string
+      threshold_value: number
+      progress_value: number
+      completed: boolean
+      completed_at: string | null
+      last_computed_at: string | null
+      status: 'active' | 'cancelled' | 'completed' | 'draft'
+    } | null
+  } | null
   importBatches: ImportBatch[]
 }
 
@@ -86,7 +99,7 @@ function HabitBadge({ label, value }: { label: string; value: boolean | null }) 
   )
 }
 
-export function MyDashboardClient({ employee, wellness, habits, workout, pulse, importBatches }: Props) {
+export function MyDashboardClient({ employee, wellness, habits, workout, pulse, challenge, importBatches }: Props) {
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
@@ -165,6 +178,40 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
         </div>
       </div>
 
+      {challenge && challenge.visibility_state !== 'none' && challenge.data ? (
+        <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.status}</Badge>}>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8, lineHeight: 1.5 }}>
+            <strong style={{ color: '#fff' }}>{challenge.data.name}</strong>
+          </div>
+          {challenge.visibility_state === 'ineligible' ? (
+            <div style={{ fontSize: 12, color: '#A5ACAF' }}>
+              You are not eligible for the current challenge.
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8 }}>
+                Progress: <strong style={{ color: '#fff' }}>{challenge.data.progress_value}</strong> / {challenge.data.threshold_value}
+              </div>
+              <div style={{ height: 8, background: '#0a3560', borderRadius: 999, overflow: 'hidden', marginBottom: 8 }}>
+                <div
+                  style={{
+                    width: `${Math.min((challenge.data.progress_value / challenge.data.threshold_value) * 100, 100)}%`,
+                    height: '100%',
+                    background: challenge.data.completed ? '#69BE28' : '#378ADD',
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: challenge.data.completed ? '#69BE28' : '#A5ACAF' }}>
+                {challenge.data.completed
+                  ? `Completed ${challenge.data.completed_at ? new Date(challenge.data.completed_at).toLocaleString() : ''}`
+                  : 'In progress'}
+                {challenge.data.last_computed_at ? ` · Updated ${new Date(challenge.data.last_computed_at).toLocaleString()}` : ''}
+              </div>
+            </>
+          )}
+        </Card>
+      ) : null}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
         <KpiCard
           label="Recovery score"
@@ -195,7 +242,6 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
           deltaDir="neutral"
         />
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 14, marginBottom: 14 }}>
         <Card title="Recovery and sleep trend">
           {trendData.length > 1 ? (

@@ -24,6 +24,7 @@ const ADMIN_NAV = [
   ...LEADERSHIP_NAV,
   { label: 'Admin', items: [
     { href: '/admin/accounts', label: 'Account Provisioning', icon: Users },
+    { href: '/admin/challenges', label: 'Challenges', icon: Target },
   ]},
 ]
 

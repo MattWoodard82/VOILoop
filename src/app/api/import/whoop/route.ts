@@ -9,6 +9,9 @@ import {
   type WhoopEmployeeProfile,
 } from '@/lib/whoop/workbook-context'
 import { createHash } from 'crypto'
+import { recomputeActiveChallengeProgress } from '@/lib/challenges/progress'
+import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 // Increase body size limit for WHOOP uploads
@@ -142,6 +145,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       habitsResult,
       employeeProfiles,
     })
+
+    if (isPilotChallengesBasicEnabled()) {
+      const recomputeResult = await recomputeActiveChallengeProgress(supabase, {
+        source: 'event',
+        batchId: result.batchId,
+      })
+      if (recomputeResult) {
+        logger.info({
+          event: 'challenge_recompute_from_whoop_import',
+          batchId: result.batchId,
+          challenge_id: recomputeResult.challengeId,
+          updated_participants: recomputeResult.updatedParticipants,
+          finalized: recomputeResult.finalized,
+        })
+      }
+    }
 
     return NextResponse.json(result, { status: 200 })
   } catch (error) {
