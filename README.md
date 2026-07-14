@@ -101,10 +101,8 @@ gh repo create voiloop --public --push
 ### Required GitHub configuration for schema deploy
 - Environment: `demo-prod`
 - Secret: `SUPABASE_DB_URL` — the **Session Pooler** connection string for the Supabase project.
-- Secret: `SUPABASE_SERVICE_ROLE_KEY` — service role key for admin bootstrap.
 - Variable: `PILOT_ADMIN_EMAIL` — admin user email set during deploy.
 - Secret: `PILOT_ADMIN_PASSWORD` — admin password set during deploy.
-- Variable or Secret: `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL used by admin bootstrap.
 
 **Why Session Pooler?**  
 GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.supabase.co`) because it is IPv6-only. The Session Pooler endpoint (`*.pooler.supabase.com`) uses IPv4 and supports DDL/migrations.
@@ -113,7 +111,7 @@ GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.s
 In the Supabase dashboard, click **Connect** and choose the **Session pooler** connection method (`method=session`). Copy that connection string and use it as the secret value. The workflow automatically appends `sslmode=require` if it is not already present.
 
 **How to add future schema changes:**  
-Create a new migration with `npx supabase migration new <name>`, edit the generated file under `supabase/migrations/`, and let the deploy workflow apply it with `supabase db push`. The same workflow also syncs the admin account email/password from `PILOT_ADMIN_EMAIL` and `PILOT_ADMIN_PASSWORD` on every run. Never edit an existing committed migration; append a new one instead.
+Create a new migration with `npx supabase migration new <name>`, edit the generated file under `supabase/migrations/`, and let the deploy workflow apply it with `supabase db push`. The same workflow also syncs VOILoop admin login credentials from `PILOT_ADMIN_EMAIL` and `PILOT_ADMIN_PASSWORD` on every run. Never edit an existing committed migration; append a new one instead.
 
 The workflow fails immediately if the URL points to a direct `db.*.supabase.co` host.
 
