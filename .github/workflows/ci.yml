@@ -85,3 +85,122 @@ jobs:
           if [ -f next-start.pid ]; then
             kill "$(cat next-start.pid)" || true
           fi
+
+  migration-compatibility:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Validate Supabase migrations against fresh and legacy schemas
+        shell: bash
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+
+          apply_migrations() {
+            local db_name="$1"
+            for migration in $(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | sort); do
+              psql "postgresql://postgres:postgres@127.0.0.1:5432/${db_name}" \
+                -v ON_ERROR_STOP=1 \
+                -f "$migration"
+            done
+          }
+
+          setup_auth_prereqs() {
+            local db_name="$1"
+            psql "postgresql://postgres:postgres@127.0.0.1:5432/${db_name}" \
+              -v ON_ERROR_STOP=1 <<'SQL'
+          create extension if not exists pgcrypto;
+          create schema if not exists auth;
+          create table if not exists auth.users (
+            id uuid primary key
+          );
+          SQL
+          }
+
+          assert_migration_invariants() {
+            local db_name="$1"
+            psql "postgresql://postgres:postgres@127.0.0.1:5432/${db_name}" \
+              -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'employees') then
+              raise exception 'employees table missing after migration';
+            end if;
+
+            if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'user_roles') then
+              raise exception 'user_roles table missing after migration';
+            end if;
+
+            if not exists (select 1 from user_roles where role = 'wellness_director') then
+              raise exception 'expected wellness_director role row to exist';
+            end if;
+
+            if exists (select 1 from user_roles where role = 'staff') then
+              raise exception 'legacy staff role should be normalized to wellness_director';
+            end if;
+          end $$;
+          SQL
+          }
+
+          psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -v ON_ERROR_STOP=1 -c "create database voiloop_migrations_fresh;"
+          setup_auth_prereqs "voiloop_migrations_fresh"
+          apply_migrations "voiloop_migrations_fresh"
+          assert_migration_invariants "voiloop_migrations_fresh"
+
+          psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -v ON_ERROR_STOP=1 -c "create database voiloop_migrations_legacy;"
+          setup_auth_prereqs "voiloop_migrations_legacy"
+          psql "postgresql://postgres:postgres@127.0.0.1:5432/voiloop_migrations_legacy" \
+            -v ON_ERROR_STOP=1 <<'SQL'
+          create table if not exists user_roles (
+            id uuid primary key default gen_random_uuid(),
+            role text not null default 'staff'
+          );
+
+          insert into user_roles (role)
+          values ('staff')
+          on conflict do nothing;
+          SQL
+          apply_migrations "voiloop_migrations_legacy"
+          assert_migration_invariants "voiloop_migrations_legacy"
+
+          psql "postgresql://postgres:postgres@127.0.0.1:5432/voiloop_migrations_legacy" \
+            -v ON_ERROR_STOP=1 <<'SQL'
+          do $$
+          begin
+            if not exists (
+              select 1
+              from information_schema.columns
+              where table_schema = 'public'
+                and table_name = 'user_roles'
+                and column_name = 'id'
+                and data_type = 'uuid'
+            ) then
+              raise exception 'legacy user_roles.id type was not preserved as uuid';
+            end if;
+          end $$;
+          SQL

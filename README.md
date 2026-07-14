@@ -100,7 +100,7 @@ gh repo create voiloop --public --push
 GitHub-hosted runners cannot reach the direct database host (`db.<project-ref>.supabase.co`) because it is IPv6-only. The Session Pooler endpoint (`*.pooler.supabase.com`) uses IPv4 and supports DDL/migrations.
 
 **How to get the correct URL:**  
-In the Supabase dashboard → Project Settings → Database → **Session pooler** — copy the connection string and use it as the secret value. The workflow automatically appends `sslmode=require` if it is not already present.
+In the Supabase dashboard, click **Connect** and choose the **Session pooler** connection method (`method=session`). Copy that connection string and use it as the secret value. The workflow automatically appends `sslmode=require` if it is not already present.
 
 **How to add future schema changes:**  
 Create a new migration with `npx supabase migration new <name>`, edit the generated file under `supabase/migrations/`, and let the deploy workflow apply it with `supabase db push`. Never edit an existing committed migration; append a new one instead.
@@ -119,6 +119,7 @@ The repository includes a CI workflow at `.github/workflows/ci.yml` with these g
 4. `npm run build`
 5. `npm test` (full test suite)
 6. `npm run smoke:routes -- http://127.0.0.1:3000` (non-blocking demo route smoke check)
+7. Supabase migration compatibility checks against both a fresh schema and a legacy `user_roles.id=uuid` fixture
 
 **Required:** lint, typecheck, build, and full test execution.
 
@@ -213,5 +214,4 @@ The importer now persists each upload as a tracked batch:
 | Day Strain | 10.4 |
 | Workout | Running 35min |
 | Calories | 2,100 |
-
 
