@@ -37,10 +37,14 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 
 ## Critical configuration requirements
 
-### Supabase schema deploy secret
+### Supabase schema deploy configuration
 
 - GitHub Environment: `demo-prod`
 - Secret name: `SUPABASE_DB_URL`
+- Secret name: `SUPABASE_SERVICE_ROLE_KEY`
+- Variable name: `PILOT_ADMIN_EMAIL`
+- Secret name: `PILOT_ADMIN_PASSWORD`
+- Variable or secret: `NEXT_PUBLIC_SUPABASE_URL`
 - Must be a **Session Pooler** URL (`*.pooler.supabase.com`, session mode, port `5432`)
 - Must include SSL (`sslmode=require`)
 
@@ -57,8 +61,9 @@ Do **not** use direct `db.<project-ref>.supabase.co` for GitHub-hosted runner de
 ### Schema deploy fails
 
 1. Confirm `SUPABASE_DB_URL` still points to Session Pooler.
-2. Re-run the deploy workflow once.
-3. If it fails again, review the SQL error line in logs and patch migration logic safely.
+2. Confirm `PILOT_ADMIN_EMAIL` and `PILOT_ADMIN_PASSWORD` are configured for the deploy environment.
+3. Re-run the deploy workflow once (it re-syncs admin email/password every run).
+4. If it fails again, review the SQL or admin credential sync error line in logs and patch logic safely.
 
 ### Production app issue
 
