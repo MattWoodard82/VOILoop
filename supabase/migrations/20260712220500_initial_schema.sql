@@ -82,11 +82,13 @@ begin
     from information_schema.columns
     where table_schema = 'public'
       and table_name = 'user_roles'
-      and column_name = 'id'
+      and column_name = 'role'
   ) then
-    insert into user_roles (id, role)
-    values (1, 'wellness_director')
-    on conflict (id) do nothing;
+    insert into user_roles (role)
+    select 'wellness_director'
+    where not exists (
+      select 1 from user_roles where role = 'wellness_director'
+    );
   end if;
 end $$;
 create table if not exists daily_wellness (
