@@ -107,14 +107,19 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -v admin_email="$PILOT_ADMIN_EMAIL" \
             -v admin_password="$PILOT_ADMIN_PASSWORD" <<'SQL'
+          select set_config('voiloop.admin_email', :'admin_email', false);
+          select set_config('voiloop.admin_password', :'admin_password', false);
+
           do $$
           declare
             target_user_id uuid;
+            admin_email text := current_setting('voiloop.admin_email');
+            admin_password text := current_setting('voiloop.admin_password');
           begin
             select u.id
             into target_user_id
             from auth.users u
-            where lower(u.email) = lower(:'admin_email')
+            where lower(u.email) = lower(admin_email)
             order by u.created_at asc
             limit 1;
 
@@ -132,8 +137,8 @@ jobs:
             end if;
 
             update auth.users
-            set email = :'admin_email',
-                encrypted_password = crypt(:'admin_password', gen_salt('bf')),
+            set email = admin_email,
+                encrypted_password = crypt(admin_password, gen_salt('bf')),
                 email_confirmed_at = coalesce(email_confirmed_at, now()),
                 updated_at = now()
             where id = target_user_id;
