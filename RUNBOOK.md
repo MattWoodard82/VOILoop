@@ -41,10 +41,8 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 
 - GitHub Environment: `demo-prod`
 - Secret name: `SUPABASE_DB_URL`
-- Secret name: `SUPABASE_SERVICE_ROLE_KEY`
 - Variable name: `PILOT_ADMIN_EMAIL`
 - Secret name: `PILOT_ADMIN_PASSWORD`
-- Variable or secret: `NEXT_PUBLIC_SUPABASE_URL`
 - Must be a **Session Pooler** URL (`*.pooler.supabase.com`, session mode, port `5432`)
 - Must include SSL (`sslmode=require`)
 
