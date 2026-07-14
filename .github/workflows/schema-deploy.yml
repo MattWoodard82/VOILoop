@@ -107,14 +107,19 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -v admin_email="$PILOT_ADMIN_EMAIL" \
             -v admin_password="$PILOT_ADMIN_PASSWORD" <<'SQL'
+          select set_config('voiloop.admin_email', :'admin_email', false);
+          select set_config('voiloop.admin_password', :'admin_password', false);
+
           do $$
           declare
             target_user_id uuid;
+            admin_email text := current_setting('voiloop.admin_email');
+            admin_password text := current_setting('voiloop.admin_password');
           begin
             select u.id
             into target_user_id
             from auth.users u
-            where lower(u.email) = lower(:'admin_email')
+            where lower(u.email) = lower(admin_email)
             order by u.created_at asc
             limit 1;
 
@@ -128,16 +133,42 @@ jobs:
             end if;
 
             if target_user_id is null then
-              raise exception 'No existing VOILoop admin user found to update. Create one once, then rerun deploy.';
+              target_user_id := gen_random_uuid();
+
+              insert into auth.users (
+                id,
+                instance_id,
+                aud,
+                role,
+                email,
+                encrypted_password,
+                email_confirmed_at,
+                raw_app_meta_data,
+                raw_user_meta_data,
+                created_at,
+                updated_at
+              )
+              values (
+                target_user_id,
+                '00000000-0000-0000-0000-000000000000',
+                'authenticated',
+                'authenticated',
+                admin_email,
+                crypt(admin_password, gen_salt('bf')),
+                now(),
+                '{"provider":"email","providers":["email"]}'::jsonb,
+                '{}'::jsonb,
+                now(),
+                now()
+              );
             end if;
 
             update auth.users
-            set email = :'admin_email',
-                encrypted_password = crypt(:'admin_password', gen_salt('bf')),
+            set email = admin_email,
+                encrypted_password = crypt(admin_password, gen_salt('bf')),
                 email_confirmed_at = coalesce(email_confirmed_at, now()),
                 updated_at = now()
             where id = target_user_id;
-
             insert into public.user_access (user_id, role, must_change_password)
             values (target_user_id, 'admin', false)
             on conflict (user_id) do update
