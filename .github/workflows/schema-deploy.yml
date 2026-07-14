@@ -169,7 +169,6 @@ jobs:
                 email_confirmed_at = coalesce(email_confirmed_at, now()),
                 updated_at = now()
             where id = target_user_id;
-
             insert into public.user_access (user_id, role, must_change_password)
             values (target_user_id, 'admin', false)
             on conflict (user_id) do update
