@@ -221,14 +221,14 @@ export default function AdminEventsPage() {
         {tab === 'nudge' && (
           <>
             <div style={s.card}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>This week's nudge</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>This week&apos;s nudge</div>
               <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 14 }}>
-                This message appears at the top of every participant's dashboard. Updated weekly.
+                This message appears at the top of every participant&apos;s dashboard. Updated weekly.
               </div>
               <div style={{ marginBottom: 10 }}>
                 <label style={s.label}>Message</label>
                 <textarea style={{ ...s.input, resize: 'vertical' } as React.CSSProperties} rows={4}
-                  placeholder="Write this week's focus or encouragement for participants..."
+                  placeholder="Write this week&apos;s focus or encouragement for participants..."
                   value={nudgeMsg}
                   onChange={e => setNudgeMsg(e.target.value)} />
               </div>

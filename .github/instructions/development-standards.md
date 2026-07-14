@@ -49,6 +49,7 @@ If a feature introduces/updates e2e coverage, include it in CI so trunk remains 
 - Use small, atomic commits that each represent one logical change.
 - Use Conventional Commit prefixes in commit messages (`feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`).
 - Every commit and PR must reference the related issue/spec so reviewers can trace intent.
+- If a commit impacts platform operations (deploy flow, secrets, migrations, monitoring, rollback, access), update `RUNBOOK.md` in the same PR before merge.
 
 ## Pull Request Quality Bar (Required)
 - Keep PRs small and reviewable; split large work into stacked/sequence PRs.

@@ -82,3 +82,4 @@ Before implementation starts, each spec must define:
 - Feature-flag plan for incomplete/risky behavior
 - Observability updates needed (logs/metrics/alerts)
 - Data handling constraints (PII exposure prevention, secret boundaries, server-only credentials)
+- Runbook impact check: if operations are affected, include required `RUNBOOK.md` updates in the PR scope

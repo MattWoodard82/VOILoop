@@ -8,6 +8,12 @@ Seahawks brand: Navy #002244 · Action Green #69BE28 · Wolf Grey #A5ACAF
 
 ---
 
+## Operations Runbook
+
+For day-to-day operating instructions in plain language, use [`RUNBOOK.md`](./RUNBOOK.md).
+
+---
+
 ## Quick Start
 
 ### 1. Install dependencies
@@ -214,4 +220,3 @@ The importer now persists each upload as a tracked batch:
 | Day Strain | 10.4 |
 | Workout | Running 35min |
 | Calories | 2,100 |
-

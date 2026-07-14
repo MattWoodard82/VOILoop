@@ -127,7 +127,7 @@ export function EventsNudgeCard({ employeeId }: Props) {
           marginBottom: 10,
         }}>
           <div style={{ fontSize: 10, color: '#69BE28', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, marginBottom: 6 }}>
-            This week's focus · from {nudge.author}
+            This week&apos;s focus · from {nudge.author}
           </div>
           <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.6 }}>
             {nudge.message}
