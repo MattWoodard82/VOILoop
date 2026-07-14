@@ -133,7 +133,34 @@ jobs:
             end if;
 
             if target_user_id is null then
-              raise exception 'No existing VOILoop admin user found to update. Create one once, then rerun deploy.';
+              target_user_id := gen_random_uuid();
+
+              insert into auth.users (
+                id,
+                instance_id,
+                aud,
+                role,
+                email,
+                encrypted_password,
+                email_confirmed_at,
+                raw_app_meta_data,
+                raw_user_meta_data,
+                created_at,
+                updated_at
+              )
+              values (
+                target_user_id,
+                '00000000-0000-0000-0000-000000000000',
+                'authenticated',
+                'authenticated',
+                admin_email,
+                crypt(admin_password, gen_salt('bf')),
+                now(),
+                '{"provider":"email","providers":["email"]}'::jsonb,
+                '{}'::jsonb,
+                now(),
+                now()
+              );
             end if;
 
             update auth.users
