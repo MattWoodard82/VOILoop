@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 export const metadata: Metadata = {
   title: 'VOILoop — Workforce Wellbeing Outcomes',
   description: 'Close the loop on workforce wellness ROI. Insight → Action → Validation → Optimization.',
+  icons: {
+    icon: '/icon.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

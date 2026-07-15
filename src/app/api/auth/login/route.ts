@@ -1,7 +1,88 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getUserAccess } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
+
+function isInvalidCredentialsError(error: { message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return message.includes('invalid login credentials') || message.includes('invalid credentials')
+}
+
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  const adminClient = createAdminSupabaseClient()
+  let page = 1
+
+  while (true) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) {
+      throw error
+    }
+
+    const users = data.users ?? []
+    const existing = users.find((user) => user.email?.toLowerCase() === email.toLowerCase())
+    if (existing) {
+      return existing.id
+    }
+
+    if (users.length < 1000) {
+      break
+    }
+
+    page += 1
+  }
+
+  return null
+}
+
+async function attemptAdminCredentialRepair(email: string): Promise<void> {
+  const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
+  const configuredAdminPassword = process.env.PILOT_ADMIN_PASSWORD
+
+  if (!configuredAdminEmail || !configuredAdminPassword) {
+    return
+  }
+
+  if (email.toLowerCase() !== configuredAdminEmail.toLowerCase()) {
+    return
+  }
+
+  const adminClient = createAdminSupabaseClient()
+  let userId = await findUserIdByEmail(configuredAdminEmail)
+
+  if (userId) {
+    const { error } = await adminClient.auth.admin.updateUserById(userId, {
+      password: configuredAdminPassword,
+      email_confirm: true,
+    })
+    if (error) {
+      throw error
+    }
+  } else {
+    const { data, error } = await adminClient.auth.admin.createUser({
+      email: configuredAdminEmail,
+      password: configuredAdminPassword,
+      email_confirm: true,
+    })
+    if (error || !data.user?.id) {
+      throw new Error(error?.message ?? 'Failed to create configured admin user')
+    }
+    userId = data.user.id
+  }
+
+  const { error: accessError } = await adminClient
+    .from('user_access')
+    .upsert({
+      user_id: userId,
+      role: 'admin',
+      must_change_password: false,
+    }, { onConflict: 'user_id' })
+
+  if (accessError) {
+    throw accessError
+  }
+}
 
 function wantsJson(request: Request): boolean {
   const contentType = request.headers.get('content-type') ?? ''
@@ -44,7 +125,24 @@ export async function POST(request: Request) {
   }
 
   const supabase = createServerSupabaseClient()
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+  let { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+  if ((error || !data.user) && isInvalidCredentialsError(error)) {
+    const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
+    const configuredAdminPassword = process.env.PILOT_ADMIN_PASSWORD
+    if (
+      configuredAdminEmail &&
+      configuredAdminPassword &&
+      email.toLowerCase() === configuredAdminEmail.toLowerCase() &&
+      password === configuredAdminPassword
+    ) {
+      await attemptAdminCredentialRepair(email)
+      const retried = await supabase.auth.signInWithPassword({ email, password })
+      data = retried.data
+      error = retried.error
+    }
+  }
+
   if (error || !data.user) {
     return jsonOrRedirect(request, { error: error?.message ?? 'Sign-in failed.' }, 401, '/login')
   }
