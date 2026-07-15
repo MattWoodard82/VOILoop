@@ -16,12 +16,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     fetch('/api/diagnostic/admin-user')
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<{ id: string | null }>
+      .then(async (r) => {
+        const body = await r.json().catch(() => null) as { id: string | null; error?: string } | null
+        if (!r.ok) {
+          const detail = body?.error ? `HTTP ${r.status}: ${body.error}` : `HTTP ${r.status}`
+          throw new Error(detail)
+        }
+        return body
       })
       .then((body) => {
-        if (body.id) {
+        if (body?.id) {
           setAdminDiag({ status: 'found', id: body.id })
         } else {
           setAdminDiag({ status: 'not_found' })
