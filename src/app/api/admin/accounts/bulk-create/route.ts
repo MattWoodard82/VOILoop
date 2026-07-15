@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { provisionSupabaseAccount } from '@/lib/supabase/provision-account'
 import { randomInt } from 'crypto'
 
 export const runtime = 'nodejs'
@@ -325,42 +326,23 @@ export async function POST(request: Request) {
     const password = randomPassword(8)
     let userId = existingUsersByEmail.get(email)
     let employeeId = ''
-    let status = 'created'
+    let status: 'created' | 'updated' = 'created'
 
-    if (userId) {
-      status = 'updated'
-      const { error } = await adminClient.auth.admin.updateUserById(userId, {
-        password,
-        email_confirm: true,
-      })
-      if (error) {
-        outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${error.message}` })
-        continue
-      }
-    } else {
-      const { data, error } = await adminClient.auth.admin.createUser({
+    try {
+      const provisioned = await provisionSupabaseAccount({
+        adminClient,
         email,
         password,
-        email_confirm: true,
-      })
-      if (error || !data.user?.id) {
-        outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${error?.message ?? 'Failed to create user'}` })
-        continue
-      }
-      userId = data.user.id
-      existingUsersByEmail.set(email, userId)
-    }
-
-    const { error: accessError } = await adminClient
-      .from('user_access')
-      .upsert({
-        user_id: userId,
         role: config.role,
-        must_change_password: true,
-      }, { onConflict: 'user_id' })
-
-    if (accessError) {
-      outputRows.push({ email, accountType, employeeId: '', password, status: `error:${accessError.message}` })
+        mustChangePassword: true,
+        existingUserId: userId,
+      })
+      userId = provisioned.userId
+      status = provisioned.status
+      existingUsersByEmail.set(email, userId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create user'
+      outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${message}` })
       continue
     }
 

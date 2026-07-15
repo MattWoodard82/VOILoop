@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getUserAccess } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { provisionSupabaseAccount } from '@/lib/supabase/provision-account'
 
 export const runtime = 'nodejs'
 
@@ -17,32 +18,6 @@ function isInvalidCredentialsError(error: { message?: string | null } | null): b
   return message.includes('invalid login credentials') || message.includes('invalid credentials')
 }
 
-async function findUserIdByEmail(email: string): Promise<string | null> {
-  const adminClient = createAdminSupabaseClient()
-  let page = 1
-
-  while (true) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
-    if (error) {
-      throw error
-    }
-
-    const users = data.users ?? []
-    const existing = users.find((user) => user.email?.toLowerCase() === email.toLowerCase())
-    if (existing) {
-      return existing.id
-    }
-
-    if (users.length < 1000) {
-      break
-    }
-
-    page += 1
-  }
-
-  return null
-}
-
 async function attemptAdminCredentialRepair(email: string): Promise<void> {
   const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
   const configuredAdminPassword = process.env.PILOT_ADMIN_PASSWORD
@@ -56,39 +31,13 @@ async function attemptAdminCredentialRepair(email: string): Promise<void> {
   }
 
   const adminClient = createAdminSupabaseClient()
-  let userId = await findUserIdByEmail(configuredAdminEmail)
-
-  if (userId) {
-    const { error } = await adminClient.auth.admin.updateUserById(userId, {
-      password: configuredAdminPassword,
-      email_confirm: true,
-    })
-    if (error) {
-      throw error
-    }
-  } else {
-    const { data, error } = await adminClient.auth.admin.createUser({
-      email: configuredAdminEmail,
-      password: configuredAdminPassword,
-      email_confirm: true,
-    })
-    if (error || !data.user?.id) {
-      throw new Error(error?.message ?? 'Failed to create configured admin user')
-    }
-    userId = data.user.id
-  }
-
-  const { error: accessError } = await adminClient
-    .from('user_access')
-    .upsert({
-      user_id: userId,
-      role: 'admin',
-      must_change_password: false,
-    }, { onConflict: 'user_id' })
-
-  if (accessError) {
-    throw accessError
-  }
+  await provisionSupabaseAccount({
+    adminClient,
+    email: configuredAdminEmail,
+    password: configuredAdminPassword,
+    role: 'admin',
+    mustChangePassword: false,
+  })
 }
 
 function wantsJson(request: Request): boolean {
