@@ -56,6 +56,14 @@ jobs:
             echo "Missing required secret PILOT_ADMIN_PASSWORD."
             exit 1
           fi
+          if [ -z "$(printf '%s' "$PILOT_ADMIN_EMAIL" | tr -d '[:space:]')" ]; then
+            echo "PILOT_ADMIN_EMAIL cannot be empty or whitespace."
+            exit 1
+          fi
+          if [ ${#PILOT_ADMIN_PASSWORD} -lt 8 ]; then
+            echo "PILOT_ADMIN_PASSWORD must be at least 8 characters."
+            exit 1
+          fi
 
       - name: Normalize and validate SUPABASE_DB_URL
         shell: bash
@@ -113,9 +121,13 @@ jobs:
           do $$
           declare
             target_user_id uuid;
-            admin_email text := current_setting('voiloop.admin_email');
+            admin_email text := lower(btrim(current_setting('voiloop.admin_email')));
             admin_password text := current_setting('voiloop.admin_password');
           begin
+            if admin_email = '' then
+              raise exception 'PILOT_ADMIN_EMAIL resolved to blank after trimming.';
+            end if;
+
             select u.id
             into target_user_id
             from auth.users u
@@ -177,6 +189,62 @@ jobs:
           end $$;
           SQL
 
+      - name: Verify admin credentials are login-ready
+        shell: bash
+        run: |
+          psql "$SUPABASE_DB_URL_NORMALIZED" \
+            -v ON_ERROR_STOP=1 \
+            -v admin_email="$PILOT_ADMIN_EMAIL" \
+            -v admin_password="$PILOT_ADMIN_PASSWORD" <<'SQL'
+          select set_config('voiloop.admin_email', :'admin_email', false);
+          select set_config('voiloop.admin_password', :'admin_password', false);
+
+          do $$
+          declare
+            expected_email text := lower(btrim(current_setting('voiloop.admin_email')));
+            expected_password text := current_setting('voiloop.admin_password');
+            target_user auth.users%rowtype;
+            access_role text;
+            access_must_change boolean;
+          begin
+            select u.*
+            into target_user
+            from auth.users u
+            where lower(u.email) = expected_email
+            order by u.created_at asc
+            limit 1;
+
+            if target_user.id is null then
+              raise exception 'Admin user not found for %', expected_email;
+            end if;
+
+            if target_user.email_confirmed_at is null then
+              raise exception 'Admin user % is not email-confirmed.', expected_email;
+            end if;
+
+            if target_user.encrypted_password is null or target_user.encrypted_password = '' then
+              raise exception 'Admin user % has no password hash.', expected_email;
+            end if;
+
+            if target_user.encrypted_password <> crypt(expected_password, target_user.encrypted_password) then
+              raise exception 'Admin password hash verification failed for %.', expected_email;
+            end if;
+
+            select ua.role, ua.must_change_password
+            into access_role, access_must_change
+            from public.user_access ua
+            where ua.user_id = target_user.id;
+
+            if access_role is distinct from 'admin' then
+              raise exception 'user_access role is %, expected admin for %.', access_role, expected_email;
+            end if;
+
+            if access_must_change is distinct from false then
+              raise exception 'must_change_password is %, expected false for %.', access_must_change, expected_email;
+            end if;
+          end $$;
+          SQL
+
       - name: Publish deployment summary
         run: |
           {
@@ -185,6 +253,7 @@ jobs:
             echo "- Environment: \`${{ inputs.environment }}\`"
             echo "- Migrations folder: \`supabase/migrations/\`"
             echo "- VOILoop admin credentials synced from GitHub config for: \`$PILOT_ADMIN_EMAIL\`"
+            echo "- Admin credential verification: passed (hash + role + password gate checks)"
             echo "- Triggered by: \`${{ github.actor }}\`"
             echo "- Commit: \`${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
