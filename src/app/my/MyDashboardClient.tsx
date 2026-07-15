@@ -5,6 +5,7 @@ import { WhoopImportClient } from '@/app/admin/import/WhoopImportClient'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Employee, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
+import { EventsNudgeCard } from '@/components/EventsNudgeCard'
 
 interface Props {
   employee: Employee
