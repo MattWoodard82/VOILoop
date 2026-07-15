@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { parseFrontendError } from '@/lib/frontend-error'
 
@@ -10,6 +10,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [errorDetail, setErrorDetail] = useState('')
+  const [adminUserId, setAdminUserId] = useState<string | null | undefined>(undefined)
+
+  useEffect(() => {
+    fetch('/api/diagnostic/admin-user')
+      .then((r) => r.json())
+      .then((body: { id: string | null }) => setAdminUserId(body.id))
+      .catch(() => setAdminUserId(null))
+  }, [])
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -71,6 +79,15 @@ export default function LoginPage() {
           </svg>
           <div><span style={{ fontWeight: 700, fontSize: 24, color: '#69BE28' }}>VOI</span><span style={{ fontWeight: 300, fontSize: 24, color: '#fff' }}>Loop</span></div>
           <div style={{ fontSize: 11, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: 4 }}>Outcomes Platform</div>
+        </div>
+        {/* DIAGNOSTIC */}
+        <div style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#A5ACAF', fontFamily: 'monospace' }}>
+          <strong style={{ color: '#69BE28' }}>DIAG</strong> admin@voiloop.com →{' '}
+          {adminUserId === undefined
+            ? 'loading…'
+            : adminUserId === null
+              ? <span style={{ color: '#ff6b6b' }}>admin user not found</span>
+              : <span style={{ color: '#69BE28' }}>{adminUserId}</span>}
         </div>
         <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 32 }}>
           <h1 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 6 }}>Sign in to VOILoop</h1>
