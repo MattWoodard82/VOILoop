@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -8,11 +9,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setErrorDetail('')
 
     const formData = new FormData(e.currentTarget)
     const emailValue = String(formData.get('email') ?? '').trim()
@@ -20,28 +23,38 @@ export default function LoginPage() {
 
     if (!emailValue || !passwordValue) {
       setError('Enter your email and password.')
+      setErrorDetail('Both fields are required before submitting.')
       setLoading(false)
       return
     }
 
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: emailValue,
-        password: passwordValue,
-      }),
-    })
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailValue,
+          password: passwordValue,
+        }),
+      })
 
-    const body = await response.json().catch(() => ({ error: 'Sign-in failed.' }))
-    if (!response.ok) {
-      setError(body.error ?? 'Sign-in failed.')
+      if (!response.ok) {
+        const parsed = await parseFrontendError(response, 'Sign-in failed.')
+        setError(parsed.message)
+        setErrorDetail(parsed.detail)
+        setLoading(false)
+        return
+      }
+
+      const body = await response.json().catch(() => ({ redirectTo: '/wellness-director' })) as { redirectTo?: string }
+      router.replace(body.redirectTo ?? '/wellness-director')
+      router.refresh()
+    } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : String(requestError)
+      setError('Sign-in request could not be completed.')
+      setErrorDetail(`Detail: ${detail}`)
       setLoading(false)
-      return
     }
-
-    router.replace(body.redirectTo ?? '/wellness-director')
-    router.refresh()
   }
 
   return (
@@ -93,7 +106,16 @@ export default function LoginPage() {
               />
             </div>
 
-            {error && <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 14 }}>{error}</div>}
+            {error && (
+              <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 14 }}>
+                <div>{error}</div>
+                {errorDetail && (
+                  <div style={{ marginTop: 6, color: '#fecaca', wordBreak: 'break-word' }}>
+                    {errorDetail}
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="submit"
               disabled={loading}
