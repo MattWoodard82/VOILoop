@@ -342,7 +342,7 @@ export async function POST(request: Request) {
       existingUsersByEmail.set(email, userId)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create user'
-      outputRows.push({ email, accountType, employeeId: '', password: '', status: `error:${message}` })
+      outputRows.push({ email, accountType, employeeId: '', password, status: `error:${message}` })
       continue
     }
 

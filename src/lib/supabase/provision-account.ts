@@ -1,4 +1,4 @@
-import type { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 export type ProvisionableRole = 'admin' | 'employee' | 'wellness_director'
 
