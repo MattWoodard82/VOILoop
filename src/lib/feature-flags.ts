@@ -6,3 +6,7 @@ function isEnabled(raw: string | undefined): boolean {
 export function isPilotChallengesBasicEnabled(): boolean {
   return isEnabled(process.env.PILOT_CHALLENGES_BASIC)
 }
+
+export function isPublicErrorDiagnosticsEnabled(): boolean {
+  return isEnabled(process.env.NEXT_PUBLIC_SHOW_ERROR_DIAGNOSTICS)
+}

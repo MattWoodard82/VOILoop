@@ -25,6 +25,17 @@ function isNoRowsError(error: { code?: string | null } | null): boolean {
   return error?.code === 'PGRST116'
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message
+    }
+  }
+  return String(error)
+}
+
 interface Props {
   employeeId: string
 }
@@ -112,7 +123,7 @@ export function EventsNudgeCard({ employeeId }: Props) {
         setRsvps(rsvpData?.map(r => r.event_id) ?? [])
         setError('')
       } catch (fetchError) {
-        const message = fetchError instanceof Error ? fetchError.message : String(fetchError)
+        const message = getErrorMessage(fetchError)
         setError(`Events card failed to load. Detail: ${message}`)
       } finally {
         setLoading(false)
