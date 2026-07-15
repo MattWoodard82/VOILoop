@@ -214,7 +214,7 @@ jobs:
             order by u.created_at asc
             limit 1;
 
-            if target_user.id is null then
+            if not found then
               raise exception 'Admin user not found for %', expected_email;
             end if;
 
@@ -234,6 +234,10 @@ jobs:
             into access_role, access_must_change
             from public.user_access ua
             where ua.user_id = target_user.id;
+
+            if not found then
+              raise exception 'user_access row missing for admin user %.', expected_email;
+            end if;
 
             if access_role is distinct from 'admin' then
               raise exception 'user_access role is %, expected admin for %.', access_role, expected_email;
