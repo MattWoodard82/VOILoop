@@ -11,7 +11,6 @@ type LoginErrorBody = {
   source: 'backend'
   requestId: string
 }
-
 function isInvalidCredentialsError(error: { message?: string | null } | null): boolean {
   if (!error) return false
   const message = (error.message ?? '').toLowerCase()
