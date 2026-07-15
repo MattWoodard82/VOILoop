@@ -8,5 +8,7 @@ export function isPilotChallengesBasicEnabled(): boolean {
 }
 
 export function isPublicErrorDiagnosticsEnabled(): boolean {
-  return isEnabled(process.env.NEXT_PUBLIC_SHOW_ERROR_DIAGNOSTICS)
+  const raw = process.env.NEXT_PUBLIC_SHOW_ERROR_DIAGNOSTICS
+  if (raw == null || raw.trim() === '') return true
+  return isEnabled(raw)
 }
