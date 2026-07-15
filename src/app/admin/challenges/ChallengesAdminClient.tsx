@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Alert, Badge, Card } from '@/components/ui'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 type Challenge = {
   id: string
@@ -48,13 +49,22 @@ export function ChallengesAdminClient() {
 
   const activeChallenge = useMemo(() => challenges.find((challenge) => challenge.status === 'active') ?? null, [challenges])
 
+  const setErrorFromResponse = async (response: Response, fallbackMessage: string) => {
+    const parsed = await parseFrontendError(response, fallbackMessage)
+    const detail = parsed.detail ? ` (${parsed.detail})` : ''
+    setError(`${parsed.message}${detail}`)
+  }
+
   const loadChallenges = async () => {
     setLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/admin/challenges', { cache: 'no-store' })
+      if (!response.ok) {
+        await setErrorFromResponse(response, 'Failed to load challenges')
+        return
+      }
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error ?? 'Failed to load challenges')
       setChallenges(payload.challenges ?? [])
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Failed to load challenges')
@@ -88,9 +98,8 @@ export function ChallengesAdminClient() {
         eligibility_mode: 'all_employees',
       }),
     })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to create challenge')
+      await setErrorFromResponse(response, 'Failed to create challenge')
       return
     }
     await loadChallenges()
@@ -98,11 +107,11 @@ export function ChallengesAdminClient() {
 
   const loadDetail = async (challengeId: string) => {
     const response = await fetch(`/api/admin/challenges/${challengeId}`, { cache: 'no-store' })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to load challenge details')
+      await setErrorFromResponse(response, 'Failed to load challenge details')
       return
     }
+    const payload = await response.json()
     setDetail(payload as ChallengeDetail)
     setEditName(payload.challenge.name ?? '')
     setEditDescription(payload.challenge.description ?? '')
@@ -111,11 +120,11 @@ export function ChallengesAdminClient() {
   const loadParticipants = async (challengeId: string, status: 'all' | 'completed' | 'incomplete') => {
     const query = status === 'all' ? '' : `?status=${status}`
     const response = await fetch(`/api/admin/challenges/${challengeId}/participants${query}`, { cache: 'no-store' })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to load participants')
+      await setErrorFromResponse(response, 'Failed to load participants')
       return
     }
+    const payload = await response.json()
     setParticipants(payload.participants ?? [])
   }
 
@@ -131,9 +140,8 @@ export function ChallengesAdminClient() {
         description: editDescription,
       }),
     })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to update challenge')
+      await setErrorFromResponse(response, 'Failed to update challenge')
       return
     }
     await loadChallenges()
@@ -147,9 +155,8 @@ export function ChallengesAdminClient() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ version: challenge.version }),
     })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to activate challenge')
+      await setErrorFromResponse(response, 'Failed to activate challenge')
       return
     }
     await loadChallenges()
@@ -162,9 +169,8 @@ export function ChallengesAdminClient() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ version: challenge.version, reason: 'cancelled during pilot validation' }),
     })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to cancel challenge')
+      await setErrorFromResponse(response, 'Failed to cancel challenge')
       return
     }
     await loadChallenges()
@@ -177,9 +183,8 @@ export function ChallengesAdminClient() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ version: challenge.version }),
     })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to complete challenge')
+      await setErrorFromResponse(response, 'Failed to complete challenge')
       return
     }
     await loadChallenges()
@@ -188,9 +193,8 @@ export function ChallengesAdminClient() {
   const runRecompute = async () => {
     setError(null)
     const response = await fetch('/api/admin/challenges/recompute', { method: 'POST' })
-    const payload = await response.json()
     if (!response.ok) {
-      setError(payload.error ?? 'Failed to run recompute')
+      await setErrorFromResponse(response, 'Failed to run recompute')
       return
     }
     await loadChallenges()

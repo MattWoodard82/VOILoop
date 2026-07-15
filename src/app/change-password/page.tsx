@@ -1,44 +1,57 @@
 'use client'
 
 import { useState } from 'react'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 export default function ChangePasswordPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
   const [success, setSuccess] = useState('')
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
+    setErrorDetail('')
     setSuccess('')
 
     if (password.length < 8) {
       setError('Password must be at least 8 characters.')
+      setErrorDetail('Password must contain at least 8 characters.')
       return
     }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match.')
+      setErrorDetail('New password and confirmation must match exactly.')
       return
     }
 
     setLoading(true)
-    const response = await fetch('/api/auth/change-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({ error: 'Failed to finalize password change.' }))
-      setError(body.error ?? 'Failed to finalize password change.')
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!response.ok) {
+        const parsed = await parseFrontendError(response, 'Failed to finalize password change.')
+        setError(parsed.message)
+        setErrorDetail(parsed.detail)
+        setLoading(false)
+        return
+      }
+      const body = await response.json().catch(() => ({ redirectTo: '/wellness-director' }))
+      setSuccess('Password updated. Redirecting…')
+      window.location.assign(body.redirectTo ?? '/wellness-director')
+    } catch (requestError) {
+      const detail = requestError instanceof Error ? requestError.message : String(requestError)
+      setError('Password update request failed.')
+      setErrorDetail(`Detail: ${detail}`)
       setLoading(false)
-      return
     }
-    const body = await response.json().catch(() => ({ redirectTo: '/wellness-director' }))
-    setSuccess('Password updated. Redirecting…')
-    window.location.assign(body.redirectTo ?? '/wellness-director')
   }
 
   return (
@@ -77,7 +90,16 @@ export default function ChangePasswordPage() {
             />
           </div>
 
-          {error && <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 14 }}>{error}</div>}
+          {error && (
+            <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 14 }}>
+              <div>{error}</div>
+              {errorDetail && (
+                <div style={{ marginTop: 6, color: '#fecaca', wordBreak: 'break-word' }}>
+                  {errorDetail}
+                </div>
+              )}
+            </div>
+          )}
           {success && <div style={{ background: 'rgba(105,190,40,0.1)', border: '1px solid rgba(105,190,40,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#69BE28', marginBottom: 14 }}>{success}</div>}
 
           <button

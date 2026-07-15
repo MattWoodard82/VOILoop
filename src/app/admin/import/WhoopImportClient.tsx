@@ -2,6 +2,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { Upload, CheckCircle, XCircle, AlertCircle, Download, RotateCcw } from 'lucide-react'
 import type { ImportResult, ImportRowError } from '@/lib/whoop/types'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'partial' | 'error'
 const MAX_DISPLAYED_ERRORS = 100
@@ -28,14 +29,15 @@ export function WhoopImportClient() {
 
     try {
       const res = await fetch('/api/import/whoop', { method: 'POST', body })
-      const json = await res.json()
 
       if (!res.ok) {
+        const parsed = await parseFrontendError(res, 'Upload failed')
         setStatus('error')
-        setStructureErrors(json.details ?? [json.error ?? 'Upload failed'])
+        setStructureErrors([parsed.message, parsed.detail].filter(Boolean))
         return
       }
 
+      const json = await res.json()
       const importResult: ImportResult = json
       setResult(importResult)
 

@@ -21,6 +21,21 @@ interface Nudge {
   week_of: string
 }
 
+function isNoRowsError(error: { code?: string | null } | null): boolean {
+  return error?.code === 'PGRST116'
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message
+    }
+  }
+  return String(error)
+}
+
 interface Props {
   employeeId: string
 }
@@ -60,41 +75,61 @@ export function EventsNudgeCard({ employeeId }: Props) {
   const [nudge, setNudge] = useState<Nudge | null>(null)
   const [rsvps, setRsvps] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    const fetch = async () => {
+    const loadCardData = async () => {
       const supabase = createClient()
       const today = new Date().toISOString().split('T')[0]
 
-      const { data: eventsData } = await supabase
-        .from('events')
-        .select('*')
-        .gte('event_date', today)
-        .order('event_date', { ascending: true })
-        .limit(5)
+      try {
+        const { data: eventsData, error: eventsError } = await supabase
+          .from('events')
+          .select('*')
+          .gte('event_date', today)
+          .order('event_date', { ascending: true })
+          .limit(5)
 
-      const weekOf = new Date()
-      weekOf.setDate(weekOf.getDate() - weekOf.getDay() + 1)
-      const weekStr = weekOf.toISOString().split('T')[0]
-      const { data: nudgeData } = await supabase
-        .from('weekly_nudges')
-        .select('message, author, week_of')
-        .lte('week_of', weekStr)
-        .order('week_of', { ascending: false })
-        .limit(1)
-        .single()
+        if (eventsError) {
+          throw eventsError
+        }
 
-      const { data: rsvpData } = await supabase
-        .from('event_rsvps')
-        .select('event_id')
-        .eq('employee_id', employeeId)
+        const weekOf = new Date()
+        weekOf.setDate(weekOf.getDate() - weekOf.getDay() + 1)
+        const weekStr = weekOf.toISOString().split('T')[0]
+        const { data: nudgeData, error: nudgeError } = await supabase
+          .from('weekly_nudges')
+          .select('message, author, week_of')
+          .lte('week_of', weekStr)
+          .order('week_of', { ascending: false })
+          .limit(1)
+          .single()
 
-      setEvents(eventsData ?? [])
-      setNudge(nudgeData ?? null)
-      setRsvps(rsvpData?.map(r => r.event_id) ?? [])
-      setLoading(false)
+        if (nudgeError && !isNoRowsError(nudgeError)) {
+          throw nudgeError
+        }
+
+        const { data: rsvpData, error: rsvpError } = await supabase
+          .from('event_rsvps')
+          .select('event_id')
+          .eq('employee_id', employeeId)
+
+        if (rsvpError) {
+          throw rsvpError
+        }
+
+        setEvents(eventsData ?? [])
+        setNudge(nudgeData ?? null)
+        setRsvps(rsvpData?.map(r => r.event_id) ?? [])
+        setError('')
+      } catch (fetchError) {
+        const message = getErrorMessage(fetchError)
+        setError(`Events card failed to load. Detail: ${message}`)
+      } finally {
+        setLoading(false)
+      }
     }
-    fetch()
+    void loadCardData()
   }, [employeeId])
 
   const toggleRsvp = async (eventId: string) => {
@@ -102,12 +137,20 @@ export function EventsNudgeCard({ employeeId }: Props) {
     const isRsvped = rsvps.includes(eventId)
 
     if (isRsvped) {
-      await supabase.from('event_rsvps').delete()
+      const { error } = await supabase.from('event_rsvps').delete()
         .eq('event_id', eventId)
         .eq('employee_id', employeeId)
+      if (error) {
+        setError(`RSVP update failed. Detail: ${error.message}`)
+        return
+      }
       setRsvps(prev => prev.filter(id => id !== eventId))
     } else {
-      await supabase.from('event_rsvps').insert({ event_id: eventId, employee_id: employeeId })
+      const { error } = await supabase.from('event_rsvps').insert({ event_id: eventId, employee_id: employeeId })
+      if (error) {
+        setError(`RSVP update failed. Detail: ${error.message}`)
+        return
+      }
       setRsvps(prev => [...prev, eventId])
     }
   }
@@ -116,6 +159,11 @@ export function EventsNudgeCard({ employeeId }: Props) {
 
   return (
     <div style={{ marginBottom: 14 }}>
+      {error && (
+        <div style={{ marginBottom: 10, padding: '10px 12px', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 8, color: '#ffb4b4', fontSize: 12 }}>
+          {error}
+        </div>
+      )}
 
       {nudge && (
         <div style={{

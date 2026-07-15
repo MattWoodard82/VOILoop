@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { Upload, Download } from 'lucide-react'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 type AccountType = 'employee' | 'wellness_director'
 
@@ -39,6 +40,7 @@ export function AccountProvisioningClient() {
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
   const [success, setSuccess] = useState('')
   const accountCopy = ACCOUNT_TYPE_COPY[accountType]
 
@@ -46,16 +48,19 @@ export function AccountProvisioningClient() {
     const file = fileInputRef.current?.files?.[0]
     if (!file) {
       setError('Select a CSV file first.')
+      setErrorDetail('')
       return
     }
 
     if (!file.name.toLowerCase().endsWith('.csv')) {
       setError('Only .csv files are supported.')
+      setErrorDetail('')
       return
     }
 
     setLoading(true)
     setError('')
+    setErrorDetail('')
     setSuccess('')
 
     const formData = new FormData()
@@ -69,8 +74,9 @@ export function AccountProvisioningClient() {
       })
 
       if (!response.ok) {
-        const body = await response.json().catch(() => ({ error: 'Account creation failed.' }))
-        setError(body.error ?? 'Account creation failed.')
+        const parsed = await parseFrontendError(response, 'Account creation failed.')
+        setError(parsed.message)
+        setErrorDetail(parsed.detail)
         setLoading(false)
         return
       }
@@ -88,6 +94,7 @@ export function AccountProvisioningClient() {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Account creation failed.'
       setError(message)
+      setErrorDetail('The request did not complete. Check your connection and try again.')
     } finally {
       setLoading(false)
     }
@@ -154,7 +161,16 @@ export function AccountProvisioningClient() {
         />
         {fileName && <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 12 }}>Selected: {fileName}</div>}
 
-        {error && <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 12 }}>{error}</div>}
+        {error && (
+          <div style={{ background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#ff6b6b', marginBottom: 12 }}>
+            <div>{error}</div>
+            {errorDetail && (
+              <div style={{ marginTop: 6, color: '#fecaca', wordBreak: 'break-word' }}>
+                {errorDetail}
+              </div>
+            )}
+          </div>
+        )}
         {success && <div style={{ background: 'rgba(105,190,40,0.1)', border: '1px solid rgba(105,190,40,0.3)', borderRadius: 6, padding: '8px 12px', fontSize: 12, color: '#69BE28', marginBottom: 12 }}>{success}</div>}
 
         <button
