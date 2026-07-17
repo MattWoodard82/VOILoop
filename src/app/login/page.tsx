@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { parseFrontendError } from '@/lib/frontend-error'
+import { parseAdminDiagnosticResponse, type AdminDiagnosticResult } from '@/lib/login-diagnostic'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -10,27 +11,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [errorDetail, setErrorDetail] = useState('')
-  const [adminDiag, setAdminDiag] = useState<
-    { status: 'loading' } | { status: 'found'; id: string } | { status: 'not_found' } | { status: 'error'; message: string }
-  >({ status: 'loading' })
+  const [adminDiag, setAdminDiag] = useState<{ status: 'loading' } | AdminDiagnosticResult>({ status: 'loading' })
 
   useEffect(() => {
     fetch('/api/diagnostic/admin-user')
-      .then(async (r) => {
-        const body = await r.json().catch(() => null) as { id: string | null; error?: string } | null
-        if (!r.ok) {
-          const detail = body?.error ? `HTTP ${r.status}: ${body.error}` : `HTTP ${r.status}`
-          throw new Error(detail)
-        }
-        return body
-      })
-      .then((body) => {
-        if (body?.id) {
-          setAdminDiag({ status: 'found', id: body.id })
-        } else {
-          setAdminDiag({ status: 'not_found' })
-        }
-      })
+      .then(parseAdminDiagnosticResponse)
+      .then((diag) => setAdminDiag(diag))
       .catch((err: unknown) => {
         setAdminDiag({ status: 'error', message: err instanceof Error ? err.message : String(err) })
       })
@@ -99,7 +85,7 @@ export default function LoginPage() {
         </div>
         {/* DIAGNOSTIC */}
         <div style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 12, color: '#A5ACAF', fontFamily: 'monospace' }}>
-          <strong style={{ color: '#69BE28' }}>DIAG</strong> admin@voiloop.com →{' '}
+          <strong style={{ color: '#69BE28' }}>DIAG</strong>{' '}
           {adminDiag.status === 'loading' && 'loading…'}
           {adminDiag.status === 'found' && <span style={{ color: '#69BE28' }}>{adminDiag.id}</span>}
           {adminDiag.status === 'not_found' && <span style={{ color: '#ff6b6b' }}>admin user not found</span>}
