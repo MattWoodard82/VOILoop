@@ -22,10 +22,10 @@ export async function parseAdminDiagnosticResponse(response: Response): Promise<
   }
 
   if (!response.ok) {
-    const backendDetail = trimmedText || (typeof payload?.error === 'string' ? payload.error.trim() : '')
+    const hasDetail = trimmedText.length > 0
     return {
       status: 'error',
-      message: backendDetail ? `HTTP ${response.status}: ${backendDetail}` : `HTTP ${response.status}`,
+      message: hasDetail ? `HTTP ${response.status}: ${responseText}` : `HTTP ${response.status}`,
     }
   }
 
