@@ -1,8 +1,19 @@
 -- Ensure Supabase Auth can scan confirmation_token values when listing users.
-update auth.users
-set confirmation_token = ''
-where confirmation_token is null;
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'auth'
+      and table_name = 'users'
+      and column_name = 'confirmation_token'
+  ) then
+    update auth.users
+    set confirmation_token = ''
+    where confirmation_token is null;
 
-alter table auth.users
-  alter column confirmation_token set default '',
-  alter column confirmation_token set not null;
+    alter table auth.users
+      alter column confirmation_token set default '',
+      alter column confirmation_token set not null;
+  end if;
+end $$;
