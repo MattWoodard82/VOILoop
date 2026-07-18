@@ -34,6 +34,7 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
    - `confirm=APPLY`
 4. Confirm workflow success.
 5. Verify production pages that rely on changed data.
+6. Do **not** run `npm run db:seed` against pilot/prod. Seed data is local-development only.
 
 ## Critical configuration requirements
 
