@@ -40,6 +40,21 @@ async function attemptAdminCredentialRepair(email: string): Promise<void> {
   })
 }
 
+async function ensureUserAccessRow(userId: string): Promise<void> {
+  const adminClient = createAdminSupabaseClient()
+  const { error } = await adminClient
+    .from('user_access')
+    .upsert({
+      user_id: userId,
+      role: 'employee',
+      must_change_password: true,
+    }, { onConflict: 'user_id' })
+
+  if (error) {
+    throw new Error(`Failed to initialize user_access for authenticated user: ${error.message}`)
+  }
+}
+
 function wantsJson(request: Request): boolean {
   const contentType = request.headers.get('content-type') ?? ''
   return contentType.toLowerCase().includes('application/json')
@@ -139,7 +154,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const access = await getUserAccess(data.user.id)
+    let access = await getUserAccess(data.user.id)
+    if (!access.role) {
+      await ensureUserAccessRow(data.user.id)
+      access = await getUserAccess(data.user.id)
+    }
     const redirectTo = access.mustChangePassword
       ? '/change-password'
       : !access.role || access.role === 'employee'

@@ -23,10 +23,6 @@ begin
         and column_name = col
     ) then
       execute format('update auth.users set %1$I = '''' where %1$I is null', col);
-      execute format(
-        'alter table auth.users alter column %1$I set default '''', alter column %1$I set not null',
-        col
-      );
     end if;
   end loop;
 end $$;
