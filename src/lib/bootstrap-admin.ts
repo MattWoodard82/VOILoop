@@ -20,6 +20,21 @@ async function bootstrapAdmin() {
     role: 'admin',
     mustChangePassword: false,
   })
+
+  const { data: accessRow, error: accessError } = await adminClient
+    .from('user_access')
+    .select('role, must_change_password')
+    .eq('user_id', result.userId)
+    .maybeSingle()
+
+  if (accessError) {
+    throw new Error(`Failed to verify user_access for admin: ${accessError.message}`)
+  }
+
+  if (!accessRow || accessRow.role !== 'admin' || accessRow.must_change_password !== false) {
+    throw new Error('Admin bootstrap did not produce required user_access values.')
+  }
+
   if (result.status === 'created') {
     console.log(`Created new admin user: ${adminEmail}`)
   } else {
