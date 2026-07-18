@@ -11,6 +11,5 @@ begin
     update auth.users
     set confirmation_token = ''
     where confirmation_token is null;
-
   end if;
 end $$;
