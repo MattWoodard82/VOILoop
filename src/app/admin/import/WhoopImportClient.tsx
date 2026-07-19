@@ -145,6 +145,7 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
         </div>
         <div style={{ display: 'grid', gap: 8 }}>
           <input
+            aria-label="Search participants"
             type="text"
             placeholder="Search participant by name, department, or ID"
             value={participantSearch}
@@ -160,6 +161,7 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
             }}
           />
           <select
+            aria-label="Select participant"
             value={selectedParticipantId}
             onChange={(e) => setSelectedParticipantId(e.target.value)}
             disabled={status === 'uploading'}

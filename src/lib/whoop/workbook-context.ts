@@ -208,7 +208,7 @@ function injectEmployeeIdentifier(
 export async function prepareWhoopWorkbookForImport(
   supabase: SupabaseClient,
   wb: ParsedWorkbook,
-  options?: string | PrepareWhoopWorkbookOptions,
+  options?: string | PrepareWhoopWorkbookOptions | null,
 ): Promise<PreparedWhoopWorkbook> {
   const authUserId = typeof options === 'string' ? options : (options?.authUserId ?? null)
   const selectedEmployeeProfile = typeof options === 'string' ? null : (options?.selectedEmployeeProfile ?? null)

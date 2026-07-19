@@ -394,7 +394,7 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
         </Card>
       </div>
 
-      <Card title="Upload WHOOP data">
+      <Card title="WHOOP upload management">
         <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 16, lineHeight: 1.6 }}>
           WHOOP uploads are handled by your administrator during this pilot phase.
         </div>
