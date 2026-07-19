@@ -7,17 +7,40 @@ import { parseFrontendError } from '@/lib/frontend-error'
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'partial' | 'error'
 const MAX_DISPLAYED_ERRORS = 100
 
-export function WhoopImportClient() {
+export interface ParticipantOption {
+  id: string
+  label: string
+  meta: string
+}
+
+interface WhoopImportClientProps {
+  participants: ParticipantOption[]
+}
+
+export function WhoopImportClient({ participants }: WhoopImportClientProps) {
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [result, setResult] = useState<ImportResult | null>(null)
   const [structureErrors, setStructureErrors] = useState<string[] | null>(null)
   const [dragOver, setDragOver] = useState(false)
+  const [participantSearch, setParticipantSearch] = useState('')
+  const [selectedParticipantId, setSelectedParticipantId] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const filteredParticipants = participants.filter((participant) => {
+    const query = participantSearch.trim().toLowerCase()
+    if (!query) return true
+    return `${participant.label} ${participant.meta} ${participant.id}`.toLowerCase().includes(query)
+  })
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.xlsx')) {
       setStatus('error')
       setStructureErrors(['Only .xlsx WHOOP export files are supported'])
+      return
+    }
+    if (!selectedParticipantId) {
+      setStatus('error')
+      setStructureErrors(['Select a participant before uploading.'])
       return
     }
 
@@ -26,6 +49,7 @@ export function WhoopImportClient() {
     setStructureErrors(null)
     const body = new FormData()
     body.append('file', file)
+    body.append('participantId', selectedParticipantId)
 
     try {
       const res = await fetch('/api/import/whoop', { method: 'POST', body })
@@ -52,7 +76,7 @@ export function WhoopImportClient() {
       setStatus('error')
       setStructureErrors([(e as Error).message])
     }
-  }, [])
+  }, [selectedParticipantId])
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -61,18 +85,18 @@ export function WhoopImportClient() {
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    if (status === 'uploading') return
+    if (status === 'uploading' || !selectedParticipantId) return
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
     if (file) handleFile(file)
   }
 
   const openFilePicker = () => {
-    if (status !== 'uploading') fileInputRef.current?.click()
+    if (status !== 'uploading' && selectedParticipantId) fileInputRef.current?.click()
   }
 
   const onDropZoneKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (status === 'uploading') return
+    if (status === 'uploading' || !selectedParticipantId) return
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
       fileInputRef.current?.click()
@@ -109,9 +133,56 @@ export function WhoopImportClient() {
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
           <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP export workbook (<code>.xlsx</code>) with the standard WHOOP tabs.
           <br />
-          <strong style={{ color: '#fff' }}>Account matching:</strong> Your upload is automatically tied to the employee record linked to your account.
+          <strong style={{ color: '#fff' }}>Participant assignment:</strong> Choose a participant first. Every row in the upload is linked to that participant.
           <br />
           <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same workbook is safe — records are upserted, not duplicated.
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
+        <div style={{ fontSize: 12, color: '#A5ACAF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+          Participant
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          <input
+            type="text"
+            placeholder="Search participant by name, department, or ID"
+            value={participantSearch}
+            onChange={(e) => setParticipantSearch(e.target.value)}
+            style={{
+              width: '100%',
+              border: '1px solid #0a3560',
+              borderRadius: 6,
+              background: '#001224',
+              color: '#fff',
+              padding: '9px 10px',
+              fontSize: 13,
+            }}
+          />
+          <select
+            value={selectedParticipantId}
+            onChange={(e) => setSelectedParticipantId(e.target.value)}
+            disabled={status === 'uploading'}
+            style={{
+              width: '100%',
+              border: '1px solid #0a3560',
+              borderRadius: 6,
+              background: '#001224',
+              color: '#fff',
+              padding: '9px 10px',
+              fontSize: 13,
+            }}
+          >
+            <option value="">Select participant</option>
+            {filteredParticipants.map((participant) => (
+              <option key={participant.id} value={participant.id}>
+                {participant.label} ({participant.id}){participant.meta ? ` — ${participant.meta}` : ''}
+              </option>
+            ))}
+          </select>
+          <div style={{ color: '#A5ACAF', fontSize: 12 }}>
+            Showing {filteredParticipants.length} of {participants.length} participants
+          </div>
         </div>
       </div>
 
@@ -124,16 +195,17 @@ export function WhoopImportClient() {
           onClick={openFilePicker}
           onKeyDown={onDropZoneKeyDown}
           role="button"
-          tabIndex={status === 'uploading' ? -1 : 0}
-          aria-disabled={status === 'uploading'}
+          tabIndex={status === 'uploading' || !selectedParticipantId ? -1 : 0}
+          aria-disabled={status === 'uploading' || !selectedParticipantId}
           style={{
             border: `2px dashed ${dragOver ? '#69BE28' : '#0a3560'}`,
             borderRadius: 10,
             padding: '48px 24px',
             textAlign: 'center',
-            cursor: status === 'uploading' ? 'not-allowed' : 'pointer',
+            cursor: status === 'uploading' || !selectedParticipantId ? 'not-allowed' : 'pointer',
             background: dragOver ? 'rgba(105,190,40,0.05)' : '#001a33',
             transition: 'all 0.15s',
+            opacity: selectedParticipantId ? 1 : 0.7,
           }}
         >
           {status === 'uploading' ? (
@@ -147,7 +219,9 @@ export function WhoopImportClient() {
               <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
                 Drop your WHOOP export here
               </div>
-              <div style={{ color: '#A5ACAF', fontSize: 13 }}>or click to browse — .xlsx files only</div>
+              <div style={{ color: '#A5ACAF', fontSize: 13 }}>
+                {selectedParticipantId ? 'or click to browse — .xlsx files only' : 'Select a participant to enable uploads'}
+              </div>
             </>
           )}
           <input

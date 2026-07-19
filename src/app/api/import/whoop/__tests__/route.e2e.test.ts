@@ -43,6 +43,7 @@ function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
+  formData.append('participantId', 'EMP001')
   return {
     headers: {
       get: (key: string) => (key.toLowerCase() === 'content-type' ? 'multipart/form-data; boundary=test' : null),
@@ -210,6 +211,26 @@ describe('WHOOP import e2e flow (route-level)', () => {
             })),
           }
         }
+        if (table === 'employees') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
         if (table === 'user_roles') {
           return {
             select: jest.fn(() => ({ single: roleSingle })),
@@ -236,7 +257,14 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     expect(body.batchId).toBe('batch-1')
     expect(body.status).toBe('completed')
-    expect(mockPrepareWhoopWorkbookForImport).toHaveBeenCalledWith(supabase, expect.any(Object), 'user-1')
+    expect(mockPrepareWhoopWorkbookForImport).toHaveBeenCalledWith(
+      supabase,
+      expect.any(Object),
+      expect.objectContaining({
+        authUserId: 'user-1',
+        selectedEmployeeProfile: expect.objectContaining({ employeeId: 'EMP001' }),
+      }),
+    )
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',

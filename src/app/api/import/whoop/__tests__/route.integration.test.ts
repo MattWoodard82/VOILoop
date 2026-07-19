@@ -36,12 +36,17 @@ jest.mock('@/lib/whoop/mappers', () => ({
   mapManualEntries: jest.fn(() => ({ habits: [], errors: [], processed: 0 })),
 }))
 
-function makeRequest(fileName = 'whoop.xlsx', contentType = 'multipart/form-data; boundary=test'): NextRequest {
+function makeRequest(
+  fileName = 'whoop.xlsx',
+  contentType = 'multipart/form-data; boundary=test',
+  participantId = 'EMP001',
+): NextRequest {
   const formData = new FormData()
   const file = new File([Buffer.from('dummy')], fileName, {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
   formData.append('file', file)
+  formData.append('participantId', participantId)
   return {
     headers: {
       get: (key: string) => (key.toLowerCase() === 'content-type' ? contentType : null),
@@ -76,7 +81,7 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Unauthorized' })
   })
 
-  test('allows authenticated employee users through role verification', async () => {
+  test('rejects non-admin users', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
@@ -92,9 +97,9 @@ describe('POST /api/import/whoop integration', () => {
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
     const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'Invalid content type: expected multipart/form-data',
+      error: 'Forbidden',
     })
   })
 
@@ -108,6 +113,26 @@ describe('POST /api/import/whoop integration', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'employees') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
               })),
             })),
           }
@@ -149,14 +174,42 @@ describe('POST /api/import/whoop integration', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'employees') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        return {
+          select: jest.fn(() => ({
+            single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
           })),
-          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
-        })),
-      })),
+        }
+      }),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
@@ -171,14 +224,42 @@ describe('POST /api/import/whoop integration', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
-      from: jest.fn(() => ({
-        select: jest.fn(() => ({
-          eq: jest.fn(() => ({
-            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'employees') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        return {
+          select: jest.fn(() => ({
+            single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
           })),
-          single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
-        })),
-      })),
+        }
+      }),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 

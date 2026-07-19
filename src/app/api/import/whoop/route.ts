@@ -28,6 +28,42 @@ function isMissingUserAccessTable(error: { code?: string | null; message?: strin
   return error.code === 'PGRST205' || message.includes('user_access')
 }
 
+interface EmployeeParticipantRow {
+  id: string
+  first_name: string
+  last_name: string
+  department: string | null
+  device_id: string | null
+}
+
+async function getSelectedParticipantProfile(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  participantId: string,
+): Promise<WhoopEmployeeProfile | null> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, first_name, last_name, department, device_id, status')
+    .eq('id', participantId)
+    .eq('status', 'Active')
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) return null
+
+  const employee = data as EmployeeParticipantRow
+  return {
+    employeeId: employee.id,
+    sourceIdentifier: employee.device_id ?? employee.id,
+    fullName: `${employee.first_name} ${employee.last_name}`.trim(),
+    firstName: employee.first_name,
+    lastName: employee.last_name,
+    department: employee.department,
+  }
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // AC-6: require authenticated session
   const session = await getSession()
@@ -61,6 +97,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!role) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+  if (role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const contentType = req.headers.get('content-type') ?? ''
   if (!contentType.toLowerCase().includes('multipart/form-data')) {
@@ -80,6 +119,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const file = formData.get('file') as File | null
   if (!file) {
     return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+  }
+
+  const participantId = String(formData.get('participantId') ?? '').trim()
+  if (!participantId) {
+    return NextResponse.json({ error: 'Participant is required' }, { status: 400 })
+  }
+
+  let selectedParticipantProfile: WhoopEmployeeProfile | null = null
+  try {
+    selectedParticipantProfile = await getSelectedParticipantProfile(supabase, participantId)
+  } catch (error) {
+    return NextResponse.json({ error: `Failed to load participant: ${toErrorMessage(error)}` }, { status: 500 })
+  }
+  if (!selectedParticipantProfile) {
+    return NextResponse.json({ error: 'Selected participant was not found or is inactive' }, { status: 422 })
   }
 
   const fileName = file.name
@@ -119,7 +173,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let preparedWorkbook = wb
   let employeeProfiles: WhoopEmployeeProfile[] = []
   try {
-    const prepared = await prepareWhoopWorkbookForImport(supabase, wb, session.user.id)
+    const prepared = await prepareWhoopWorkbookForImport(supabase, wb, {
+      authUserId: session.user.id,
+      selectedEmployeeProfile: selectedParticipantProfile,
+    })
     preparedWorkbook = prepared.workbook
     employeeProfiles = prepared.employeeProfiles
   } catch (error) {

@@ -25,6 +25,11 @@ export interface PreparedWhoopWorkbook {
   employeeProfiles: WhoopEmployeeProfile[]
 }
 
+export interface PrepareWhoopWorkbookOptions {
+  authUserId?: string | null
+  selectedEmployeeProfile?: WhoopEmployeeProfile | null
+}
+
 interface EmployeeRow {
   id: string
   auth_user_id?: string | null
@@ -203,8 +208,18 @@ function injectEmployeeIdentifier(
 export async function prepareWhoopWorkbookForImport(
   supabase: SupabaseClient,
   wb: ParsedWorkbook,
-  authUserId?: string | null,
+  options?: string | PrepareWhoopWorkbookOptions,
 ): Promise<PreparedWhoopWorkbook> {
+  const authUserId = typeof options === 'string' ? options : (options?.authUserId ?? null)
+  const selectedEmployeeProfile = typeof options === 'string' ? null : (options?.selectedEmployeeProfile ?? null)
+
+  if (selectedEmployeeProfile) {
+    return {
+      workbook: injectEmployeeIdentifier(wb, selectedEmployeeProfile.employeeId, true),
+      employeeProfiles: [selectedEmployeeProfile],
+    }
+  }
+
   const authUserProfile = authUserId
     ? await resolveEmployeeProfileForAuthUser(supabase, authUserId)
     : null
