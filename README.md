@@ -50,7 +50,7 @@ This applies the versioned SQL files in `supabase/migrations/` to your local Sup
 npm run db:seed
 ```
 `db:seed` is guarded for local development and refuses non-local Supabase URLs by default.
-If you intentionally need to seed a remote non-pilot environment, set `VOILOOP_ALLOW_NON_LOCAL_SEED=true` explicitly for that one run.
+If you intentionally need to seed a remote non-pilot, non-production environment, set `VOILOOP_ALLOW_NON_LOCAL_SEED=true` explicitly for that one run. This override does not bypass the `VOILOOP_ENV=pilot` or `VOILOOP_ENV=production` block.
 
 This inserts:
 - Travis Brandenburgh (COO) — exact WHOOP data from June 9 2026
