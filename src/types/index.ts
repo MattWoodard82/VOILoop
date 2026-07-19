@@ -4,6 +4,7 @@ export type InterventionStatus = 'Pending' | 'In Progress' | 'Monitoring' | 'Res
 
 export interface Participant {
   id: string
+  auth_user_id?: string | null
   first_name: string
   last_name: string
   department: string

@@ -9,10 +9,6 @@ import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import type { Participant } from '@/types'
 
-interface ParticipantWithAuthUserId extends Participant {
-  auth_user_id?: string | null
-}
-
 async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, string>> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return new Map()
@@ -23,24 +19,18 @@ async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, 
 
   const emailByUserId = new Map<string, string>()
   const adminClient = createAdminSupabaseClient()
-
-  let page = 1
-  while (true) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 })
-    if (error) throw error
-
-    const users = data.users ?? []
-    for (const user of users) {
-      if (user.email && idSet.has(user.id)) {
-        emailByUserId.set(user.id, user.email)
+  for (const authUserId of Array.from(idSet)) {
+    const { data, error } = await adminClient.auth.admin.getUserById(authUserId)
+    if (error) {
+      const lowerMessage = error.message.toLowerCase()
+      if (lowerMessage.includes('not found') || lowerMessage.includes('does not exist')) {
+        continue
       }
+      throw error
     }
-
-    if (users.length < 1000 || emailByUserId.size >= idSet.size) {
-      break
+    if (data.user?.email) {
+      emailByUserId.set(authUserId, data.user.email)
     }
-
-    page += 1
   }
 
   return emailByUserId
@@ -52,7 +42,7 @@ export default async function AdminPage() {
   const { redirect: redirectTo } = await requireAdmin()
   if (redirectTo) redirect(redirectTo)
 
-  const participantRecords = await getParticipants() as ParticipantWithAuthUserId[]
+  const participantRecords = await getParticipants()
   const authUserIds = participantRecords
     .map((participant) => participant.auth_user_id)
     .filter((value): value is string => Boolean(value))
