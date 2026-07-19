@@ -37,15 +37,17 @@ jest.mock('@/lib/whoop/mappers', () => ({
 }))
 
 function makeRequest(
-  fileName = 'whoop.xlsx',
+  fileNames = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'],
   contentType = 'multipart/form-data; boundary=test',
   participantId = 'EMP001',
 ): NextRequest {
   const formData = new FormData()
-  const file = new File([Buffer.from('dummy')], fileName, {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  fileNames.forEach((fileName) => {
+    const file = new File([Buffer.from('dummy')], fileName, {
+      type: 'text/csv',
+    })
+    formData.append('files', file)
   })
-  formData.append('file', file)
   formData.append('participantId', participantId)
   return {
     headers: {
@@ -96,7 +98,7 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
+    const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'], 'application/json'))
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
       error: 'Forbidden',
@@ -148,7 +150,7 @@ describe('POST /api/import/whoop integration', () => {
       }),
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
-    mockParseWorkbook.mockReturnValue({} as never)
+    mockParseWorkbook.mockReturnValue({ Sheet1: [{}] } as never)
     mockPrepareWhoopWorkbookForImport.mockResolvedValue({
       workbook: {},
       participantProfiles: [],
@@ -213,14 +215,14 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.xlsx', 'application/json'))
+    const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'], 'application/json'))
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
       error: 'Invalid content type: expected multipart/form-data',
     })
   })
 
-  test('returns 400 for non-xlsx uploads', async () => {
+  test('returns 400 when required WHOOP CSV files are missing', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
@@ -263,10 +265,10 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
-    const response = await POST(makeRequest('whoop.csv'))
+    const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv']))
     expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Only .xlsx WHOOP export files are supported',
-    })
+    const body = await response.json()
+    expect(body.error).toBe('Invalid WHOOP upload payload')
+    expect(body.details).toContain('Upload exactly 3 files.')
   })
 })

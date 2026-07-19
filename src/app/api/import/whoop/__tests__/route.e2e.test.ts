@@ -37,12 +37,12 @@ jest.mock('@/lib/whoop/workbook-context', () => ({
   })),
 }))
 
-function makeRequest(fileName = 'whoop-export.xlsx'): NextRequest {
+function makeRequest(fileNames = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv']): NextRequest {
   const formData = new FormData()
-  const file = new File([Buffer.from('workbook')], fileName, {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  fileNames.forEach((fileName) => {
+    const file = new File([Buffer.from('workbook')], fileName, { type: 'text/csv' })
+    formData.append('files', file)
   })
-  formData.append('file', file)
   formData.append('participantId', 'EMP001')
   return {
     headers: {
@@ -74,7 +74,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
   test('imports valid workbook and returns processed summary', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-1' } } as never)
-    mockParseWorkbook.mockReturnValue({ Exercise: [{}], Stress: [{}], Sleep: [{}], 'Manual Entries': [{}] } as never)
+    mockParseWorkbook.mockReturnValue({ Sheet1: [{}] } as never)
     mockValidateTabStructure.mockReturnValue({
       valid: true,
       missingRequiredTabs: [],
@@ -184,7 +184,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       batchId: 'batch-1',
       status: 'completed',
       success: true,
-      fileName: 'whoop-export.xlsx',
+      fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
       tabs: [
         { tab: 'Exercise', processed: 2, inserted: 1, updated: 1, skipped: 0, failed: 0 },
         { tab: 'Stress/Sleep', processed: 1, inserted: 1, updated: 0, skipped: 0, failed: 0 },
@@ -246,7 +246,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
 
     const body = await response.json()
     expect(body.success).toBe(true)
-    expect(body.fileName).toBe('whoop-export.xlsx')
+    expect(body.fileName).toBe('workouts.csv,sleeps.csv,physiological_cycles.csv')
     expect(body.totals).toEqual({
       processed: 4,
       inserted: 3,
@@ -268,7 +268,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
-      fileName: 'whoop-export.xlsx',
+      fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
       fileSize: expect.any(Number),
       fileHash: expect.any(String),
       exerciseResult: expect.objectContaining({ processed: 2 }),

@@ -2,7 +2,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Upload, Users } from 'lucide-react'
+import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -23,15 +23,13 @@ const LEADERSHIP_NAV = [
 const ADMIN_NAV = [
   ...LEADERSHIP_NAV,
   { label: 'Admin', items: [
-    { href: '/admin/accounts', label: 'Account Provisioning', icon: Users },
-    { href: '/admin/challenges', label: 'Challenges', icon: Target },
+    { href: '/admin', label: 'Admin Console', icon: Users },
   ]},
 ]
 
 const PARTICIPANT_NAV = [
   { label: 'My Dashboard', items: [
     { href: '/my', label: 'My Wellness', icon: Activity },
-    { href: '/admin/import', label: 'Import WHOOP Data', icon: Upload },
   ]},
 ]
 

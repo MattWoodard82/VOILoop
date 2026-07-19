@@ -165,8 +165,8 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     expect(insertParticipant).toHaveBeenCalledWith(expect.objectContaining({
       id: 'EMP001',
       auth_user_id: 'emp-auth-1',
-      first_name: 'Pilot',
-      last_name: 'User',
+      first_name: 'pilot@example.com',
+      last_name: '',
     }))
 
     const body = await response.text()

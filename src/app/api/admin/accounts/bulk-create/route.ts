@@ -118,34 +118,10 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-function toTitleCase(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase())
-    .join(' ')
-}
-
 function deriveNameFromEmail(email: string): { firstName: string; lastName: string } {
-  const localPart = email.split('@')[0] ?? ''
-  const parts = localPart
-    .replace(/[^a-zA-Z0-9]+/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(toTitleCase)
-
-  if (parts.length === 0) {
-    return { firstName: 'Pilot', lastName: 'User' }
-  }
-
-  if (parts.length === 1) {
-    return { firstName: parts[0], lastName: 'User' }
-  }
-
   return {
-    firstName: parts[0],
-    lastName: parts.slice(1).join(' '),
+    firstName: email,
+    lastName: '',
   }
 }
 
