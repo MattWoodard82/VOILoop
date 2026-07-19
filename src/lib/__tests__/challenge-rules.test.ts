@@ -10,7 +10,7 @@ import {
 
 describe('challenge rules', () => {
   test('builds idempotency keys in the expected format', () => {
-    expect(buildCompletionIdempotencyKey('c1', 'e1')).toBe('challenge:c1:employee:e1:completion')
+    expect(buildCompletionIdempotencyKey('c1', 'e1')).toBe('challenge:c1:participant:e1:completion')
   })
 
   test('enforces challenge lifecycle state transitions', () => {
@@ -50,7 +50,7 @@ describe('challenge rules', () => {
       threshold_value: 10,
       window_start_at: '2026-07-01T00:00:00.000Z',
       window_end_at: '2026-07-31T00:00:00.000Z',
-      eligibility_mode: 'all_employees',
+      eligibility_mode: 'all_participants',
     })).toEqual({ ok: true })
 
     expect(validateChallengePayload({

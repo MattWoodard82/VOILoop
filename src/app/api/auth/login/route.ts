@@ -46,7 +46,7 @@ async function ensureUserAccessRow(userId: string): Promise<void> {
     .from('user_access')
     .upsert({
       user_id: userId,
-      role: 'employee',
+      role: 'participant',
       must_change_password: true,
     }, { onConflict: 'user_id' })
 
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
     }
     const redirectTo = access.mustChangePassword
       ? '/change-password'
-      : !access.role || access.role === 'employee'
+      : !access.role || access.role === 'participant'
         ? '/my'
         : '/wellness-director'
 

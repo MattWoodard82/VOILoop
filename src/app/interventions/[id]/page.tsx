@@ -20,23 +20,23 @@ export default async function InterventionDetailPage({
 
   if (!intervention) notFound()
 
-  const { data: employee } = await supabase
-    .from('employees')
+  const { data: participant } = await supabase
+    .from('participants')
     .select('*')
-    .eq('id', intervention.employee_id)
+    .eq('id', intervention.participant_id)
     .single()
 
   const { data: wellness } = await supabase
     .from('daily_wellness')
     .select('*')
-    .eq('employee_id', intervention.employee_id)
+    .eq('participant_id', intervention.participant_id)
     .gte('date', intervention.date_triggered ?? '2026-01-01')
     .order('date', { ascending: true })
 
   const { data: habits } = await supabase
     .from('habits')
     .select('*')
-    .eq('employee_id', intervention.employee_id)
+    .eq('participant_id', intervention.participant_id)
     .gte('date', intervention.date_triggered ?? '2026-01-01')
     .order('date', { ascending: false })
     .limit(7)
@@ -44,7 +44,7 @@ export default async function InterventionDetailPage({
   const { data: workouts } = await supabase
     .from('workouts')
     .select('*')
-    .eq('employee_id', intervention.employee_id)
+    .eq('participant_id', intervention.participant_id)
     .gte('date', intervention.date_triggered ?? '2026-01-01')
     .order('date', { ascending: false })
     .limit(7)
@@ -53,7 +53,7 @@ export default async function InterventionDetailPage({
     <DashboardShell title="Intervention Detail">
       <InterventionDetailClient
         intervention={intervention}
-        employee={employee}
+        participant={participant}
         wellness={wellness ?? []}
         habits={habits ?? []}
         workouts={workouts ?? []}

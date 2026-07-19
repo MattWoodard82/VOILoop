@@ -54,7 +54,7 @@ describe('setMustChangePassword', () => {
     }, { onConflict: 'user_id' })
   })
 
-  test('falls back to employee role when no existing access row is found', async () => {
+  test('falls back to participant role when no existing access row is found', async () => {
     const maybeSingle = jest.fn(async () => ({
       data: null,
       error: { message: 'not found' },
@@ -93,7 +93,7 @@ describe('setMustChangePassword', () => {
     expect(upsert).toHaveBeenCalledWith({
       user_id: 'user-2',
       must_change_password: false,
-      role: 'employee',
+      role: 'participant',
     }, { onConflict: 'user_id' })
   })
 })

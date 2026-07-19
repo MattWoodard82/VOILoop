@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     }
 
     const access = await getUserAccess(session.user.id)
-    const role = access.role ?? 'employee'
+    const role = access.role ?? 'participant'
     const adminSupabase = createAdminSupabaseClient()
     const { error: accessError } = await adminSupabase
       .from('user_access')
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const redirectTo = role === 'employee' ? '/my' : '/wellness-director'
+    const redirectTo = role === 'participant' ? '/my' : '/wellness-director'
     return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

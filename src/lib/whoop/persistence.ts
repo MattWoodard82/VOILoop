@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ImportResult, ImportRowError, ImportTabResult, ImportBatchStatus } from './types'
 import type { MappedExercise, MappedHabits, MappedWellness } from './mappers'
-import type { WhoopEmployeeProfile } from './workbook-context'
+import type { WhoopParticipantProfile } from './workbook-context'
 import { logger } from '@/lib/logger'
 
 const EXERCISE_TAB = 'Exercise'
@@ -17,7 +17,7 @@ interface PersistWhoopImportParams {
   exerciseResult: MappedExercise
   wellnessResult: MappedWellness
   habitsResult: MappedHabits
-  employeeProfiles: WhoopEmployeeProfile[]
+  participantProfiles: WhoopParticipantProfile[]
 }
 
 interface BatchTotals {
@@ -73,37 +73,37 @@ export function deriveBatchStatus(totals: BatchTotals): ImportBatchStatus {
   return 'partial'
 }
 
-async function ensureEmployeesExist(
+async function ensureParticipantsExist(
   supabase: SupabaseClient,
-  employeeProfiles: WhoopEmployeeProfile[],
+  participantProfiles: WhoopParticipantProfile[],
 ): Promise<void> {
   const today = new Date().toISOString().slice(0, 10)
   const uniqueProfiles = Array.from(
-    new Map(employeeProfiles.map((profile) => [profile.employeeId, profile])).values(),
+    new Map(participantProfiles.map((profile) => [profile.participantId, profile])).values(),
   )
 
   for (const profile of uniqueProfiles) {
-    const { data: existingEmployee, error: existingEmployeeError } = await supabase
-      .from('employees')
+    const { data: existingParticipant, error: existingParticipantError } = await supabase
+      .from('participants')
       .select('id, device_id')
-      .eq('id', profile.employeeId)
+      .eq('id', profile.participantId)
       .maybeSingle()
 
-    if (existingEmployeeError) {
-      throw existingEmployeeError
+    if (existingParticipantError) {
+      throw existingParticipantError
     }
 
-    if (!existingEmployee) {
-      const { error: insertEmployeeError } = await supabase
-        .from('employees')
+    if (!existingParticipant) {
+      const { error: insertParticipantError } = await supabase
+        .from('participants')
         .insert({
-          id: profile.employeeId,
+          id: profile.participantId,
           first_name: profile.firstName,
           last_name: profile.lastName,
           department: profile.department,
           title: 'WHOOP Participant',
           device_id:
-            profile.sourceIdentifier && profile.sourceIdentifier !== profile.employeeId
+            profile.sourceIdentifier && profile.sourceIdentifier !== profile.participantId
               ? profile.sourceIdentifier
               : null,
           consent: true,
@@ -112,44 +112,44 @@ async function ensureEmployeesExist(
           is_exact_data: false,
         })
 
-      if (insertEmployeeError) {
-        throw insertEmployeeError
+      if (insertParticipantError) {
+        throw insertParticipantError
       }
 
       continue
     }
 
-    if (!existingEmployee.device_id && profile.sourceIdentifier && profile.sourceIdentifier !== profile.employeeId) {
-      const { error: updateEmployeeError } = await supabase
-        .from('employees')
+    if (!existingParticipant.device_id && profile.sourceIdentifier && profile.sourceIdentifier !== profile.participantId) {
+      const { error: updateParticipantError } = await supabase
+        .from('participants')
         .update({ device_id: profile.sourceIdentifier })
-        .eq('id', profile.employeeId)
+        .eq('id', profile.participantId)
 
-      if (updateEmployeeError) {
-        throw updateEmployeeError
+      if (updateParticipantError) {
+        throw updateParticipantError
       }
     }
   }
 }
 
-function buildFallbackEmployeeProfiles(
+function buildFallbackParticipantProfiles(
   exerciseResult: MappedExercise,
   wellnessResult: MappedWellness,
   habitsResult: MappedHabits,
-  employeeProfiles: WhoopEmployeeProfile[],
-): WhoopEmployeeProfile[] {
-  const profilesById = new Map(employeeProfiles.map((profile) => [profile.employeeId, profile]))
-  const employeeIds = new Set<string>()
+  participantProfiles: WhoopParticipantProfile[],
+): WhoopParticipantProfile[] {
+  const profilesById = new Map(participantProfiles.map((profile) => [profile.participantId, profile]))
+  const participantIds = new Set<string>()
 
-  exerciseResult.workouts.forEach((workout) => employeeIds.add(workout.employee_id))
-  wellnessResult.wellness.forEach((wellness) => employeeIds.add(wellness.employee_id))
-  habitsResult.habits.forEach((habit) => employeeIds.add(habit.employee_id))
+  exerciseResult.workouts.forEach((workout) => participantIds.add(workout.participant_id))
+  wellnessResult.wellness.forEach((wellness) => participantIds.add(wellness.participant_id))
+  habitsResult.habits.forEach((habit) => participantIds.add(habit.participant_id))
 
-  for (const employeeId of Array.from(employeeIds)) {
-    if (profilesById.has(employeeId)) continue
-    profilesById.set(employeeId, {
-      employeeId,
-      sourceIdentifier: employeeId,
+  for (const participantId of Array.from(participantIds)) {
+    if (profilesById.has(participantId)) continue
+    profilesById.set(participantId, {
+      participantId,
+      sourceIdentifier: participantId,
       fullName: null,
       firstName: 'WHOOP',
       lastName: 'Participant',
@@ -171,13 +171,13 @@ async function upsertWorkouts(
 
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
-    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const participantIds = Array.from(new Set(chunk.map((row) => row.participant_id)))
     const startTimes = Array.from(new Set(chunk.map((row) => row.start_time)))
 
     const { data: existingRows, error: existingError } = await supabase
       .from('workouts')
-      .select('employee_id,start_time')
-      .in('employee_id', employeeIds)
+      .select('participant_id,start_time')
+      .in('participant_id', participantIds)
       .in('start_time', startTimes)
 
     if (existingError) {
@@ -186,11 +186,11 @@ async function upsertWorkouts(
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.start_time}`))
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.start_time}`))
     const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
     const { error: upsertError } = await supabase
       .from('workouts')
-      .upsert(chunkRows, { onConflict: 'employee_id,start_time' })
+      .upsert(chunkRows, { onConflict: 'participant_id,start_time' })
 
     if (upsertError) {
       tabResult.failed += chunk.length
@@ -198,7 +198,7 @@ async function upsertWorkouts(
       continue
     }
 
-    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.start_time}`)).length
+    const updated = chunk.filter((row) => existingKeys.has(`${row.participant_id}|${row.start_time}`)).length
     tabResult.updated += updated
     tabResult.inserted += chunk.length - updated
   }
@@ -221,13 +221,13 @@ async function upsertDailyWellness(
 
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
-    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const participantIds = Array.from(new Set(chunk.map((row) => row.participant_id)))
     const dates = Array.from(new Set(chunk.map((row) => row.date)))
 
     const { data: existingRows, error: existingError } = await supabase
       .from('daily_wellness')
-      .select('employee_id,date')
-      .in('employee_id', employeeIds)
+      .select('participant_id,date')
+      .in('participant_id', participantIds)
       .in('date', dates)
 
     if (existingError) {
@@ -236,11 +236,11 @@ async function upsertDailyWellness(
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.date}`))
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.date}`))
     const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
     const { error: upsertError } = await supabase
       .from('daily_wellness')
-      .upsert(chunkRows, { onConflict: 'employee_id,date' })
+      .upsert(chunkRows, { onConflict: 'participant_id,date' })
 
     if (upsertError) {
       tabResult.failed += chunk.length
@@ -248,7 +248,7 @@ async function upsertDailyWellness(
       continue
     }
 
-    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.date}`)).length
+    const updated = chunk.filter((row) => existingKeys.has(`${row.participant_id}|${row.date}`)).length
     tabResult.updated += updated
     tabResult.inserted += chunk.length - updated
   }
@@ -267,13 +267,13 @@ async function upsertHabits(
 
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
-    const employeeIds = Array.from(new Set(chunk.map((row) => row.employee_id)))
+    const participantIds = Array.from(new Set(chunk.map((row) => row.participant_id)))
     const dates = Array.from(new Set(chunk.map((row) => row.date)))
 
     const { data: existingRows, error: existingError } = await supabase
       .from('habits')
-      .select('employee_id,date')
-      .in('employee_id', employeeIds)
+      .select('participant_id,date')
+      .in('participant_id', participantIds)
       .in('date', dates)
 
     if (existingError) {
@@ -282,11 +282,11 @@ async function upsertHabits(
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.employee_id}|${row.date}`))
+    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.date}`))
     const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
     const { error: upsertError } = await supabase
       .from('habits')
-      .upsert(chunkRows, { onConflict: 'employee_id,date' })
+      .upsert(chunkRows, { onConflict: 'participant_id,date' })
 
     if (upsertError) {
       tabResult.failed += chunk.length
@@ -294,7 +294,7 @@ async function upsertHabits(
       continue
     }
 
-    const updated = chunk.filter((row) => existingKeys.has(`${row.employee_id}|${row.date}`)).length
+    const updated = chunk.filter((row) => existingKeys.has(`${row.participant_id}|${row.date}`)).length
     tabResult.updated += updated
     tabResult.inserted += chunk.length - updated
   }
@@ -312,7 +312,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     exerciseResult,
     wellnessResult,
     habitsResult,
-    employeeProfiles,
+    participantProfiles,
   } = params
 
   const allErrors: ImportRowError[] = [
@@ -337,9 +337,9 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
   const batchId = createdBatch.id as string
 
   try {
-    await ensureEmployeesExist(
+    await ensureParticipantsExist(
       supabase,
-      buildFallbackEmployeeProfiles(exerciseResult, wellnessResult, habitsResult, employeeProfiles),
+      buildFallbackParticipantProfiles(exerciseResult, wellnessResult, habitsResult, participantProfiles),
     )
 
     const tabResults: ImportTabResult[] = [

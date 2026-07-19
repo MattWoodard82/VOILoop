@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   intervention: any
-  employee: any
+  participant: any
   wellness: any[]
   habits: any[]
   workouts: any[]
@@ -44,7 +44,7 @@ function MetricCard({ label, before, after, unit }: { label: string; before: any
   )
 }
 
-export function InterventionDetailClient({ intervention, employee, wellness, habits, workouts }: Props) {
+export function InterventionDetailClient({ intervention, participant, wellness, habits, workouts }: Props) {
   const router = useRouter()
   const [status, setStatus] = useState(intervention.outcome ?? 'Pending')
   const [notes, setNotes] = useState(intervention.notes ?? '')
@@ -98,10 +98,10 @@ export function InterventionDetailClient({ intervention, employee, wellness, hab
       <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 10, padding: '18px 22px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 4 }}>
-            {employee ? `${employee.first_name} ${employee.last_name}` : intervention.employee_id}
+            {participant ? `${participant.first_name} ${participant.last_name}` : intervention.participant_id}
           </div>
           <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8 }}>
-            {employee?.title} · {employee?.department}
+            {participant?.title} · {participant?.department}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', color: '#ff6b6b', padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>
@@ -217,7 +217,7 @@ export function InterventionDetailClient({ intervention, employee, wellness, hab
         <div style={{ marginBottom: 16 }}>
           <label style={labelStyle}>Wellness Director clinical notes (private)</label>
           <textarea value={wdNotes} onChange={e => setWdNotes(e.target.value)} rows={3}
-            placeholder="Private notes about this employee — not visible to the COO..."
+            placeholder="Private notes about this participant — not visible to the COO..."
             style={{ ...inputStyle, resize: 'vertical' as const }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

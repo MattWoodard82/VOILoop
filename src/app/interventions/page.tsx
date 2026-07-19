@@ -1,5 +1,5 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getInterventions, getEmployees } from '@/lib/supabase/queries'
+import { getInterventions, getParticipants } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, Alert, TimelineItem } from '@/components/ui'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
@@ -7,12 +7,12 @@ import { formatDate } from '@/lib/utils'
 export const dynamic = 'force-dynamic'
 
 export default async function InterventionsPage() {
-  const [interventions, employees] = await Promise.all([
+  const [interventions, participants] = await Promise.all([
     getInterventions(),
-    getEmployees(),
+    getParticipants(),
   ])
 
-  const empMap = Object.fromEntries(employees.map((e) => [e.id, e]))
+  const empMap = Object.fromEntries(participants.map((e) => [e.id, e]))
   const pending = interventions.filter((i) => i.outcome === 'Pending')
   const inProgress = interventions.filter((i) => i.outcome === 'In Progress')
   const monitoring = interventions.filter((i) => i.outcome === 'Monitoring')
@@ -38,7 +38,7 @@ export default async function InterventionsPage() {
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: 140 }}>Employee</th>
+              <th style={{ width: 140 }}>Participant</th>
               <th>Trigger metric</th>
               <th>Value</th>
               <th>Intervention</th>
@@ -49,11 +49,11 @@ export default async function InterventionsPage() {
           </thead>
           <tbody>
             {interventions.map((int) => {
-              const emp = empMap[int.employee_id]
+              const emp = empMap[int.participant_id]
               return (
                <tr key={int.id} onClick={() => window.location.href = `/interventions/${int.id}`} style={{ cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(105,190,40,0.04)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{emp ? `${emp.first_name} ${emp.last_name}` : int.employee_id}</div>
+                    <div style={{ fontWeight: 600 }}>{emp ? `${emp.first_name} ${emp.last_name}` : int.participant_id}</div>
                     <div style={{ fontSize: 10, color: '#A5ACAF' }}>{int.department}</div>
                   </td>
                   <td>{int.trigger_metric}</td>
@@ -74,7 +74,7 @@ export default async function InterventionsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
         <Card title="Recommended actions">
           {pending.slice(0, 2).map((int, i, arr) => {
-            const emp = empMap[int.employee_id]
+            const emp = empMap[int.participant_id]
             return (
               <TimelineItem
                 key={int.id}
@@ -87,7 +87,7 @@ export default async function InterventionsPage() {
             )
           })}
           {inProgress.map((int, i) => {
-            const emp = empMap[int.employee_id]
+            const emp = empMap[int.participant_id]
             return (
               <TimelineItem
                 key={int.id}

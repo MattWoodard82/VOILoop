@@ -25,7 +25,7 @@ type ChallengeDetail = {
 }
 
 type Participant = {
-  employee_id: string
+  participant_id: string
   is_eligible: boolean
   progress_value: number
   completed: boolean
@@ -95,7 +95,7 @@ export function ChallengesAdminClient() {
         threshold_value: createThreshold,
         window_start_at: `${createStart}T00:00:00.000Z`,
         window_end_at: `${createEnd}T23:59:59.000Z`,
-        eligibility_mode: 'all_employees',
+        eligibility_mode: 'all_participants',
       }),
     })
     if (!response.ok) {
@@ -322,11 +322,11 @@ export function ChallengesAdminClient() {
               </div>
               <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #0a3560', borderRadius: 8 }}>
                 <table className="data-table" style={{ marginBottom: 0 }}>
-                  <thead><tr><th>Employee</th><th>Eligible</th><th>Progress</th><th>Completed</th></tr></thead>
+                  <thead><tr><th>Participant</th><th>Eligible</th><th>Progress</th><th>Completed</th></tr></thead>
                   <tbody>
                     {participants.map((participant) => (
-                      <tr key={participant.employee_id}>
-                        <td>{participant.employee_id}</td>
+                      <tr key={participant.participant_id}>
+                        <td>{participant.participant_id}</td>
                         <td>{participant.is_eligible ? 'Yes' : 'No'}</td>
                         <td>{participant.progress_value}</td>
                         <td>{participant.completed ? 'Yes' : 'No'}</td>

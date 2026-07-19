@@ -7,8 +7,8 @@ import { WellnessDirectorClient } from './WellnessDirectorClient'
 export const dynamic = 'force-dynamic'
 
 export default async function WellnessDirectorPage() {
-  const { employees, stats, interventions } = await getTeamDashboard()
-  const highRisk = employees.filter(e => e.risk_level === 'High')
+  const { participants, stats, interventions } = await getTeamDashboard()
+  const highRisk = participants.filter(e => e.risk_level === 'High')
 
   // Build department intervention summary from live data
   const deptMap: Record<string, { priority: string; triggers: string[]; actions: string[] }> = {}
@@ -42,19 +42,19 @@ export default async function WellnessDirectorPage() {
     <DashboardShell title="Wellness Director Dashboard">
       {highRisk.length > 0 && (
         <Alert variant="warn" icon={<AlertTriangle size={14} />}>
-          <strong style={{ color: '#fff' }}>{highRisk.length} employee{highRisk.length > 1 ? 's' : ''} flagged: </strong>
+          <strong style={{ color: '#fff' }}>{highRisk.length} participant{highRisk.length > 1 ? 's' : ''} flagged: </strong>
           {highRisk.map(e => `${e.first_name} ${e.last_name} (Recovery ${e.latest_wellness?.recovery_score ?? '–'})`).join(' · ')} — require immediate Wellness Director review.
         </Alert>
       )}
-      <div className="sec-label">Workforce snapshot — {employees.length} employees</div>
+      <div className="sec-label">Workforce snapshot — {participants.length} participants</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_employees} employees tracked`} deltaDir="neutral" />
-        <KpiCard label="High burnout risk" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map(e => e.first_name).join(' · ') : 'No high-risk employees today'} deltaDir="neutral" />
+        <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_participants} participants tracked`} deltaDir="neutral" />
+        <KpiCard label="High burnout risk" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map(e => e.first_name).join(' · ') : 'No high-risk participants today'} deltaDir="neutral" />
         <KpiCard label="Avg sleep performance" value={`${stats.avg_sleep_perf}%`} color="#A5ACAF" delta={`Pulse participation ${stats.participation_rate}%`} deltaDir="neutral" />
-        <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${employees.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
+        <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${participants.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
       </div>
 
-      <WellnessDirectorClient employees={employees} />
+      <WellnessDirectorClient participants={participants} />
 
       {deptSuggestions.length > 0 && (
         <div style={{ marginTop: 24 }}>

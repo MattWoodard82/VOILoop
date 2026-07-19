@@ -9,10 +9,10 @@ import {
 } from './parser'
 
 const IMPORT_TABS = [TAB_EXERCISE, TAB_STRESS, TAB_SLEEP, TAB_MANUAL] as const
-const EMPLOYEE_IDENTIFIER_FIELD = 'Employee Identifier'
+const PARTICIPANT_IDENTIFIER_FIELD = 'Participant Identifier'
 
-export interface WhoopEmployeeProfile {
-  employeeId: string
+export interface WhoopParticipantProfile {
+  participantId: string
   sourceIdentifier: string | null
   fullName: string | null
   firstName: string
@@ -22,15 +22,15 @@ export interface WhoopEmployeeProfile {
 
 export interface PreparedWhoopWorkbook {
   workbook: ParsedWorkbook
-  employeeProfiles: WhoopEmployeeProfile[]
+  participantProfiles: WhoopParticipantProfile[]
 }
 
 export interface PrepareWhoopWorkbookOptions {
   authUserId?: string | null
-  selectedEmployeeProfile?: WhoopEmployeeProfile | null
+  selectedParticipantProfile?: WhoopParticipantProfile | null
 }
 
-interface EmployeeRow {
+interface ParticipantRow {
   id: string
   auth_user_id?: string | null
   first_name: string
@@ -85,24 +85,24 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, '')
 }
 
-function workbookHasMissingEmployeeIdentifiers(wb: ParsedWorkbook): boolean {
+function workbookHasMissingParticipantIdentifiers(wb: ParsedWorkbook): boolean {
   return IMPORT_TABS.some((tab) =>
-    (wb[tab] ?? []).some((row) => !getTextValue(row, [EMPLOYEE_IDENTIFIER_FIELD])),
+    (wb[tab] ?? []).some((row) => !getTextValue(row, [PARTICIPANT_IDENTIFIER_FIELD])),
   )
 }
 
-async function resolveWorkbookEmployeeProfile(
+async function resolveWorkbookParticipantProfile(
   supabase: SupabaseClient,
   wb: ParsedWorkbook,
-): Promise<WhoopEmployeeProfile | null> {
+): Promise<WhoopParticipantProfile | null> {
   const condensedRows = wb[TAB_CONDENSED] ?? []
   if (!condensedRows.length) return null
 
   const identifiers = uniqueValues(
-    condensedRows.map((row) => getTextValue(row, [EMPLOYEE_IDENTIFIER_FIELD])),
+    condensedRows.map((row) => getTextValue(row, [PARTICIPANT_IDENTIFIER_FIELD])),
   )
   const names = uniqueValues(
-    condensedRows.map((row) => getTextValue(row, ['Employee Name', 'Employee Name '])),
+    condensedRows.map((row) => getTextValue(row, ['Participant Name', 'Participant Name '])),
   )
 
   if (identifiers.length > 1 || names.length > 1) {
@@ -116,40 +116,40 @@ async function resolveWorkbookEmployeeProfile(
       .map((row) => getTextValue(row, ['Department']))
       .find((value): value is string => Boolean(value)) ?? null
 
-  let employeeId: string | null = null
+  let participantId: string | null = null
 
   if (fullName) {
-    const { data: employees, error } = await supabase
-      .from('employees')
+    const { data: participants, error } = await supabase
+      .from('participants')
       .select('id, first_name, last_name')
 
     if (error) throw error
 
     const normalizedTarget = normalizeName(fullName)
-    const matches = (employees ?? []).filter((employee) =>
-      normalizeName(`${employee.first_name} ${employee.last_name}`) === normalizedTarget,
+    const matches = (participants ?? []).filter((participant) =>
+      normalizeName(`${participant.first_name} ${participant.last_name}`) === normalizedTarget,
     )
 
     if (matches.length === 1) {
-      employeeId = matches[0].id
+      participantId = matches[0].id
     }
   }
 
-  if (!employeeId && sourceIdentifier) {
-    employeeId = sourceIdentifier
+  if (!participantId && sourceIdentifier) {
+    participantId = sourceIdentifier
   }
 
-  if (!employeeId && fullName) {
+  if (!participantId && fullName) {
     const slug = slugify(fullName)
-    employeeId = slug ? `whoop-${slug}` : null
+    participantId = slug ? `whoop-${slug}` : null
   }
 
-  if (!employeeId) return null
+  if (!participantId) return null
 
   const { firstName, lastName } = splitName(fullName)
 
   return {
-    employeeId,
+    participantId,
     sourceIdentifier,
     fullName,
     firstName,
@@ -158,12 +158,12 @@ async function resolveWorkbookEmployeeProfile(
   }
 }
 
-async function resolveEmployeeProfileForAuthUser(
+async function resolveParticipantProfileForAuthUser(
   supabase: SupabaseClient,
   authUserId: string,
-): Promise<WhoopEmployeeProfile | null> {
+): Promise<WhoopParticipantProfile | null> {
   const { data, error } = await supabase
-    .from('employees')
+    .from('participants')
     .select('id, auth_user_id, first_name, last_name, department, device_id')
     .eq('auth_user_id', authUserId)
     .maybeSingle()
@@ -171,20 +171,20 @@ async function resolveEmployeeProfileForAuthUser(
   if (error) throw error
   if (!data) return null
 
-  const employee = data as EmployeeRow
+  const participant = data as ParticipantRow
   return {
-    employeeId: employee.id,
-    sourceIdentifier: employee.device_id ?? employee.id,
-    fullName: `${employee.first_name} ${employee.last_name}`.trim(),
-    firstName: employee.first_name,
-    lastName: employee.last_name,
-    department: employee.department,
+    participantId: participant.id,
+    sourceIdentifier: participant.device_id ?? participant.id,
+    fullName: `${participant.first_name} ${participant.last_name}`.trim(),
+    firstName: participant.first_name,
+    lastName: participant.last_name,
+    department: participant.department,
   }
 }
 
-function injectEmployeeIdentifier(
+function injectParticipantIdentifier(
   wb: ParsedWorkbook,
-  employeeId: string,
+  participantId: string,
   overwriteExisting: boolean = false,
 ): ParsedWorkbook {
   const nextWorkbook: ParsedWorkbook = { ...wb }
@@ -193,11 +193,11 @@ function injectEmployeeIdentifier(
     if (!wb[tab]) continue
 
     nextWorkbook[tab] = wb[tab].map((row) => {
-      const existingEmployeeId = getTextValue(row, [EMPLOYEE_IDENTIFIER_FIELD])
-      if (existingEmployeeId && !overwriteExisting) return row
+      const existingParticipantId = getTextValue(row, [PARTICIPANT_IDENTIFIER_FIELD])
+      if (existingParticipantId && !overwriteExisting) return row
       return {
         ...row,
-        [EMPLOYEE_IDENTIFIER_FIELD]: employeeId,
+        [PARTICIPANT_IDENTIFIER_FIELD]: participantId,
       }
     })
   }
@@ -211,44 +211,44 @@ export async function prepareWhoopWorkbookForImport(
   options?: string | PrepareWhoopWorkbookOptions | null,
 ): Promise<PreparedWhoopWorkbook> {
   const authUserId = typeof options === 'string' ? options : (options?.authUserId ?? null)
-  const selectedEmployeeProfile = typeof options === 'string' ? null : (options?.selectedEmployeeProfile ?? null)
+  const selectedParticipantProfile = typeof options === 'string' ? null : (options?.selectedParticipantProfile ?? null)
 
-  if (selectedEmployeeProfile) {
+  if (selectedParticipantProfile) {
     return {
-      workbook: injectEmployeeIdentifier(wb, selectedEmployeeProfile.employeeId, true),
-      employeeProfiles: [selectedEmployeeProfile],
+      workbook: injectParticipantIdentifier(wb, selectedParticipantProfile.participantId, true),
+      participantProfiles: [selectedParticipantProfile],
     }
   }
 
   const authUserProfile = authUserId
-    ? await resolveEmployeeProfileForAuthUser(supabase, authUserId)
+    ? await resolveParticipantProfileForAuthUser(supabase, authUserId)
     : null
-  const workbookProfile = await resolveWorkbookEmployeeProfile(supabase, wb)
-  const missingEmployeeIdentifiers = workbookHasMissingEmployeeIdentifiers(wb)
+  const workbookProfile = await resolveWorkbookParticipantProfile(supabase, wb)
+  const missingParticipantIdentifiers = workbookHasMissingParticipantIdentifiers(wb)
   const profile = authUserProfile ?? workbookProfile ?? null
 
   if (authUserId && !authUserProfile) {
-    throw new Error('Your account is not linked to an employee record')
+    throw new Error('Your account is not linked to an participant record')
   }
 
   if (!profile) {
-    if (missingEmployeeIdentifiers) {
-      throw new Error('Could not resolve employee identity from the Condensed Employee Metrics sheet')
+    if (missingParticipantIdentifiers) {
+      throw new Error('Could not resolve participant identity from the Condensed Participant Metrics sheet')
     }
 
     return {
       workbook: wb,
-      employeeProfiles: [],
+      participantProfiles: [],
     }
   }
 
   return {
     workbook:
       authUserProfile
-        ? injectEmployeeIdentifier(wb, authUserProfile.employeeId, true)
-        : missingEmployeeIdentifiers
-          ? injectEmployeeIdentifier(wb, profile.employeeId)
+        ? injectParticipantIdentifier(wb, authUserProfile.participantId, true)
+        : missingParticipantIdentifiers
+          ? injectParticipantIdentifier(wb, profile.participantId)
           : wb,
-    employeeProfiles: [profile],
+    participantProfiles: [profile],
   }
 }

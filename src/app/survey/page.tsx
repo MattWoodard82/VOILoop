@@ -88,7 +88,7 @@ const QUESTIONS = [
   },
 ]
 
-const EMPLOYEES = [
+const PARTICIPANTS = [
   { id: 'EMP001', name: 'Travis Brandenburgh' },
   { id: 'EMP002', name: 'Nicole Chen' },
   { id: 'EMP003', name: 'Dzenan Blambic' },
@@ -110,28 +110,28 @@ function scoreColor(val: number, invert?: boolean) {
 
 export default function SurveyPage() {
   const [step, setStep] = useState<'select' | 'survey' | 'done'>('select')
-  const [employeeId, setEmployeeId] = useState('')
+  const [participantId, setParticipantId] = useState('')
   const [answers, setAnswers] = useState<Record<string, number>>({})
   const [currentQ, setCurrentQ] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [latestBio, setLatestBio] = useState<{ hrv_ms: number | null; resting_hr: number | null } | null>(null)
 
-  // Load latest biometrics when employee is selected
+  // Load latest biometrics when participant is selected
   useEffect(() => {
-    if (!employeeId) return
+    if (!participantId) return
     const fetchBio = async () => {
       const supabase = createClient()
       const { data } = await supabase
         .from('daily_wellness')
         .select('hrv_ms, resting_hr')
-        .eq('employee_id', employeeId)
+        .eq('participant_id', participantId)
         .order('date', { ascending: false })
         .limit(1)
         .single()
       if (data) setLatestBio(data)
     }
     fetchBio()
-  }, [employeeId])
+  }, [participantId])
 
   const setAnswer = (val: number) => {
     const key = QUESTIONS[currentQ].key
@@ -155,7 +155,7 @@ export default function SurveyPage() {
     const supabase = createClient()
     const today = new Date().toISOString().split('T')[0]
     await supabase.from('pulse_surveys').upsert({
-      employee_id: employeeId,
+      participant_id: participantId,
       date: today,
       wellbeing_score: answers.wellbeing_score ?? null,
       burnout_score: answers.burnout_score ?? null,
@@ -167,7 +167,7 @@ export default function SurveyPage() {
       work_life_balance: answers.work_life_balance ?? null,
       psychological_safety: answers.psychological_safety ?? null,
       self_image_score: answers.self_image_score ?? null,
-    }, { onConflict: 'employee_id,date' })
+    }, { onConflict: 'participant_id,date' })
     setSubmitting(false)
     setStep('done')
   }
@@ -228,18 +228,18 @@ export default function SurveyPage() {
               Select your name to begin
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {EMPLOYEES.map(emp => (
+              {PARTICIPANTS.map(emp => (
                 <button
                   key={emp.id}
-                  onClick={() => setEmployeeId(emp.id)}
+                  onClick={() => setParticipantId(emp.id)}
                   style={{
-                    background: employeeId === emp.id ? 'rgba(105,190,40,0.1)' : '#001a33',
-                    border: `1px solid ${employeeId === emp.id ? 'rgba(105,190,40,0.4)' : '#0a3560'}`,
+                    background: participantId === emp.id ? 'rgba(105,190,40,0.1)' : '#001a33',
+                    border: `1px solid ${participantId === emp.id ? 'rgba(105,190,40,0.4)' : '#0a3560'}`,
                     borderRadius: 8,
                     padding: '11px 14px',
                     fontSize: 13,
-                    color: employeeId === emp.id ? '#69BE28' : '#fff',
-                    fontWeight: employeeId === emp.id ? 600 : 400,
+                    color: participantId === emp.id ? '#69BE28' : '#fff',
+                    fontWeight: participantId === emp.id ? 600 : 400,
                     cursor: 'pointer',
                     textAlign: 'left',
                     fontFamily: 'Inter, sans-serif',
@@ -253,18 +253,18 @@ export default function SurveyPage() {
 
             <button
               onClick={() => setStep('survey')}
-              disabled={!employeeId}
+              disabled={!participantId}
               style={{
                 width: '100%',
                 marginTop: 20,
-                background: employeeId ? '#69BE28' : '#0a3560',
-                color: employeeId ? '#002244' : '#A5ACAF',
+                background: participantId ? '#69BE28' : '#0a3560',
+                color: participantId ? '#002244' : '#A5ACAF',
                 border: 'none',
                 borderRadius: 8,
                 padding: '13px',
                 fontSize: 14,
                 fontWeight: 700,
-                cursor: employeeId ? 'pointer' : 'not-allowed',
+                cursor: participantId ? 'pointer' : 'not-allowed',
                 fontFamily: 'Inter, sans-serif',
               }}
             >
@@ -282,7 +282,7 @@ export default function SurveyPage() {
 
   // ── DONE STEP ────────────────────────────────────────────────────────────
   if (step === 'done') {
-    const empName = EMPLOYEES.find(e => e.id === employeeId)?.name?.split(' ')[0] ?? 'there'
+    const empName = PARTICIPANTS.find(e => e.id === participantId)?.name?.split(' ')[0] ?? 'there'
     const scores = QUESTIONS.map(q => ({ ...q, val: answers[q.key] })).filter(q => q.val)
 
     return (

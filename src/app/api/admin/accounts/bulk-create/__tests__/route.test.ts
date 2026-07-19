@@ -11,7 +11,7 @@ jest.mock('@/lib/supabase/admin', () => ({
   createAdminSupabaseClient: jest.fn(),
 }))
 
-function makeRequest(csv: string, accountType: 'employee' | 'wellness_director' = 'employee') {
+function makeRequest(csv: string, accountType: 'participant' | 'wellness_director' = 'participant') {
   const formData = new FormData()
   const file = new File([Buffer.from(csv)], 'accounts.csv', { type: 'text/csv' })
   formData.append('file', file)
@@ -67,8 +67,8 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     } as never)
 
     const upsertUserAccess = jest.fn(async () => ({ error: null }))
-    const employeesSelect = jest.fn(async () => ({ data: [], error: null }))
-    const insertEmployee = jest.fn(async () => ({ error: null }))
+    const participantsSelect = jest.fn(async () => ({ data: [], error: null }))
+    const insertParticipant = jest.fn(async () => ({ error: null }))
     const createUser = jest.fn(async () => ({ data: { user: { id: 'wd-1' } }, error: null }))
     const listUsers = jest.fn(async () => ({ data: { users: [] }, error: null }))
 
@@ -85,10 +85,10 @@ describe('POST /api/admin/accounts/bulk-create', () => {
           return { upsert: upsertUserAccess }
         }
 
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
-            select: employeesSelect,
-            insert: insertEmployee,
+            select: participantsSelect,
+            insert: insertParticipant,
           }
         }
 
@@ -99,8 +99,8 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     const response = await POST(makeRequest('email\nwd@example.com', 'wellness_director'))
 
     expect(response.status).toBe(200)
-    expect(employeesSelect).not.toHaveBeenCalled()
-    expect(insertEmployee).not.toHaveBeenCalled()
+    expect(participantsSelect).not.toHaveBeenCalled()
+    expect(insertParticipant).not.toHaveBeenCalled()
     expect(upsertUserAccess).toHaveBeenCalledWith({
       user_id: 'wd-1',
       role: 'wellness_director',
@@ -112,7 +112,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     expect(body).toContain('"wd@example.com","wellness_director","","')
   })
 
-  test('creates employee records for employee account runs', async () => {
+  test('creates participant records for participant account runs', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn(() => ({
@@ -125,7 +125,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     } as never)
 
     const upsertUserAccess = jest.fn(async () => ({ error: null }))
-    const insertEmployee = jest.fn(async () => ({ error: null }))
+    const insertParticipant = jest.fn(async () => ({ error: null }))
     const createUser = jest.fn(async () => ({ data: { user: { id: 'emp-auth-1' } }, error: null }))
     const listUsers = jest.fn(async () => ({ data: { users: [] }, error: null }))
 
@@ -142,10 +142,10 @@ describe('POST /api/admin/accounts/bulk-create', () => {
           return { upsert: upsertUserAccess }
         }
 
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
             select: jest.fn(async () => ({ data: [], error: null })),
-            insert: insertEmployee,
+            insert: insertParticipant,
           }
         }
 
@@ -153,15 +153,16 @@ describe('POST /api/admin/accounts/bulk-create', () => {
       }),
     } as never)
 
-    const response = await POST(makeRequest('email\npilot@example.com', 'employee'))
+    const response = await POST(makeRequest('email\npilot@example.com', 'participant'))
 
     expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Disposition')).toContain('participant-passwords.csv')
     expect(upsertUserAccess).toHaveBeenCalledWith({
       user_id: 'emp-auth-1',
-      role: 'employee',
+      role: 'participant',
       must_change_password: true,
     }, { onConflict: 'user_id' })
-    expect(insertEmployee).toHaveBeenCalledWith(expect.objectContaining({
+    expect(insertParticipant).toHaveBeenCalledWith(expect.objectContaining({
       id: 'EMP001',
       auth_user_id: 'emp-auth-1',
       first_name: 'Pilot',
@@ -169,6 +170,64 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     }))
 
     const body = await response.text()
-    expect(body).toContain('"pilot@example.com","employee","EMP001","')
+    const rows = body.split('\n')
+    expect(rows[0]).toBe('email,account_type,participant_id,password,status')
+    expect(rows[1] ?? '').toMatch(/^"pilot@example\.com","participant","EMP001","[A-Za-z0-9]{8}","created"$/)
+  })
+
+  test('increments participant ids from existing records', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const upsertUserAccess = jest.fn(async () => ({ error: null }))
+    const insertParticipant = jest.fn(async () => ({ error: null }))
+    const createUser = jest.fn(async () => ({ data: { user: { id: 'emp-auth-2' } }, error: null }))
+    const listUsers = jest.fn(async () => ({ data: { users: [] }, error: null }))
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      auth: {
+        admin: {
+          listUsers,
+          createUser,
+          updateUserById: jest.fn(),
+        },
+      },
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return { upsert: upsertUserAccess }
+        }
+
+        if (table === 'participants') {
+          return {
+            select: jest.fn(async () => ({
+              data: [{ id: 'EMP009', auth_user_id: 'existing-auth-user' }],
+              error: null,
+            })),
+            insert: insertParticipant,
+          }
+        }
+
+        return {}
+      }),
+    } as never)
+
+    const response = await POST(makeRequest('email\npilot2@example.com', 'participant'))
+
+    expect(response.status).toBe(200)
+    expect(insertParticipant).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'EMP010',
+      auth_user_id: 'emp-auth-2',
+    }))
+
+    const body = await response.text()
+    expect(body).toContain('"pilot2@example.com","participant","EMP010","')
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import type { EmployeeWithWellness } from '@/types'
+import type { ParticipantWithWellness } from '@/types'
 import { Card, Badge, ScorePill } from '@/components/ui'
 import { recoveryColor, initials } from '@/lib/utils'
 
@@ -17,11 +17,11 @@ const HABITS = [
   ['read_before_bed', 'Read before bed'],
 ] as const
 
-export function TeamRosterClient({ employees }: { employees: EmployeeWithWellness[] }) {
+export function TeamRosterClient({ participants }: { participants: ParticipantWithWellness[] }) {
   const [filter, setFilter] = useState<'all' | 'green' | 'yellow' | 'red'>('all')
-  const [selected, setSelected] = useState<EmployeeWithWellness | null>(null)
+  const [selected, setSelected] = useState<ParticipantWithWellness | null>(null)
 
-  const filtered = employees.filter((e) => {
+  const filtered = participants.filter((e) => {
     if (filter === 'all') return true
     if (filter === 'green') return e.recovery_status === 'green'
     if (filter === 'yellow') return e.recovery_status === 'yellow'
@@ -42,14 +42,14 @@ export function TeamRosterClient({ employees }: { employees: EmployeeWithWellnes
               color: filter === f ? '#002244' : '#A5ACAF',
               fontWeight: filter === f ? 700 : 400,
             }}>
-            {f === 'all' ? 'All employees' : f === 'green' ? 'Green ≥67' : f === 'yellow' ? 'Yellow 34–66' : 'Red <34'}
+            {f === 'all' ? 'All participants' : f === 'green' ? 'Green ≥67' : f === 'yellow' ? 'Yellow 34–66' : 'Red <34'}
           </button>
         ))}
       </div>
 
       <Card>
         <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 95px 55px 50px 55px 55px 60px', gap: 6, fontSize: 9, color: '#A5ACAF', paddingBottom: 8, borderBottom: '1px solid #0a3560', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          <span /><span>Employee<span>Dept</span></span>
+          <span /><span>Participant<span>Dept</span></span>
           <span style={{ textAlign: 'center' }}>Recovery</span>
           <span style={{ textAlign: 'center' }}>HRV</span>
           <span style={{ textAlign: 'center' }}>Sleep%</span>
@@ -57,7 +57,7 @@ export function TeamRosterClient({ employees }: { employees: EmployeeWithWellnes
           <span style={{ textAlign: 'right' }}>Risk</span>
         </div>
         {filtered.map((e, i) => {
-          const [bg, fg] = AV_COLORS[employees.indexOf(e) % AV_COLORS.length]
+          const [bg, fg] = AV_COLORS[participants.indexOf(e) % AV_COLORS.length]
           const w = e.latest_wellness
           return (
             <div key={e.id} onClick={() => setSelected(e === selected ? null : e)}
@@ -94,11 +94,11 @@ export function TeamRosterClient({ employees }: { employees: EmployeeWithWellnes
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 60px 80px', gap: 6, fontSize: 11, color: '#A5ACAF', paddingBottom: 8, borderBottom: '1px solid #0a3560', marginBottom: 6 }}>
           <span>#</span>
-          <span>Employee</span>
+          <span>Participant</span>
           <span style={{ textAlign: 'center' }}>Score</span>
           <span style={{ textAlign: 'center' }}>Status</span>
         </div>
-        {[...employees]
+        {[...participants]
           .sort((a, b) => (b.latest_wellness?.recovery_score ?? 0) - (a.latest_wellness?.recovery_score ?? 0))
           .map((e, i) => {
             const score = e.latest_wellness?.recovery_score ?? 0

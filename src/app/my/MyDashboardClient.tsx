@@ -3,11 +3,11 @@
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
-import type { DailyWellness, Employee, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
+import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
 
 interface Props {
-  employee: Employee
+  participant: Participant
   wellness: DailyWellness[]
   habits: Habit | null
   workout: Workout | null
@@ -99,7 +99,7 @@ function HabitBadge({ label, value }: { label: string; value: boolean | null }) 
   )
 }
 
-export function MyDashboardClient({ employee, wellness, habits, workout, pulse, challenge, importBatches }: Props) {
+export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches }: Props) {
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
@@ -154,10 +154,10 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
       >
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
-            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {employee.first_name}
+            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, {participant.first_name}
           </div>
           <div style={{ fontSize: 13, color: '#A5ACAF', marginBottom: 12 }}>
-            {employee.department} · {employee.title}
+            {participant.department} · {participant.title}
           </div>
           <div style={{ fontSize: 14, fontWeight: 600, color: recoveryColor(latest?.recovery_score ?? null), marginBottom: 4 }}>
             {recoverySummary.label}
@@ -174,7 +174,7 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
           <Badge variant="wolf">
             {importSyncLabel ? `Last sync ${importSyncLabel}` : 'No sync yet'}
           </Badge>
-          {employee.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
+          {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
         </div>
       </div>
 

@@ -49,7 +49,7 @@ describe('POST /api/auth/mark-password-changed', () => {
     })
   })
 
-  test('defaults to employee role and redirects to my page when no role is found', async () => {
+  test('defaults to participant role and redirects to my page when no role is found', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-2' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: null, mustChangePassword: true })
 
@@ -64,7 +64,7 @@ describe('POST /api/auth/mark-password-changed', () => {
     expect(response.status).toBe(200)
     expect(upsert).toHaveBeenCalledWith({
       user_id: 'user-2',
-      role: 'employee',
+      role: 'participant',
       must_change_password: false,
     }, { onConflict: 'user_id' })
     expect(body).toMatchObject({

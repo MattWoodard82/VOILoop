@@ -1,6 +1,6 @@
 export type ChallengeStatus = 'draft' | 'active' | 'completed' | 'cancelled'
 export type ChallengeMetricType = 'actions_count'
-export type ChallengeEligibilityMode = 'all_employees' | 'filtered'
+export type ChallengeEligibilityMode = 'all_participants' | 'filtered'
 export type ChallengeCompletionSource = 'event' | 'scheduled_recompute' | 'manual_repair'
 export type ChallengeAuditAction = 'create' | 'update' | 'activate' | 'cancel' | 'complete' | 'recompute' | 'repair'
 
@@ -22,15 +22,15 @@ export interface ChallengePayload {
   eligibility_definition?: ChallengeEligibilityDefinition | null
 }
 
-interface RuleEvaluationEmployee {
+interface RuleEvaluationParticipant {
   department?: string | null
   location_id?: string | null
   employment_type?: string | null
   enrolled_date?: string | null
 }
 
-export function buildCompletionIdempotencyKey(challengeId: string, employeeId: string): string {
-  return `challenge:${challengeId}:employee:${employeeId}:completion`
+export function buildCompletionIdempotencyKey(challengeId: string, participantId: string): string {
+  return `challenge:${challengeId}:participant:${participantId}:completion`
 }
 
 export function isTerminalChallengeStatus(status: ChallengeStatus): boolean {
@@ -70,7 +70,7 @@ export function normalizeEligibilityDefinition(
   mode: ChallengeEligibilityMode,
   rawDefinition: unknown,
 ): ChallengeEligibilityDefinition | null {
-  if (mode === 'all_employees') return null
+  if (mode === 'all_participants') return null
   if (!rawDefinition || typeof rawDefinition !== 'object') return null
 
   const source = rawDefinition as Record<string, unknown>
@@ -138,7 +138,7 @@ export function validateChallengePayload(payload: LooseChallengePayload): { ok: 
   }
 
   if (payload.eligibility_mode !== undefined) {
-    if (String(payload.eligibility_mode) !== 'all_employees' && String(payload.eligibility_mode) !== 'filtered') {
+    if (String(payload.eligibility_mode) !== 'all_participants' && String(payload.eligibility_mode) !== 'filtered') {
       return { ok: false, code: 'INVALID_ELIGIBILITY' }
     }
   }
@@ -158,38 +158,38 @@ function tenureDays(enrolledDate: string, referenceDate: Date): number {
 }
 
 export function evaluateEligibility(
-  employee: RuleEvaluationEmployee,
+  participant: RuleEvaluationParticipant,
   mode: ChallengeEligibilityMode,
   definition: ChallengeEligibilityDefinition | null,
   referenceDate: Date = new Date(),
 ): { isEligible: boolean; reason: string | null } {
-  if (mode === 'all_employees') return { isEligible: true, reason: null }
+  if (mode === 'all_participants') return { isEligible: true, reason: null }
   if (!definition) return { isEligible: false, reason: 'missing_definition' }
 
   if (definition.department_ids?.length) {
-    const department = employee.department?.trim()
+    const department = participant.department?.trim()
     if (!department || !definition.department_ids.includes(department)) {
       return { isEligible: false, reason: 'department_mismatch' }
     }
   }
 
   if (definition.location_ids?.length) {
-    const locationId = employee.location_id?.trim()
+    const locationId = participant.location_id?.trim()
     if (!locationId || !definition.location_ids.includes(locationId)) {
       return { isEligible: false, reason: 'location_mismatch' }
     }
   }
 
   if (definition.employment_type?.length) {
-    const employmentType = employee.employment_type?.trim() as 'full_time' | 'part_time' | 'contractor' | undefined
+    const employmentType = participant.employment_type?.trim() as 'full_time' | 'part_time' | 'contractor' | undefined
     if (!employmentType || !definition.employment_type.includes(employmentType)) {
       return { isEligible: false, reason: 'employment_type_mismatch' }
     }
   }
 
   if (definition.min_tenure_days !== undefined) {
-    if (!employee.enrolled_date) return { isEligible: false, reason: 'missing_enrolled_date' }
-    const days = tenureDays(employee.enrolled_date, referenceDate)
+    if (!participant.enrolled_date) return { isEligible: false, reason: 'missing_enrolled_date' }
+    const days = tenureDays(participant.enrolled_date, referenceDate)
     if (days < definition.min_tenure_days) {
       return { isEligible: false, reason: 'tenure_below_minimum' }
     }

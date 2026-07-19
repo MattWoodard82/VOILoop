@@ -27,7 +27,7 @@ export function mapExercise(wb: ParsedWorkbook): MappedExercise {
     const validated = validateExerciseRow(rows[i], i + 2, errors) // +2: header=1
     if (!validated) continue
     workouts.push({
-      employee_id: validated.employeeId,
+      participant_id: validated.participantId,
       date: validated.date,
       start_time: validated.startTimeIso,
       end_time: validated.endTimeIso,
@@ -92,7 +92,7 @@ function mergeWellness(
 ): ValidatedWellnessRow {
   // override wins for non-null values
   return {
-    employeeId: override.employeeId,
+    participantId: override.participantId,
     date: override.date,
     recoveryScore: override.recoveryScore ?? base.recoveryScore,
     hrvMs: override.hrvMs ?? base.hrvMs,
@@ -116,7 +116,7 @@ function mergeWellness(
 
 function validatedToWellness(v: ValidatedWellnessRow): WhoopWellness {
   return {
-    employee_id: v.employeeId,
+    participant_id: v.participantId,
     date: v.date,
     recovery_score: v.recoveryScore,
     hrv_ms: v.hrvMs,
@@ -140,7 +140,7 @@ function validatedToWellness(v: ValidatedWellnessRow): WhoopWellness {
 
 export function mapWellness(wb: ParsedWorkbook): MappedWellness {
   const errors: ImportRowError[] = []
-  // keyed by `${employeeId}|${date}`
+  // keyed by `${participantId}|${date}`
   const stressMap = new Map<string, ValidatedWellnessRow>()
   const sleepMap = new Map<string, ValidatedWellnessRow>()
   const sleepDateBySignature = new Map<string, string>()
@@ -162,7 +162,7 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
       const fallbackDate = signature ? sleepDateBySignature.get(signature) ?? null : null
       const v = validateWellnessRow(TAB_STRESS, rows[i], i + 2, errors, fallbackDate)
       if (!v) continue
-      const key = `${v.employeeId}|${v.date}`
+      const key = `${v.participantId}|${v.date}`
       const existing = stressMap.get(key)
       // keep the entry with the most non-null fields (last-write wins for same key)
       stressMap.set(key, existing ? mergeWellness(existing, v) : v)
@@ -175,13 +175,13 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
     for (let i = 0; i < rows.length; i++) {
       const v = validateWellnessRow(TAB_SLEEP, rows[i], i + 2, errors)
       if (!v) continue
-      const key = `${v.employeeId}|${v.date}`
+      const key = `${v.participantId}|${v.date}`
       const existing = sleepMap.get(key)
       sleepMap.set(key, existing ? mergeWellness(existing, v) : v)
     }
   }
 
-  // Merge: Sleep overrides Stress for each (employee, date) key
+  // Merge: Sleep overrides Stress for each (participant, date) key
   const merged = new Map<string, ValidatedWellnessRow>()
   Array.from(stressMap.entries()).forEach(([key, stressRow]) => {
     merged.set(key, stressRow)
@@ -199,9 +199,9 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
 //
 // Maps question-text keywords to habit columns.
 // Matching is case-insensitive and substring-based.
-// Multiple rows for same (employee, date) are collapsed: any "yes" wins.
+// Multiple rows for same (participant, date) are collapsed: any "yes" wins.
 
-const QUESTION_MAP: [RegExp, keyof Omit<WhoopHabit, 'id' | 'employee_id' | 'date' | 'notes'>][] = [
+const QUESTION_MAP: [RegExp, keyof Omit<WhoopHabit, 'id' | 'participant_id' | 'date' | 'notes'>][] = [
   [/alcohol/i, 'alcohol'],
   [/caffeine/i, 'caffeine'],
   [/late meal|ate late/i, 'ate_late'],
@@ -220,7 +220,7 @@ const QUESTION_MAP: [RegExp, keyof Omit<WhoopHabit, 'id' | 'employee_id' | 'date
   [/massage/i, 'massage'],
 ]
 
-type HabitFields = Omit<WhoopHabit, 'employee_id' | 'date' | 'notes'>
+type HabitFields = Omit<WhoopHabit, 'participant_id' | 'date' | 'notes'>
 
 export interface MappedHabits {
   habits: WhoopHabit[]
@@ -234,7 +234,7 @@ export function mapManualEntries(wb: ParsedWorkbook): MappedHabits {
   const rows = wb[TAB_MANUAL]
   const errors: ImportRowError[] = []
   const cycleDateLookup = new Map<string, string>()
-  // keyed by `${employeeId}|${date}`
+  // keyed by `${participantId}|${date}`
   const habitMap = new Map<string, HabitFields>()
 
   for (const tab of [TAB_STRESS, TAB_SLEEP] as const) {
@@ -250,7 +250,7 @@ export function mapManualEntries(wb: ParsedWorkbook): MappedHabits {
   for (let i = 0; i < rows.length; i++) {
     const v = validateManualRow(rows[i], i + 2, errors, cycleDateLookup)
     if (!v) continue
-    const key = `${v.employeeId}|${v.date}`
+    const key = `${v.participantId}|${v.date}`
     if (!habitMap.has(key)) {
       habitMap.set(key, {
         alcohol: null, caffeine: null, ate_late: null, hydrated: null,
@@ -272,8 +272,8 @@ export function mapManualEntries(wb: ParsedWorkbook): MappedHabits {
   }
 
   const habits: WhoopHabit[] = Array.from(habitMap.entries()).map(([key, fields]) => {
-    const [employeeId, date] = key.split('|')
-    return { employee_id: employeeId, date, ...fields, notes: null }
+    const [participantId, date] = key.split('|')
+    return { participant_id: participantId, date, ...fields, notes: null }
   })
 
   return { habits, errors, processed: rows.length }

@@ -4,7 +4,7 @@ export const TAB_EXERCISE = 'Exercise'
 export const TAB_STRESS = 'Stress'
 export const TAB_SLEEP = 'Sleep'
 export const TAB_MANUAL = 'Manual Entries'
-export const TAB_CONDENSED = 'Condensed Employee Metrics'
+export const TAB_CONDENSED = 'Condensed Participant Metrics'
 
 export const REQUIRED_TABS = [TAB_EXERCISE] as const
 export const AT_LEAST_ONE_TABS = [TAB_STRESS, TAB_SLEEP] as const

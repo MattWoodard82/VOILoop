@@ -148,8 +148,8 @@ jobs:
               -v ON_ERROR_STOP=1 <<'SQL'
           do $$
           begin
-            if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'employees') then
-              raise exception 'employees table missing after migration';
+            if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'participants') then
+              raise exception 'participants table missing after migration';
             end if;
 
             if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'user_roles') then

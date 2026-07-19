@@ -6,7 +6,7 @@ type TableRow = Record<string, unknown>
 class FakeSupabase {
   tables: Record<string, TableRow[]> = {
     upload_batches: [],
-    employees: [],
+    participants: [],
     workouts: [],
     daily_wellness: [],
     habits: [],
@@ -235,7 +235,7 @@ describe('persistWhoopImport', () => {
     const supabase = new FakeSupabase()
 
     const workout: WhoopWorkout = {
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       date: '2026-07-01',
       start_time: '2026-07-01T06:00:00.000Z',
       end_time: '2026-07-01T06:45:00.000Z',
@@ -253,7 +253,7 @@ describe('persistWhoopImport', () => {
     }
 
     const wellness: WhoopWellness = {
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       date: '2026-07-01',
       recovery_score: 78,
       hrv_ms: 52,
@@ -275,7 +275,7 @@ describe('persistWhoopImport', () => {
     }
 
     const habits: WhoopHabit = {
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       date: '2026-07-01',
       alcohol: false,
       caffeine: true,
@@ -296,8 +296,8 @@ describe('persistWhoopImport', () => {
       notes: 'Initial import',
     }
 
-    const employeeProfile = {
-      employeeId: 'EMP900',
+    const participantProfile = {
+      participantId: 'EMP900',
       sourceIdentifier: 'EMP900',
       fullName: 'Pilot Tester',
       firstName: 'Pilot',
@@ -314,7 +314,7 @@ describe('persistWhoopImport', () => {
       exerciseResult: { workouts: [workout], errors: [], processed: 1 },
       wellnessResult: { wellness: [wellness], errors: [], processed: 1 },
       habitsResult: { habits: [habits], errors: [], processed: 1 },
-      employeeProfiles: [employeeProfile],
+      participantProfiles: [participantProfile],
     })
 
     const secondResult = await persistWhoopImport({
@@ -326,7 +326,7 @@ describe('persistWhoopImport', () => {
       exerciseResult: { workouts: [{ ...workout, calories: 450 }], errors: [], processed: 1 },
       wellnessResult: { wellness: [{ ...wellness, recovery_score: 80 }], errors: [], processed: 1 },
       habitsResult: { habits: [{ ...habits, notes: 'Re-imported' }], errors: [], processed: 1 },
-      employeeProfiles: [employeeProfile],
+      participantProfiles: [participantProfile],
     })
 
     expect(firstResult.totals).toEqual({
@@ -345,27 +345,27 @@ describe('persistWhoopImport', () => {
       failed: 0,
     })
 
-    expect(supabase.tables.employees).toHaveLength(1)
+    expect(supabase.tables.participants).toHaveLength(1)
     expect(supabase.tables.workouts).toHaveLength(1)
     expect(supabase.tables.daily_wellness).toHaveLength(1)
     expect(supabase.tables.habits).toHaveLength(1)
 
     expect(supabase.tables.workouts[0]).toMatchObject({
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       start_time: '2026-07-01T06:00:00.000Z',
       calories: 450,
       source_batch_id: secondResult.batchId,
     })
 
     expect(supabase.tables.daily_wellness[0]).toMatchObject({
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       date: '2026-07-01',
       recovery_score: 80,
       source_batch_id: secondResult.batchId,
     })
 
     expect(supabase.tables.habits[0]).toMatchObject({
-      employee_id: 'EMP900',
+      participant_id: 'EMP900',
       date: '2026-07-01',
       notes: 'Re-imported',
       source_batch_id: secondResult.batchId,

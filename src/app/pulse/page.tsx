@@ -6,12 +6,12 @@ import { initials, safeAvg } from '@/lib/utils'
 export const dynamic = 'force-dynamic'
 
 export default async function PulsePage() {
-  const [{ employees }, pulse] = await Promise.all([
+  const [{ participants }, pulse] = await Promise.all([
     getTeamDashboard(),
     getLatestPulse(),
   ])
 
-  const pulseMap = Object.fromEntries(pulse.map((p) => [p.employee_id, p]))
+  const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
   const responded = pulse.length
   const avgWellbeing = safeAvg(pulse.map((p) => p.wellbeing_score))
   const avgBurnout = safeAvg(pulse.map((p) => p.burnout_score))
@@ -29,15 +29,15 @@ export default async function PulsePage() {
   return (
     <DashboardShell title="Pulse Survey Dashboard">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Response rate" value={`${Math.round((responded / employees.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${employees.length} responded`} deltaDir="up" />
+        <KpiCard label="Response rate" value={`${Math.round((responded / participants.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${participants.length} responded`} deltaDir="up" />
         <KpiCard label="Avg wellbeing" value={`${avgWellbeing}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
         <KpiCard label="Burnout index" value={`${avgBurnout}/10`} color="#ff6b6b" delta="Lower is better" deltaDir="neutral" />
         <KpiCard label="Psych safety" value={`${avgPsychSafety}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card title="Wellbeing scores by employee" badge={<Badge variant="wolf">{responded} responses</Badge>}>
-          {[...employees]
+        <Card title="Wellbeing scores by participant" badge={<Badge variant="wolf">{responded} responses</Badge>}>
+          {[...participants]
             .filter((e) => pulseMap[e.id])
             .sort((a, b) => (pulseMap[b.id]?.wellbeing_score ?? 0) - (pulseMap[a.id]?.wellbeing_score ?? 0))
             .map((e, idx) => {

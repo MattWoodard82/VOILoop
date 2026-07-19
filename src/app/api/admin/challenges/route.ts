@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     window_end_at: String(body.window_end_at ?? ''),
     eligibility_mode: String(body.eligibility_mode ?? ''),
     eligibility_definition: normalizeEligibilityDefinition(
-      String(body.eligibility_mode ?? '') as 'all_employees' | 'filtered',
+      String(body.eligibility_mode ?? '') as 'all_participants' | 'filtered',
       body.eligibility_definition,
     ),
   }

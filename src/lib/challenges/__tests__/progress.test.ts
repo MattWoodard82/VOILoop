@@ -64,8 +64,8 @@ describe('recomputeActiveChallengeProgress', () => {
               eq: () => ({
                 eq: async () => ({
                   data: [
-                    { id: 'p1', employee_id: 'EMP001', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
-                    { id: 'p2', employee_id: 'EMP002', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
+                    { id: 'p1', participant_id: 'EMP001', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
+                    { id: 'p2', participant_id: 'EMP002', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
                   ],
                   error: null,
                 }),
@@ -84,9 +84,9 @@ describe('recomputeActiveChallengeProgress', () => {
               gte: () => ({
                 lte: async () => ({
                   data: [
-                    { employee_id: 'EMP001', start_time: '2026-07-11T08:00:00.000Z' },
-                    { employee_id: 'EMP001', start_time: '2026-07-12T08:00:00.000Z' },
-                    { employee_id: 'EMP002', start_time: '2026-07-11T08:00:00.000Z' },
+                    { participant_id: 'EMP001', start_time: '2026-07-11T08:00:00.000Z' },
+                    { participant_id: 'EMP001', start_time: '2026-07-12T08:00:00.000Z' },
+                    { participant_id: 'EMP002', start_time: '2026-07-11T08:00:00.000Z' },
                   ],
                   error: null,
                 }),
@@ -124,7 +124,7 @@ describe('recomputeActiveChallengeProgress', () => {
       progress_value: 2,
       completed: true,
       completion_source: 'event',
-      completion_idempotency_key: 'challenge:challenge-1:employee:EMP001:completion',
+      completion_idempotency_key: 'challenge:challenge-1:participant:EMP001:completion',
     })
     expect(participantUpdates[0][1]).toMatchObject({
       progress_value: 1,

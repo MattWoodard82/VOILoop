@@ -203,7 +203,7 @@ export function nonNegative(val: number | null): number | null {
 // ─── Row-level validation (Exercise) ──────────────────────────────────────────
 
 export interface ValidatedExerciseRow {
-  employeeId: string
+  participantId: string
   date: string
   startTimeIso: string
   endTimeIso: string | null
@@ -226,9 +226,9 @@ export function validateExerciseRow(
   rowIndex: number,
   errors: ImportRowError[],
 ): ValidatedExerciseRow | null {
-  const employeeId = String(row['Employee Identifier'] ?? '').trim()
-  if (!employeeId) {
-    errors.push({ tab: TAB_EXERCISE, row: rowIndex, field: 'Employee Identifier', message: 'Missing employee identifier' })
+  const participantId = String(row['Participant Identifier'] ?? '').trim()
+  if (!participantId) {
+    errors.push({ tab: TAB_EXERCISE, row: rowIndex, field: 'Participant Identifier', message: 'Missing participant identifier' })
     return null
   }
 
@@ -243,7 +243,7 @@ export function validateExerciseRow(
   const endTimeIso = toISOString(row['Workout end time'])
 
   return {
-    employeeId,
+    participantId,
     date,
     startTimeIso,
     endTimeIso,
@@ -265,7 +265,7 @@ export function validateExerciseRow(
 // ─── Row-level validation (Stress / Sleep) ────────────────────────────────────
 
 export interface ValidatedWellnessRow {
-  employeeId: string
+  participantId: string
   date: string
   recoveryScore: number | null
   hrvMs: number | null
@@ -293,9 +293,9 @@ export function validateWellnessRow(
   errors: ImportRowError[],
   fallbackDate?: string | null,
 ): ValidatedWellnessRow | null {
-  const employeeId = String(row['Employee Identifier'] ?? '').trim()
-  if (!employeeId) {
-    errors.push({ tab: tabName, row: rowIndex, field: 'Employee Identifier', message: 'Missing employee identifier' })
+  const participantId = String(row['Participant Identifier'] ?? '').trim()
+  if (!participantId) {
+    errors.push({ tab: tabName, row: rowIndex, field: 'Participant Identifier', message: 'Missing participant identifier' })
     return null
   }
 
@@ -312,7 +312,7 @@ export function validateWellnessRow(
   }
 
   return {
-    employeeId,
+    participantId,
     date,
     recoveryScore: clampPct(toInt(row['Recovery score %'])),
     hrvMs: nonNegative(toInt(row['Heart rate variability (ms)'])),
@@ -337,7 +337,7 @@ export function validateWellnessRow(
 // ─── Row-level validation (Manual Entries) ────────────────────────────────────
 
 export interface ValidatedManualRow {
-  employeeId: string
+  participantId: string
   date: string
   questionText: string
   answeredYes: boolean
@@ -349,9 +349,9 @@ export function validateManualRow(
   errors: ImportRowError[],
   cycleDateLookup?: Map<string, string>,
 ): ValidatedManualRow | null {
-  const employeeId = String(row['Employee Identifier'] ?? '').trim()
-  if (!employeeId) {
-    errors.push({ tab: TAB_MANUAL, row: rowIndex, field: 'Employee Identifier', message: 'Missing employee identifier' })
+  const participantId = String(row['Participant Identifier'] ?? '').trim()
+  if (!participantId) {
+    errors.push({ tab: TAB_MANUAL, row: rowIndex, field: 'Participant Identifier', message: 'Missing participant identifier' })
     return null
   }
 
@@ -375,5 +375,5 @@ export function validateManualRow(
     deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
   const answeredYes = toBool(row['Answered yes']) ?? false
 
-  return { employeeId, date, questionText, answeredYes }
+  return { participantId, date, questionText, answeredYes }
 }

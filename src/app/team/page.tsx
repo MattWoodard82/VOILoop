@@ -5,10 +5,10 @@ import { TeamRosterClient } from './TeamRosterClient'
 export const dynamic = 'force-dynamic'
 
 export default async function TeamPage() {
-  const { employees } = await getTeamDashboard()
+  const { participants } = await getTeamDashboard()
   return (
     <DashboardShell title="Team Roster">
-      <TeamRosterClient employees={employees} />
+      <TeamRosterClient participants={participants} />
     </DashboardShell>
   )
 }

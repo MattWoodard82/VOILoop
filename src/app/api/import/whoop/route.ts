@@ -6,7 +6,7 @@ import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
 import {
   prepareWhoopWorkbookForImport,
-  type WhoopEmployeeProfile,
+  type WhoopParticipantProfile,
 } from '@/lib/whoop/workbook-context'
 import { createHash } from 'crypto'
 import { recomputeActiveChallengeProgress } from '@/lib/challenges/progress'
@@ -28,7 +28,7 @@ function isMissingUserAccessTable(error: { code?: string | null; message?: strin
   return error.code === 'PGRST205' || message.includes('user_access')
 }
 
-interface EmployeeParticipantRow {
+interface ParticipantParticipantRow {
   id: string
   first_name: string
   last_name: string
@@ -39,9 +39,9 @@ interface EmployeeParticipantRow {
 async function getSelectedParticipantProfile(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   participantId: string,
-): Promise<WhoopEmployeeProfile | null> {
+): Promise<WhoopParticipantProfile | null> {
   const { data, error } = await supabase
-    .from('employees')
+    .from('participants')
     .select('id, first_name, last_name, department, device_id, status')
     .eq('id', participantId)
     .eq('status', 'Active')
@@ -53,14 +53,14 @@ async function getSelectedParticipantProfile(
 
   if (!data) return null
 
-  const employee = data as EmployeeParticipantRow
+  const participant = data as ParticipantParticipantRow
   return {
-    employeeId: employee.id,
-    sourceIdentifier: employee.device_id ?? employee.id,
-    fullName: `${employee.first_name} ${employee.last_name}`.trim(),
-    firstName: employee.first_name,
-    lastName: employee.last_name,
-    department: employee.department,
+    participantId: participant.id,
+    sourceIdentifier: participant.device_id ?? participant.id,
+    fullName: `${participant.first_name} ${participant.last_name}`.trim(),
+    firstName: participant.first_name,
+    lastName: participant.last_name,
+    department: participant.department,
   }
 }
 
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Participant is required' }, { status: 400 })
   }
 
-  let selectedParticipantProfile: WhoopEmployeeProfile | null = null
+  let selectedParticipantProfile: WhoopParticipantProfile | null = null
   try {
     selectedParticipantProfile = await getSelectedParticipantProfile(supabase, participantId)
   } catch (error) {
@@ -171,14 +171,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   let preparedWorkbook = wb
-  let employeeProfiles: WhoopEmployeeProfile[] = []
+  let participantProfiles: WhoopParticipantProfile[] = []
   try {
     const prepared = await prepareWhoopWorkbookForImport(supabase, wb, {
       authUserId: session.user.id,
-      selectedEmployeeProfile: selectedParticipantProfile,
+      selectedParticipantProfile: selectedParticipantProfile,
     })
     preparedWorkbook = prepared.workbook
-    employeeProfiles = prepared.employeeProfiles
+    participantProfiles = prepared.participantProfiles
   } catch (error) {
     return NextResponse.json({ error: toErrorMessage(error) }, { status: 422 })
   }
@@ -200,7 +200,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       exerciseResult,
       wellnessResult,
       habitsResult,
-      employeeProfiles,
+      participantProfiles,
     })
 
     if (isPilotChallengesBasicEnabled()) {

@@ -107,7 +107,7 @@ export async function middleware(request: NextRequest) {
       const { role, mustChangePassword } = await getAccessForUser()
       const redirectTo = mustChangePassword
         ? PASSWORD_CHANGE_ROUTE
-        : role === 'employee' || !role
+        : role === 'participant' || !role
           ? '/my'
           : '/wellness-director'
       return NextResponse.redirect(new URL(redirectTo, request.url))
@@ -128,7 +128,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!mustChangePassword && isRouteMatch(pathname, PASSWORD_CHANGE_ROUTE)) {
-    return NextResponse.redirect(new URL(role === 'employee' ? '/my' : '/wellness-director', request.url))
+    return NextResponse.redirect(new URL(role === 'participant' ? '/my' : '/wellness-director', request.url))
   }
 
   // Check wellness-director-accessible routes before admin-only routes so explicitly
@@ -143,12 +143,12 @@ export async function middleware(request: NextRequest) {
 
   if (isAdminOnly) {
     if (role !== 'admin') {
-      return NextResponse.redirect(new URL(role === 'employee' || !role ? '/my' : '/wellness-director', request.url))
+      return NextResponse.redirect(new URL(role === 'participant' || !role ? '/my' : '/wellness-director', request.url))
     }
   }
 
   if (isWellnessDirectorRoute) {
-    if (!role || role === 'employee') {
+    if (!role || role === 'participant') {
       return NextResponse.redirect(new URL('/my', request.url))
     }
   }

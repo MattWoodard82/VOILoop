@@ -93,20 +93,20 @@ export async function POST(request: Request, { params }: { params: { id: string 
     return NextResponse.json({ error: 'VERSION_CONFLICT', code: 'VERSION_CONFLICT' }, { status: 409 })
   }
 
-  const { data: employees, error: employeesError } = await supabase
-    .from('employees')
+  const { data: participants, error: participantsError } = await supabase
+    .from('participants')
     .select('id, department, location_id, employment_type, enrolled_date')
     .eq('status', 'Active')
 
-  if (employeesError) return NextResponse.json({ error: employeesError.message }, { status: 500 })
+  if (participantsError) return NextResponse.json({ error: participantsError.message }, { status: 500 })
 
-  const participantRows = (employees ?? []).map((employee) => {
+  const participantRows = (participants ?? []).map((participant) => {
     const eligibility = evaluateEligibility(
       {
-        department: employee.department,
-        location_id: employee.location_id,
-        employment_type: employee.employment_type,
-        enrolled_date: employee.enrolled_date,
+        department: participant.department,
+        location_id: participant.location_id,
+        employment_type: participant.employment_type,
+        enrolled_date: participant.enrolled_date,
       },
       activated.eligibility_mode,
       activated.eligibility_definition,
@@ -115,7 +115,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
 
     return {
       challenge_id: activated.id,
-      employee_id: employee.id,
+      participant_id: participant.id,
       is_eligible: eligibility.isEligible,
       eligibility_reason: eligibility.reason,
       progress_value: 0,
@@ -128,7 +128,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
   if (participantRows.length) {
     const { error: participantError } = await supabase
       .from('challenge_participants')
-      .upsert(participantRows, { onConflict: 'challenge_id,employee_id' })
+      .upsert(participantRows, { onConflict: 'challenge_id,participant_id' })
 
     if (participantError) return NextResponse.json({ error: participantError.message }, { status: 500 })
   }

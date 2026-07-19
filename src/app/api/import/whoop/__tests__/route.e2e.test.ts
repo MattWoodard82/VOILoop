@@ -33,7 +33,7 @@ jest.mock('@/lib/whoop/persistence', () => ({
 jest.mock('@/lib/whoop/workbook-context', () => ({
   prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
     workbook,
-    employeeProfiles: [],
+    participantProfiles: [],
   })),
 }))
 
@@ -68,7 +68,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
     jest.clearAllMocks()
     mockPrepareWhoopWorkbookForImport.mockImplementation(async (_supabase, workbook) => ({
       workbook,
-      employeeProfiles: [],
+      participantProfiles: [],
     }))
   })
 
@@ -87,7 +87,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       errors: [],
       workouts: [
         {
-          employee_id: 'E1',
+          participant_id: 'E1',
           date: '2024-01-15',
           start_time: '2024-01-15T08:00:00.000Z',
           end_time: '2024-01-15T09:00:00.000Z',
@@ -104,7 +104,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
           zone5_pct: 10,
         },
         {
-          employee_id: 'E1',
+          participant_id: 'E1',
           date: '2024-01-15',
           start_time: '2024-01-15T17:00:00.000Z',
           end_time: '2024-01-15T17:45:00.000Z',
@@ -128,7 +128,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       errors: [],
       wellness: [
         {
-          employee_id: 'E1',
+          participant_id: 'E1',
           date: '2024-01-15',
           recovery_score: 70,
           hrv_ms: 80,
@@ -156,7 +156,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       errors: [],
       habits: [
         {
-          employee_id: 'E1',
+          participant_id: 'E1',
           date: '2024-01-15',
           alcohol: false,
           caffeine: true,
@@ -211,7 +211,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
             })),
           }
         }
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
@@ -262,7 +262,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       expect.any(Object),
       expect.objectContaining({
         authUserId: 'user-1',
-        selectedEmployeeProfile: expect.objectContaining({ employeeId: 'EMP001' }),
+        selectedParticipantProfile: expect.objectContaining({ participantId: 'EMP001' }),
       }),
     )
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
@@ -274,7 +274,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
       exerciseResult: expect.objectContaining({ processed: 2 }),
       wellnessResult: expect.objectContaining({ processed: 1 }),
       habitsResult: expect.objectContaining({ processed: 1 }),
-      employeeProfiles: [],
+      participantProfiles: [],
     }))
   })
 })

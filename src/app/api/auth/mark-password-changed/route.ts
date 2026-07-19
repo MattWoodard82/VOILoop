@@ -10,7 +10,7 @@ export async function POST() {
   }
 
   const access = await getUserAccess(session.user.id)
-  const role = access.role ?? 'employee'
+  const role = access.role ?? 'participant'
   const supabase = createServerSupabaseClient()
   const { error } = await supabase
     .from('user_access')
@@ -26,6 +26,6 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    redirectTo: role === 'employee' ? '/my' : '/wellness-director',
+    redirectTo: role === 'participant' ? '/my' : '/wellness-director',
   })
 }

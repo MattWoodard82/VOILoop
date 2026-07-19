@@ -56,7 +56,7 @@ This inserts:
 - Travis Brandenburgh (COO) — exact WHOOP data from June 9 2026
 - 9 team members with generated wellness data
 - 4 interventions (2 pending, 1 in progress, 1 monitoring)
-- Pulse survey responses for 9 employees
+- Pulse survey responses for 9 participants
 
 ### 6. Run the dev server
 ```bash
@@ -154,7 +154,7 @@ To protect live demo production while PRs are in flight:
 src/
 ├── app/
 │   ├── wellness-director/ # Wellness Director dashboard (KPIs, recovery, burnout)
-│   ├── team/             # Team roster with click-through employee detail
+│   ├── team/             # Team roster with click-through participant detail
 │   ├── pulse/            # Pulse survey scores and question breakdown
 │   ├── interventions/    # Intervention log and recommendations
 │   └── outcomes/         # Before/after validation + VOILoop cycle
