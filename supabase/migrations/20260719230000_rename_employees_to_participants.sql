@@ -8,6 +8,9 @@ begin
   if exists (
     select 1 from information_schema.tables
     where table_schema = 'public' and table_name = 'employees'
+  ) and not exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'participants'
   ) then
     alter table employees rename to participants;
   end if;
@@ -20,6 +23,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'daily_wellness' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'daily_wellness' and column_name = 'participant_id'
   ) then
     alter table daily_wellness rename column employee_id to participant_id;
   end if;
@@ -30,6 +36,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'workouts' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'workouts' and column_name = 'participant_id'
   ) then
     alter table workouts rename column employee_id to participant_id;
   end if;
@@ -40,6 +49,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'habits' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'habits' and column_name = 'participant_id'
   ) then
     alter table habits rename column employee_id to participant_id;
   end if;
@@ -50,6 +62,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'pulse_surveys' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'pulse_surveys' and column_name = 'participant_id'
   ) then
     alter table pulse_surveys rename column employee_id to participant_id;
   end if;
@@ -60,6 +75,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'interventions' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'interventions' and column_name = 'participant_id'
   ) then
     alter table interventions rename column employee_id to participant_id;
   end if;
@@ -70,6 +88,9 @@ begin
   if exists (
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'challenge_participants' and column_name = 'employee_id'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'challenge_participants' and column_name = 'participant_id'
   ) then
     alter table challenge_participants rename column employee_id to participant_id;
   end if;
@@ -119,11 +140,11 @@ begin
     alter type challenge_eligibility_mode rename value 'all_employees' to 'all_participants';
   end if;
 exception
-  when others then null; -- enum rename not supported; skip
+  when feature_not_supported then null; -- older PG that doesn't support enum rename; skip
 end $$;
 
 -- Update any stored 'all_employees' values in challenges table to 'all_participants'
--- (only needed if the enum rename above was skipped)
+-- (only needed if the enum rename above was skipped on older PG)
 do $$
 begin
   if exists (
@@ -136,8 +157,6 @@ begin
     set eligibility_mode = 'all_participants'::challenge_eligibility_mode
     where eligibility_mode::text = 'all_employees';
   end if;
-exception
-  when others then null;
 end $$;
 
 -- ─── 5. Add missing columns if absent (participants table) ───────────────────
