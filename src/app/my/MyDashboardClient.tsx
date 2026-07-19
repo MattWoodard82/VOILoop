@@ -1,7 +1,6 @@
 'use client'
 
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
-import { WhoopImportClient } from '@/app/admin/import/WhoopImportClient'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Employee, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
@@ -395,11 +394,10 @@ export function MyDashboardClient({ employee, wellness, habits, workout, pulse, 
         </Card>
       </div>
 
-      <Card title="Upload WHOOP data">
+      <Card title="WHOOP upload management">
         <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 16, lineHeight: 1.6 }}>
-          Upload your latest WHOOP export to refresh the recovery, sleep, strain, workout, and habit sections above.
+          WHOOP uploads are handled by your administrator during this pilot phase.
         </div>
-        <WhoopImportClient />
       </Card>
     </div>
   )
