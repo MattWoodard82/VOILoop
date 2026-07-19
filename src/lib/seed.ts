@@ -92,10 +92,10 @@ async function seed() {
       consent: true, enrolled_date: '2026-04-01', status: 'Active', is_exact_data: false },
   ]
 
-  const { error: empErr } = await supabase
+  const { error: participantErr } = await supabase
     .from('participants')
     .upsert(participants, { onConflict: 'id' })
-  if (empErr) { console.error('Participants:', empErr); process.exit(1) }
+  if (participantErr) { console.error('Participants:', participantErr); process.exit(1) }
   console.log('✅ Participants seeded')
 
   // ── Daily Wellness ─────────────────────────────────────────────────────────

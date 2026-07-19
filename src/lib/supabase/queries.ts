@@ -268,7 +268,9 @@ export async function getTeamDashboard(): Promise<{
     avg_sleep_perf: avg(sleeps),
     high_risk_count: enriched.filter((e) => e.risk_level === 'High').length,
     total_participants: participants.length,
-    participation_rate: Math.round((pulseResponded / participants.length) * 100),
+    participation_rate: participants.length > 0
+      ? Math.round((pulseResponded / participants.length) * 100)
+      : 0,
   }
 
   return { participants: enriched, stats, interventions }

@@ -341,14 +341,14 @@ end $$;
 
 -- ─── Indexes ──────────────────────────────────────────────────────────────────
 
-create index if not exists idx_wellness_emp_date    on daily_wellness(participant_id, date desc);
+create index if not exists idx_wellness_participant_date on daily_wellness(participant_id, date desc);
 create index if not exists idx_wellness_batch_id    on daily_wellness(source_batch_id);
-create index if not exists idx_workouts_emp_date    on workouts(participant_id, date desc);
+create index if not exists idx_workouts_participant_date on workouts(participant_id, date desc);
 create index if not exists idx_workouts_batch_id    on workouts(source_batch_id);
-create index if not exists idx_habits_emp_date      on habits(participant_id, date desc);
+create index if not exists idx_habits_participant_date on habits(participant_id, date desc);
 create index if not exists idx_habits_batch_id      on habits(source_batch_id);
-create index if not exists idx_pulse_emp_date       on pulse_surveys(participant_id, date desc);
-create index if not exists idx_interventions_emp    on interventions(participant_id);
+create index if not exists idx_pulse_participant_date on pulse_surveys(participant_id, date desc);
+create index if not exists idx_interventions_participant on interventions(participant_id);
 create index if not exists idx_interventions_status on interventions(outcome);
 create index if not exists idx_upload_batches_status_started_at on upload_batches(status, started_at desc);
 create index if not exists idx_upload_batches_file_hash on upload_batches(file_hash_sha256);

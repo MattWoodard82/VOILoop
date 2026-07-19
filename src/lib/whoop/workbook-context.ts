@@ -228,7 +228,7 @@ export async function prepareWhoopWorkbookForImport(
   const profile = authUserProfile ?? workbookProfile ?? null
 
   if (authUserId && !authUserProfile) {
-    throw new Error('Your account is not linked to an participant record')
+    throw new Error('Your account is not linked to a participant record')
   }
 
   if (!profile) {

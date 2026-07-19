@@ -16,7 +16,7 @@ const ACCOUNT_TYPE_COPY: Record<AccountType, {
   participant: {
     title: 'Participant accounts',
     successLabel: 'participant',
-    description: 'Upload a CSV of user emails. Each account is created as an participant, receives a generated password, and is required to change that password at first login.',
+    description: 'Upload a CSV of user emails. Each account is created as a participant, receives a generated password, and is required to change that password at first login.',
     downloadName: 'participant-passwords.csv',
     buttonLabel: 'Generate Participant Password CSV',
   },
