@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "db:seed": "npx ts-node --project tsconfig.json src/lib/seed.ts",
-    "admin:bootstrap": "npx ts-node --project tsconfig.json src/lib/bootstrap-admin.ts"
+    "admin:bootstrap": "npx ts-node --project tsconfig.json src/lib/bootstrap-admin.ts",
+    "admin:delete-accounts": "npx ts-node --project tsconfig.json src/lib/delete-accounts-by-email.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.4.0",

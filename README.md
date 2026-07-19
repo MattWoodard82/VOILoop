@@ -74,6 +74,18 @@ Default local credentials come from `.env.local`:
 
 Login is email/password only. Users created through account provisioning are forced to change password on first login.
 
+### 8. Delete test accounts by email
+```bash
+npm run admin:delete-accounts
+```
+Defaults to deleting:
+`test1@user.com`, `test2@user.com`, `test3@user.com`, `test4@user.com`, `test5@user.com`.
+
+To delete a custom set instead, pass emails as arguments:
+```bash
+npm run admin:delete-accounts -- user1@example.com user2@example.com
+```
+
 ---
 
 ## Deploy to Vercel
