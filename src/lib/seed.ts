@@ -9,10 +9,48 @@ import { createClient } from '@supabase/supabase-js'
 
 dotenv.config({ path: '.env.local' })
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY in environment.')
+}
+
+function isLocalSupabaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+  } catch {
+    return false
+  }
+}
+
+function assertSeedingAllowed(url: string) {
+  const voiloopEnv = (process.env.VOILOOP_ENV ?? '').toLowerCase()
+  const allowNonLocalSeed = process.env.VOILOOP_ALLOW_NON_LOCAL_SEED === 'true'
+
+  if (voiloopEnv === 'pilot' || voiloopEnv === 'production') {
+    throw new Error(`Refusing to seed when VOILOOP_ENV=${voiloopEnv}. Seeding is local-only by default.`)
+  }
+
+  if (isLocalSupabaseUrl(url)) {
+    return
+  }
+
+  if (allowNonLocalSeed) {
+    console.warn('⚠ VOILOOP_ALLOW_NON_LOCAL_SEED=true set. Proceeding to seed non-local Supabase environment.')
+    return
+  }
+
+  throw new Error(
+    `Refusing to seed non-local Supabase URL (${url}). ` +
+    'Set VOILOOP_ALLOW_NON_LOCAL_SEED=true only when you explicitly intend to seed a remote environment.'
+  )
+}
+
+assertSeedingAllowed(supabaseUrl)
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 const DATE = '2026-06-09'
 
