@@ -70,7 +70,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   if (body.eligibility_definition !== undefined) {
-    const effectiveMode = (updatePayload.eligibility_mode as 'all_employees' | 'filtered' | undefined)
+    const effectiveMode = (updatePayload.eligibility_mode as 'all_participants' | 'filtered' | undefined)
       ?? challenge.eligibility_mode
     updatePayload.eligibility_definition = normalizeEligibilityDefinition(effectiveMode, body.eligibility_definition)
   }

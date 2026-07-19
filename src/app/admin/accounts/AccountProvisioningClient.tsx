@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { Upload, Download } from 'lucide-react'
 import { parseFrontendError } from '@/lib/frontend-error'
 
-type AccountType = 'employee' | 'wellness_director'
+type AccountType = 'participant' | 'wellness_director'
 
 const ACCOUNT_TYPE_COPY: Record<AccountType, {
   title: string
@@ -13,12 +13,12 @@ const ACCOUNT_TYPE_COPY: Record<AccountType, {
   downloadName: string
   buttonLabel: string
 }> = {
-  employee: {
-    title: 'Employee accounts',
-    successLabel: 'employee',
-    description: 'Upload a CSV of user emails. Each account is created as an employee, receives a generated password, and is required to change that password at first login.',
-    downloadName: 'employee-passwords.csv',
-    buttonLabel: 'Generate Employee Password CSV',
+  participant: {
+    title: 'Participant accounts',
+    successLabel: 'participant',
+    description: 'Upload a CSV of user emails. Each account is created as a participant, receives a generated password, and is required to change that password at first login.',
+    downloadName: 'participant-passwords.csv',
+    buttonLabel: 'Generate Participant Password CSV',
   },
   wellness_director: {
     title: 'Wellness Director accounts',
@@ -36,7 +36,7 @@ function getDownloadName(contentDisposition: string | null, fallback: string): s
 
 export function AccountProvisioningClient() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [accountType, setAccountType] = useState<AccountType>('employee')
+  const [accountType, setAccountType] = useState<AccountType>('participant')
   const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -114,7 +114,7 @@ export function AccountProvisioningClient() {
             Account type
           </div>
           <div role="radiogroup" aria-label="Account type" style={{ display: 'flex', gap: 10 }}>
-            {(['employee', 'wellness_director'] as const).map((option) => {
+            {(['participant', 'wellness_director'] as const).map((option) => {
               const selected = accountType === option
               return (
                 <button
@@ -139,9 +139,9 @@ export function AccountProvisioningClient() {
                     {ACCOUNT_TYPE_COPY[option].title}
                   </div>
                   <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.5 }}>
-                    {option === 'employee'
-                      ? 'Creates employee accounts and employee records.'
-                      : 'Creates dashboard-viewer accounts without employee records.'}
+                    {option === 'participant'
+                      ? 'Creates participant accounts and participant records.'
+                      : 'Creates dashboard-viewer accounts without participant records.'}
                   </div>
                 </button>
               )

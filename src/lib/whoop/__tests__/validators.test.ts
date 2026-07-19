@@ -79,8 +79,8 @@ describe('nonNegative', () => {
 
 describe('validateTabStructure', () => {
   const baseWb: ParsedWorkbook = {
-    Exercise: [{ 'Employee Identifier': 'E1', 'Workout start time': '2024-01-15 08:00:00', 'Activity name': 'Run' }],
-    Stress: [{ 'Employee Identifier': 'E1', 'Cycle start time': '2024-01-15 00:00:00' }],
+    Exercise: [{ 'Participant Identifier': 'E1', 'Workout start time': '2024-01-15 08:00:00', 'Activity name': 'Run' }],
+    Stress: [{ 'Participant Identifier': 'E1', 'Cycle start time': '2024-01-15 00:00:00' }],
   }
 
   test('valid workbook passes', () => {
@@ -106,7 +106,7 @@ describe('validateTabStructure', () => {
 
   test('missing required column reported', () => {
     const wb: ParsedWorkbook = {
-      Exercise: [{ 'Employee Identifier': 'E1', 'Activity name': 'Run' }], // missing Workout start time
+      Exercise: [{ 'Participant Identifier': 'E1', 'Activity name': 'Run' }], // missing Workout start time
       Stress: baseWb.Stress,
     }
     const r = validateTabStructure(wb)
@@ -119,7 +119,7 @@ describe('validateTabStructure', () => {
 
 describe('validateExerciseRow', () => {
   const validRow = {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Workout start time': '2024-01-15 08:00:00',
     'Workout end time': '2024-01-15 09:00:00',
     'Cycle timezone': 'UTC-06:00',
@@ -141,16 +141,16 @@ describe('validateExerciseRow', () => {
     const result = validateExerciseRow(validRow, 2, errors)
     expect(result).not.toBeNull()
     expect(errors).toHaveLength(0)
-    expect(result!.employeeId).toBe('E1')
+    expect(result!.participantId).toBe('E1')
     expect(result!.activity).toBe('Running')
   })
 
-  test('fails on missing employee id', () => {
+  test('fails on missing participant id', () => {
     const errors: ImportRowError[] = []
-    const row = { ...validRow, 'Employee Identifier': '' }
+    const row = { ...validRow, 'Participant Identifier': '' }
     const result = validateExerciseRow(row, 2, errors)
     expect(result).toBeNull()
-    expect(errors[0].field).toBe('Employee Identifier')
+    expect(errors[0].field).toBe('Participant Identifier')
   })
 
   test('fails on ## timestamp', () => {
@@ -184,7 +184,7 @@ describe('validateExerciseRow', () => {
 
 describe('validateWellnessRow', () => {
   const validRow = {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 00:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Recovery score %': 75,
@@ -226,7 +226,7 @@ describe('validateManualRow', () => {
   test('parses answered yes row', () => {
     const errors: ImportRowError[] = []
     const row = {
-      'Employee Identifier': 'E1',
+      'Participant Identifier': 'E1',
       'Cycle start time': '2024-01-15 00:00:00',
       'Question text': 'Did you drink alcohol?',
       'Answered yes': 'yes',

@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     .from('challenge_participants')
     .select('*')
     .eq('challenge_id', params.id)
-    .order('employee_id', { ascending: true })
+    .order('participant_id', { ascending: true })
     .range(offset, offset + limit - 1)
 
   if (status === 'completed') query = query.eq('completed', true)

@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
-import { ensureEmployeeForAuthUser } from '@/lib/employee-linking'
+import { ensureParticipantForAuthUser } from '@/lib/participant-linking'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
@@ -15,26 +15,26 @@ export default async function MyPage() {
   const { session, role, mustChangePassword } = await getRoleAndSession()
   if (!session) redirect('/login')
   if (mustChangePassword) redirect('/change-password')
-  if (role && role !== 'employee') redirect('/wellness-director')
+  if (role && role !== 'participant') redirect('/wellness-director')
 
   const user = session.user
   const supabase = createServerSupabaseClient()
 
-  let { data: employee } = await supabase
-    .from('employees').select('*').eq('auth_user_id', user.id).single()
+  let { data: participant } = await supabase
+    .from('participants').select('*').eq('auth_user_id', user.id).single()
 
-  if (!employee && user.email) {
+  if (!participant && user.email) {
     const adminClient = createAdminSupabaseClient()
-    const employeeId = await ensureEmployeeForAuthUser(adminClient, user.id, user.email)
-    const { data: linkedEmployee } = await supabase
-      .from('employees')
+    const participantId = await ensureParticipantForAuthUser(adminClient, user.id, user.email)
+    const { data: linkedParticipant } = await supabase
+      .from('participants')
       .select('*')
-      .eq('id', employeeId)
+      .eq('id', participantId)
       .single()
-    employee = linkedEmployee
+    participant = linkedParticipant
   }
 
-  if (!employee) {
+  if (!participant) {
     return (
       <div style={{ minHeight: '100vh', background: '#0d1f35', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Inter, sans-serif' }}>
         <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: 36, maxWidth: 400, textAlign: 'center', position: 'relative' }}>
@@ -43,7 +43,7 @@ export default async function MyPage() {
           </div>
           <div style={{ fontSize: 32, marginBottom: 12 }}>👋</div>
           <h2 style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 8 }}>Account not linked yet</h2>
-          <p style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>Your login is set up but has not been linked to your employee record. Contact your administrator.</p>
+          <p style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>Your login is set up but has not been linked to your participant record. Contact your administrator.</p>
         </div>
       </div>
     )
@@ -56,7 +56,7 @@ export default async function MyPage() {
   let { data: wellness } = await supabase
     .from('daily_wellness')
     .select('*')
-    .eq('employee_id', employee.id)
+    .eq('participant_id', participant.id)
     .gte('date', trendWindowStartDate)
     .order('date', { ascending: false })
 
@@ -64,16 +64,16 @@ export default async function MyPage() {
     const { data: latestWellness } = await supabase
       .from('daily_wellness')
       .select('*')
-      .eq('employee_id', employee.id)
+      .eq('participant_id', participant.id)
       .order('date', { ascending: false })
       .limit(1)
 
     wellness = latestWellness ?? []
   }
 
-  const { data: habits } = await supabase.from('habits').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
-  const { data: workouts } = await supabase.from('workouts').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(1)
-  const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('employee_id', employee.id).order('date', { ascending: false }).limit(4)
+  const { data: habits } = await supabase.from('habits').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
+  const { data: workouts } = await supabase.from('workouts').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
+  const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(4)
   const { data: importBatches } = await supabase
     .from('upload_batches')
     .select('*')
@@ -115,24 +115,24 @@ export default async function MyPage() {
     }
 
     if (visibleChallenge) {
-      const { data: participant } = await supabase
+      const { data: challengeParticipant } = await supabase
         .from('challenge_participants')
         .select('is_eligible, progress_value, completed, completed_at, updated_at')
         .eq('challenge_id', visibleChallenge.id)
-        .eq('employee_id', employee.id)
+        .eq('participant_id', participant.id)
         .maybeSingle()
 
       challenge = {
-        visibility_state: participant?.is_eligible ? 'eligible' : 'ineligible',
+        visibility_state: challengeParticipant?.is_eligible ? 'eligible' : 'ineligible',
         data: {
           id: visibleChallenge.id,
           name: visibleChallenge.name,
           status: visibleChallenge.status,
           threshold_value: visibleChallenge.threshold_value,
-          progress_value: participant?.is_eligible ? (participant.progress_value ?? 0) : 0,
-          completed: Boolean(participant?.completed),
-          completed_at: participant?.completed_at ?? null,
-          last_computed_at: participant?.updated_at ?? null,
+          progress_value: challengeParticipant?.is_eligible ? (challengeParticipant.progress_value ?? 0) : 0,
+          completed: Boolean(challengeParticipant?.completed),
+          completed_at: challengeParticipant?.completed_at ?? null,
+          last_computed_at: challengeParticipant?.updated_at ?? null,
         },
       }
     } else {
@@ -151,7 +151,7 @@ export default async function MyPage() {
       showSignOut={false}
     >
       <MyDashboardClient
-        employee={employee}
+        participant={participant}
         wellness={wellness ?? []}
         habits={habits?.[0] ?? null}
         workout={workouts?.[0] ?? null}

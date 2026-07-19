@@ -1,8 +1,8 @@
 import { createClient } from './client'
 import { createServerSupabaseClient } from './server'
 import type {
-  Employee, DailyWellness, Workout, Habit,
-  PulseSurvey, Intervention, EmployeeWithWellness, TeamStats,
+  Participant, DailyWellness, Workout, Habit,
+  PulseSurvey, Intervention, ParticipantWithWellness, TeamStats,
   RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
 } from '@/types'
 
@@ -34,10 +34,10 @@ function getQueryClient() {
   }
 }
 
-export async function getEmployees(): Promise<Employee[]> {
+export async function getParticipants(): Promise<Participant[]> {
   const supabase = getQueryClient()
   const { data, error } = await supabase
-    .from('employees')
+    .from('participants')
     .select('*')
     .eq('status', 'Active')
     .order('last_name')
@@ -67,14 +67,14 @@ export async function getLatestWellness(date?: string): Promise<DailyWellness[]>
   return data ?? []
 }
 
-export async function getWellnessTrend(employeeId: string, days: number = 30): Promise<DailyWellness[]> {
+export async function getWellnessTrend(participantId: string, days: number = 30): Promise<DailyWellness[]> {
   const supabase = getQueryClient()
   const since = new Date()
   since.setDate(since.getDate() - days)
   const { data, error } = await supabase
     .from('daily_wellness')
     .select('*')
-    .eq('employee_id', employeeId)
+    .eq('participant_id', participantId)
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
   if (error) throw error
@@ -223,12 +223,12 @@ export async function updateIntervention(id: string, updates: Partial<Interventi
 }
 
 export async function getTeamDashboard(): Promise<{
-  employees: EmployeeWithWellness[]
+  participants: ParticipantWithWellness[]
   stats: TeamStats
   interventions: Intervention[]
 }> {
-  const [employees, wellness, workouts, habits, pulse, interventions] = await Promise.all([
-    getEmployees(),
+  const [participants, wellness, workouts, habits, pulse, interventions] = await Promise.all([
+    getParticipants(),
     getLatestWellness(),
     getLatestWorkouts(),
     getLatestHabits(),
@@ -236,15 +236,15 @@ export async function getTeamDashboard(): Promise<{
     getInterventions(),
   ])
 
-  const wellnessMap = Object.fromEntries(wellness.map((w) => [w.employee_id, w]))
+  const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
   const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
-    if (!map[workout.employee_id]) map[workout.employee_id] = workout
+    if (!map[workout.participant_id]) map[workout.participant_id] = workout
     return map
   }, {})
-  const habitsMap = Object.fromEntries(habits.map((h) => [h.employee_id, h]))
-  const pulseMap = Object.fromEntries(pulse.map((p) => [p.employee_id, p]))
+  const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
+  const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
 
-  const enriched: EmployeeWithWellness[] = employees.map((emp) => {
+  const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
     return {
       ...emp,
@@ -267,11 +267,13 @@ export async function getTeamDashboard(): Promise<{
     avg_hrv: avg(hrvs),
     avg_sleep_perf: avg(sleeps),
     high_risk_count: enriched.filter((e) => e.risk_level === 'High').length,
-    total_employees: employees.length,
-    participation_rate: Math.round((pulseResponded / employees.length) * 100),
+    total_participants: participants.length,
+    participation_rate: participants.length > 0
+      ? Math.round((pulseResponded / participants.length) * 100)
+      : 0,
   }
 
-  return { employees: enriched, stats, interventions }
+  return { participants: enriched, stats, interventions }
 }
 
 export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {

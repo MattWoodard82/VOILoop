@@ -42,7 +42,7 @@ describe('provisionSupabaseAccount', () => {
       adminClient: mocks.adminClient,
       email: '  Pilot@example.com ',
       password: 'Password123',
-      role: 'employee',
+      role: 'participant',
       mustChangePassword: true,
     })
 
@@ -55,7 +55,7 @@ describe('provisionSupabaseAccount', () => {
     })
     expect(mocks.upsert).toHaveBeenCalledWith({
       user_id: 'new-user-id',
-      role: 'employee',
+      role: 'participant',
       must_change_password: true,
     }, { onConflict: 'user_id' })
   })

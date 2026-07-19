@@ -8,5 +8,5 @@ export default async function HomePage() {
     redirect('/login')
   }
 
-  redirect(!role || role === 'employee' ? '/my' : '/wellness-director')
+  redirect(!role || role === 'participant' ? '/my' : '/wellness-director')
 }

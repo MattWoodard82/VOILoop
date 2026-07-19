@@ -38,14 +38,14 @@ describe('getLatestWorkouts', () => {
   })
 
   test('orders by start_time when the column exists', async () => {
-    const rows = [{ id: '1', employee_id: 'E1', date: '2024-01-15', start_time: '2024-01-15T08:00:00Z' }]
+    const rows = [{ id: '1', participant_id: 'E1', date: '2024-01-15', start_time: '2024-01-15T08:00:00Z' }]
     mockCreateClient.mockReturnValue(makeSupabaseClient({ data: rows, error: null }, { data: [], error: null }) as never)
 
     await expect(getLatestWorkouts()).resolves.toEqual(rows)
   })
 
   test('falls back to date-only ordering when start_time is missing', async () => {
-    const rows = [{ id: '1', employee_id: 'E1', date: '2024-01-15', start_time: '2024-01-15T08:00:00Z' }]
+    const rows = [{ id: '1', participant_id: 'E1', date: '2024-01-15', start_time: '2024-01-15T08:00:00Z' }]
     mockCreateClient.mockReturnValue(
       makeSupabaseClient(
         {

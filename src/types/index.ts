@@ -2,7 +2,7 @@ export type RiskLevel = 'Low' | 'Medium' | 'High'
 export type RecoveryStatus = 'green' | 'yellow' | 'red'
 export type InterventionStatus = 'Pending' | 'In Progress' | 'Monitoring' | 'Resolved'
 
-export interface Employee {
+export interface Participant {
   id: string
   first_name: string
   last_name: string
@@ -19,7 +19,7 @@ export interface Employee {
 
 export interface DailyWellness {
   id: string
-  employee_id: string
+  participant_id: string
   source_batch_id: string | null
   date: string
   recovery_score: number | null
@@ -43,7 +43,7 @@ export interface DailyWellness {
 
 export interface Workout {
   id: string
-  employee_id: string
+  participant_id: string
   source_batch_id: string | null
   date: string
   start_time: string
@@ -63,7 +63,7 @@ export interface Workout {
 
 export interface Habit {
   id: string
-  employee_id: string
+  participant_id: string
   source_batch_id: string | null
   date: string
   alcohol: boolean | null
@@ -87,7 +87,7 @@ export interface Habit {
 
 export interface PulseSurvey {
   id: string
-  employee_id: string
+  participant_id: string
   date: string
   wellbeing_score: number | null
   burnout_score: number | null
@@ -101,7 +101,7 @@ export interface PulseSurvey {
 
 export interface Intervention {
   id: string
-  employee_id: string
+  participant_id: string
   date_triggered: string | null
   department: string | null
   trigger_metric: string | null
@@ -116,7 +116,7 @@ export interface Intervention {
 }
 
 // Joined types for dashboard use
-export interface EmployeeWithWellness extends Employee {
+export interface ParticipantWithWellness extends Participant {
   latest_wellness: DailyWellness | null
   latest_workout: Workout | null
   latest_habits: Habit | null
@@ -130,7 +130,7 @@ export interface TeamStats {
   avg_hrv: number
   avg_sleep_perf: number
   high_risk_count: number
-  total_employees: number
+  total_participants: number
   participation_rate: number
 }
 
@@ -165,7 +165,7 @@ export interface ImportRowOutcome {
 
 export type ChallengeStatus = 'draft' | 'active' | 'completed' | 'cancelled'
 export type ChallengeMetricType = 'actions_count'
-export type ChallengeEligibilityMode = 'all_employees' | 'filtered'
+export type ChallengeEligibilityMode = 'all_participants' | 'filtered'
 export type ChallengeVisibilityState = 'none' | 'ineligible' | 'eligible'
 
 export interface ChallengeEligibilityDefinition {
@@ -199,7 +199,7 @@ export interface Challenge {
 export interface ChallengeParticipant {
   id: string
   challenge_id: string
-  employee_id: string
+  participant_id: string
   is_eligible: boolean
   eligibility_reason: string | null
   progress_value: number

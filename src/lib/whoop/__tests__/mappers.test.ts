@@ -5,7 +5,7 @@ import type { ParsedWorkbook } from '../parser'
 
 const exerciseRows = [
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Workout start time': '2024-01-15 08:00:00',
     'Workout end time': '2024-01-15 09:00:00',
     'Cycle timezone': 'UTC-06:00',
@@ -22,8 +22,8 @@ const exerciseRows = [
     'HR Zone 5 (% in zone)': 10,
   },
   {
-    // Second workout same employee same day
-    'Employee Identifier': 'E1',
+    // Second workout same participant same day
+    'Participant Identifier': 'E1',
     'Workout start time': '2024-01-15 17:00:00',
     'Workout end time': '2024-01-15 17:45:00',
     'Cycle timezone': 'UTC-06:00',
@@ -38,7 +38,7 @@ const exerciseRows = [
 
 const stressRows = [
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 04:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Recovery score %': 65,
@@ -52,7 +52,7 @@ const stressRows = [
 
 const sleepRows = [
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 04:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Recovery score %': 70, // Sleep tab has better data
@@ -65,21 +65,21 @@ const sleepRows = [
 
 const manualRows = [
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 04:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Question text': 'Did you drink alcohol last night?',
     'Answered yes': 'no',
   },
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 04:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Question text': 'Did you consume caffeine today?',
     'Answered yes': 'yes',
   },
   {
-    'Employee Identifier': 'E1',
+    'Participant Identifier': 'E1',
     'Cycle start time': '2024-01-15 04:00:00',
     'Cycle timezone': 'UTC-06:00',
     'Question text': 'Did you do sauna today?',
@@ -92,7 +92,7 @@ const manualRows = [
 describe('mapExercise', () => {
   const wb: ParsedWorkbook = { Exercise: exerciseRows }
 
-  test('maps two workouts with same employee same day (AC-4)', () => {
+  test('maps two workouts with same participant same day (AC-4)', () => {
     const { workouts, errors } = mapExercise(wb)
     expect(workouts).toHaveLength(2)
     expect(errors).toHaveLength(0)
@@ -157,7 +157,7 @@ describe('mapWellness', () => {
     expect(wellness[0].recovery_score).toBe(65)
   })
 
-  test('deduplicates same employee+date across rows', () => {
+  test('deduplicates same participant+date across rows', () => {
     const dupeRows = [...stressRows, ...stressRows]
     const wb: ParsedWorkbook = { Stress: dupeRows }
     const { wellness } = mapWellness(wb)
@@ -168,7 +168,7 @@ describe('mapWellness', () => {
     const wb: ParsedWorkbook = {
       Stress: [
         {
-          'Employee Identifier': 'E1',
+          'Participant Identifier': 'E1',
           'Cycle start time': '##########',
           'Cycle timezone': 'UTC-06:00',
           'Sleep performance %': 88,
@@ -188,7 +188,7 @@ describe('mapWellness', () => {
       ],
       Sleep: [
         {
-          'Employee Identifier': 'E1',
+          'Participant Identifier': 'E1',
           'Cycle start time': '2024-01-14 22:41:02',
           'Wake onset': '2024-01-15 07:15:00',
           'Cycle timezone': 'UTC-06:00',
@@ -232,8 +232,8 @@ describe('mapManualEntries', () => {
 
   test('any "yes" wins for same key and question', () => {
     const rows = [
-      { 'Employee Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Alcohol?', 'Answered yes': 'no' },
-      { 'Employee Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Alcohol?', 'Answered yes': 'yes' },
+      { 'Participant Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Alcohol?', 'Answered yes': 'no' },
+      { 'Participant Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Alcohol?', 'Answered yes': 'yes' },
     ]
     const wb: ParsedWorkbook = { 'Manual Entries': rows }
     const { habits } = mapManualEntries(wb)
@@ -247,7 +247,7 @@ describe('mapManualEntries', () => {
 
   test('unknown question text leaves all fields null except matched ones', () => {
     const rows = [
-      { 'Employee Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Unknown habit?', 'Answered yes': 'yes' },
+      { 'Participant Identifier': 'E1', 'Cycle start time': '2024-01-15 04:00:00', 'Question text': 'Unknown habit?', 'Answered yes': 'yes' },
     ]
     const { habits } = mapManualEntries({ 'Manual Entries': rows })
     const h = habits[0]
@@ -259,7 +259,7 @@ describe('mapManualEntries', () => {
     const wb: ParsedWorkbook = {
       Sleep: [
         {
-          'Employee Identifier': 'E1',
+          'Participant Identifier': 'E1',
           'Cycle start time': '2024-01-14 22:41:02',
           'Cycle timezone': 'UTC-06:00',
           'Wake onset': '2024-01-15 07:15:00',
@@ -267,7 +267,7 @@ describe('mapManualEntries', () => {
       ],
       'Manual Entries': [
         {
-          'Employee Identifier': 'E1',
+          'Participant Identifier': 'E1',
           'Cycle start time': '2024-01-14 22:41:02',
           'Cycle timezone': 'UTC-06:00',
           'Question text': 'Did you drink alcohol last night?',
@@ -284,7 +284,7 @@ describe('mapManualEntries', () => {
     const wb: ParsedWorkbook = {
       'Manual Entries': [
         {
-          'Employee Identifier': 'E1',
+          'Participant Identifier': 'E1',
           'Cycle start time': '2024-01-15 04:00:00',
           'Question text': 'Took ashwaganda?',
           'Answered yes': 'yes',

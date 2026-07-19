@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-interface EmployeeRow {
+interface ParticipantRow {
   id: string
   first_name: string
   last_name: string
@@ -33,18 +33,18 @@ function deriveNamesFromEmail(email: string): { firstName: string; lastName: str
   }
 }
 
-function buildGeneratedEmployeeId(userId: string): string {
+function buildGeneratedParticipantId(userId: string): string {
   const compact = userId.replace(/-/g, '')
   return `USR${compact.slice(0, 10).toUpperCase()}`
 }
 
-export async function ensureEmployeeForAuthUser(
+export async function ensureParticipantForAuthUser(
   supabase: SupabaseClient,
   userId: string,
   email: string,
 ): Promise<string> {
   const { data: current, error: currentError } = await supabase
-    .from('employees')
+    .from('participants')
     .select('id')
     .eq('auth_user_id', userId)
     .maybeSingle()
@@ -57,20 +57,20 @@ export async function ensureEmployeeForAuthUser(
   const normalizedLast = normalizeNameToken(lastName)
 
   const { data: candidates, error: candidatesError } = await supabase
-    .from('employees')
+    .from('participants')
     .select('id, first_name, last_name, auth_user_id')
     .is('auth_user_id', null)
 
   if (candidatesError) throw candidatesError
 
-  const matched = (candidates as EmployeeRow[] | null)?.find((employee) =>
-    normalizeNameToken(employee.first_name) === normalizedFirst &&
-    normalizeNameToken(employee.last_name) === normalizedLast
+  const matched = (candidates as ParticipantRow[] | null)?.find((participant) =>
+    normalizeNameToken(participant.first_name) === normalizedFirst &&
+    normalizeNameToken(participant.last_name) === normalizedLast
   )
 
   if (matched?.id) {
     const { error: updateError } = await supabase
-      .from('employees')
+      .from('participants')
       .update({ auth_user_id: userId })
       .eq('id', matched.id)
 
@@ -78,28 +78,28 @@ export async function ensureEmployeeForAuthUser(
     return matched.id
   }
 
-  let employeeId = buildGeneratedEmployeeId(userId)
+  let participantId = buildGeneratedParticipantId(userId)
   const today = new Date().toISOString().slice(0, 10)
 
   const { data: existingId } = await supabase
-    .from('employees')
+    .from('participants')
     .select('id')
-    .eq('id', employeeId)
+    .eq('id', participantId)
     .maybeSingle()
 
   if (existingId?.id) {
-    employeeId = `${employeeId}_${Math.floor(Math.random() * 900 + 100)}`
+    participantId = `${participantId}_${Math.floor(Math.random() * 900 + 100)}`
   }
 
   const { error: insertError } = await supabase
-    .from('employees')
+    .from('participants')
     .insert({
-      id: employeeId,
+      id: participantId,
       auth_user_id: userId,
       first_name: firstName,
       last_name: lastName,
       department: 'Unassigned',
-      title: 'Employee',
+      title: 'Participant',
       consent: true,
       enrolled_date: today,
       status: 'Active',
@@ -107,5 +107,5 @@ export async function ensureEmployeeForAuthUser(
     })
 
   if (insertError) throw insertError
-  return employeeId
+  return participantId
 }

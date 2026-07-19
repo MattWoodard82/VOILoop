@@ -1,34 +1,34 @@
 'use client'
 import { useState, useMemo } from 'react'
-import type { EmployeeWithWellness } from '@/types'
+import type { ParticipantWithWellness } from '@/types'
 import { Card, Badge, BarRow } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 
 interface Props {
-  employees: EmployeeWithWellness[]
+  participants: ParticipantWithWellness[]
 }
 
-export function WellnessDirectorClient({ employees }: Props) {
+export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
 
   const departments = useMemo(() => {
-const depts = Array.from(new Set(employees.map(e => e.department))).sort()
+const depts = Array.from(new Set(participants.map(e => e.department))).sort()
     return ['All', ...depts]
-  }, [employees])
+  }, [participants])
 
   const filtered = useMemo(() => {
-    let result = [...employees]
+    let result = [...participants]
     if (deptFilter !== 'All') result = result.filter(e => e.department === deptFilter)
     if (personFilter !== 'All') result = result.filter(e => e.id === personFilter)
     return result
-  }, [employees, deptFilter, personFilter])
+  }, [participants, deptFilter, personFilter])
 
   const deptAverages = useMemo(() => {
     if (personFilter !== 'All') return null
     const map: Record<string, number[]> = {}
-    employees.forEach(e => {
+    participants.forEach(e => {
       const score = e.latest_wellness?.recovery_score
       if (score) {
         if (!map[e.department]) map[e.department] = []
@@ -40,7 +40,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
       avg: Math.round(scores.reduce((a,b) => a+b, 0) / scores.length),
       count: scores.length,
     })).sort((a,b) => b.avg - a.avg)
-  }, [employees, personFilter])
+  }, [participants, personFilter])
 
   const selectStyle = {
     background: '#001a33', border: '1px solid #0a3560', borderRadius: 6,
@@ -63,8 +63,8 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 11, color: '#A5ACAF' }}>Person:</span>
           <select value={personFilter} onChange={e => setPersonFilter(e.target.value)} style={selectStyle}>
-            <option value="All">All employees</option>
-            {employees
+            <option value="All">All participants</option>
+            {participants
               .filter(e => deptFilter === 'All' || e.department === deptFilter)
               .map(e => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
           </select>
@@ -76,7 +76,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
           </button>
         )}
         <span style={{ marginLeft: deptFilter === 'All' && personFilter === 'All' ? 'auto' : 4, fontSize: 11, color: '#A5ACAF' }}>
-          Showing <strong style={{ color: '#fff' }}>{filtered.length}</strong> of {employees.length} employees
+          Showing <strong style={{ color: '#fff' }}>{filtered.length}</strong> of {participants.length} participants
         </span>
       </div>
 
@@ -114,7 +114,7 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
                   <div style={{ height: 4, background: '#0a3560', borderRadius: 2, overflow: 'hidden' }}>
                     <div style={{ width: `${d.avg}%`, height: '100%', background: recoveryColor(d.avg), borderRadius: 2 }} />
                   </div>
-                  <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>{d.count} employee{d.count !== 1 ? 's' : ''} · click to filter</div>
+                  <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>{d.count} participant{d.count !== 1 ? 's' : ''} · click to filter</div>
                 </div>
               ))}
             </div>
@@ -123,8 +123,8 @@ const depts = Array.from(new Set(employees.map(e => e.department))).sort()
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14, marginBottom: 14 }}>
-        <Card title={`Recovery scores — ${deptFilter !== 'All' ? deptFilter : personFilter !== 'All' ? filtered[0]?.first_name : 'all employees'}`}
-          badge={<Badge variant="wolf">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</Badge>}>
+        <Card title={`Recovery scores — ${deptFilter !== 'All' ? deptFilter : personFilter !== 'All' ? filtered[0]?.first_name : 'all participants'}`}
+          badge={<Badge variant="wolf">{filtered.length} participant{filtered.length !== 1 ? 's' : ''}</Badge>}>
           <WellnessDirectorCharts
             type="recovery"
             data={filtered.map(e => ({

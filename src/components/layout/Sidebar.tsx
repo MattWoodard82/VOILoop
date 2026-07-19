@@ -6,7 +6,7 @@ import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Upload, Users }
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-type NavRole = 'admin' | 'wellness_director' | 'employee' | null
+type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 
 const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
@@ -28,7 +28,7 @@ const ADMIN_NAV = [
   ]},
 ]
 
-const EMPLOYEE_NAV = [
+const PARTICIPANT_NAV = [
   { label: 'My Dashboard', items: [
     { href: '/my', label: 'My Wellness', icon: Activity },
     { href: '/admin/import', label: 'Import WHOOP Data', icon: Upload },
@@ -80,8 +80,8 @@ export function Sidebar() {
   const nav = useMemo(() => {
     if (role === 'admin') return ADMIN_NAV
     if (role === 'wellness_director') return LEADERSHIP_NAV
-    if (role === 'employee') return EMPLOYEE_NAV
-    return pathname.startsWith('/my') || pathname.startsWith('/admin/import') ? EMPLOYEE_NAV : LEADERSHIP_NAV
+    if (role === 'participant') return PARTICIPANT_NAV
+    return pathname.startsWith('/my') || pathname.startsWith('/admin/import') ? PARTICIPANT_NAV : LEADERSHIP_NAV
   }, [pathname, role])
 
   const handleSignOut = async () => {

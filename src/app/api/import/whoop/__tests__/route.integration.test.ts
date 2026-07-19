@@ -26,7 +26,7 @@ jest.mock('@/lib/whoop/persistence', () => ({
 jest.mock('@/lib/whoop/workbook-context', () => ({
   prepareWhoopWorkbookForImport: jest.fn(async (_supabase, workbook) => ({
     workbook,
-    employeeProfiles: [],
+    participantProfiles: [],
   })),
 }))
 
@@ -69,7 +69,7 @@ describe('POST /api/import/whoop integration', () => {
     mockPersistWhoopImport.mockReset()
     mockPrepareWhoopWorkbookForImport.mockResolvedValue({
       workbook: {},
-      employeeProfiles: [],
+      participantProfiles: [],
     })
   })
 
@@ -88,9 +88,9 @@ describe('POST /api/import/whoop integration', () => {
       from: jest.fn(() => ({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            maybeSingle: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
+            maybeSingle: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
           })),
-          single: jest.fn(async () => ({ data: { role: 'employee' }, error: null })),
+          single: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
         })),
       })),
     }
@@ -117,7 +117,7 @@ describe('POST /api/import/whoop integration', () => {
             })),
           }
         }
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
@@ -151,7 +151,7 @@ describe('POST /api/import/whoop integration', () => {
     mockParseWorkbook.mockReturnValue({} as never)
     mockPrepareWhoopWorkbookForImport.mockResolvedValue({
       workbook: {},
-      employeeProfiles: [],
+      participantProfiles: [],
     })
     mockValidateTabStructure.mockReturnValue({
       valid: false,
@@ -184,7 +184,7 @@ describe('POST /api/import/whoop integration', () => {
             })),
           }
         }
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
@@ -234,7 +234,7 @@ describe('POST /api/import/whoop integration', () => {
             })),
           }
         }
-        if (table === 'employees') {
+        if (table === 'participants') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({

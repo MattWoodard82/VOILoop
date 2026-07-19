@@ -17,7 +17,7 @@ describe('challenge access', () => {
   test('allows admins and wellness directors to operate challenges', () => {
     expect(canOperateChallenges('admin')).toBe(true)
     expect(canOperateChallenges('wellness_director')).toBe(true)
-    expect(canOperateChallenges('employee')).toBe(false)
+    expect(canOperateChallenges('participant')).toBe(false)
     expect(canOperateChallenges(null)).toBe(false)
   })
 
@@ -37,9 +37,9 @@ describe('challenge access', () => {
     expect(result).toMatchObject({ userId: 'admin-1', role: 'admin' })
   })
 
-  test('returns forbidden for employee role', async () => {
+  test('returns forbidden for participant role', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'emp-1' } } as never)
-    mockGetUserAccess.mockResolvedValue({ role: 'employee', mustChangePassword: false })
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
     const result = await requireChallengeOperator()
     expect('error' in result).toBe(true)

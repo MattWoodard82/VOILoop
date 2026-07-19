@@ -6,14 +6,14 @@ import { randomInt } from 'crypto'
 
 export const runtime = 'nodejs'
 
-type AccountType = 'employee' | 'wellness_director'
+type AccountType = 'participant' | 'wellness_director'
 
 interface ParsedCsv {
   emails: string[]
   invalidRows: string[]
 }
 
-interface EmployeeRecord {
+interface ParticipantRecord {
   id: string
   auth_user_id: string | null
 }
@@ -21,19 +21,19 @@ interface EmployeeRecord {
 interface ProvisioningConfig {
   role: AccountType
   downloadFileName: string
-  createsEmployeeRecord: boolean
+  createsParticipantRecord: boolean
 }
 
 const ACCOUNT_TYPE_CONFIG: Record<AccountType, ProvisioningConfig> = {
-  employee: {
-    role: 'employee',
-    downloadFileName: 'employee-passwords.csv',
-    createsEmployeeRecord: true,
+  participant: {
+    role: 'participant',
+    downloadFileName: 'participant-passwords.csv',
+    createsParticipantRecord: true,
   },
   wellness_director: {
     role: 'wellness_director',
     downloadFileName: 'wellness-director-passwords.csv',
-    createsEmployeeRecord: false,
+    createsParticipantRecord: false,
   },
 }
 
@@ -149,50 +149,50 @@ function deriveNameFromEmail(email: string): { firstName: string; lastName: stri
   }
 }
 
-function getNextEmployeeNumber(existingEmployees: EmployeeRecord[]): number {
-  const maxEmployeeNumber = existingEmployees.reduce((max, employee) => {
-    const match = /^EMP(\d+)$/i.exec(employee.id)
+function getNextParticipantNumber(existingParticipants: ParticipantRecord[]): number {
+  const maxParticipantNumber = existingParticipants.reduce((max, participant) => {
+    const match = /^EMP(\d+)$/i.exec(participant.id)
     if (!match) return max
     return Math.max(max, Number(match[1]))
   }, 0)
 
-  return maxEmployeeNumber + 1
+  return maxParticipantNumber + 1
 }
 
-function formatEmployeeId(employeeNumber: number): string {
-  return `EMP${String(employeeNumber).padStart(3, '0')}`
+function formatParticipantId(participantNumber: number): string {
+  return `EMP${String(participantNumber).padStart(3, '0')}`
 }
 
 function parseAccountType(value: FormDataEntryValue | null): AccountType | null {
-  if (value !== 'employee' && value !== 'wellness_director') {
+  if (value !== 'participant' && value !== 'wellness_director') {
     return null
   }
 
   return value
 }
 
-async function ensureEmployeeRecord(
+async function ensureParticipantRecord(
   adminClient: ReturnType<typeof createAdminSupabaseClient>,
-  existingEmployeesByAuthUserId: Map<string, EmployeeRecord>,
-  nextEmployeeNumberRef: { current: number },
+  existingParticipantsByAuthUserId: Map<string, ParticipantRecord>,
+  nextParticipantNumberRef: { current: number },
   userId: string,
   email: string,
 ): Promise<string> {
-  const existingEmployee = existingEmployeesByAuthUserId.get(userId)
-  if (existingEmployee) {
-    return existingEmployee.id
+  const existingParticipant = existingParticipantsByAuthUserId.get(userId)
+  if (existingParticipant) {
+    return existingParticipant.id
   }
 
-  const employeeId = formatEmployeeId(nextEmployeeNumberRef.current)
-  nextEmployeeNumberRef.current += 1
+  const participantId = formatParticipantId(nextParticipantNumberRef.current)
+  nextParticipantNumberRef.current += 1
 
   const { firstName, lastName } = deriveNameFromEmail(email)
   const today = new Date().toISOString().slice(0, 10)
 
   const { error } = await adminClient
-    .from('employees')
+    .from('participants')
     .insert({
-      id: employeeId,
+      id: participantId,
       auth_user_id: userId,
       first_name: firstName,
       last_name: lastName,
@@ -209,9 +209,9 @@ async function ensureEmployeeRecord(
     throw error
   }
 
-  const employeeRecord = { id: employeeId, auth_user_id: userId }
-  existingEmployeesByAuthUserId.set(userId, employeeRecord)
-  return employeeId
+  const participantRecord = { id: participantId, auth_user_id: userId }
+  existingParticipantsByAuthUserId.set(userId, participantRecord)
+  return participantId
 }
 
 async function requireAdminUser(userId: string): Promise<boolean> {
@@ -278,27 +278,27 @@ export async function POST(request: Request) {
 
   const adminClient = createAdminSupabaseClient()
   const config = ACCOUNT_TYPE_CONFIG[accountType]
-  let existingEmployees: EmployeeRecord[] = []
+  let existingParticipants: ParticipantRecord[] = []
 
-  if (config.createsEmployeeRecord) {
-    const { data, error: employeesError } = await adminClient
-      .from('employees')
+  if (config.createsParticipantRecord) {
+    const { data, error: participantsError } = await adminClient
+      .from('participants')
       .select('id, auth_user_id')
 
-    if (employeesError) {
-      return NextResponse.json({ error: employeesError.message }, { status: 500 })
+    if (participantsError) {
+      return NextResponse.json({ error: participantsError.message }, { status: 500 })
     }
 
-    existingEmployees = (data ?? []) as EmployeeRecord[]
+    existingParticipants = (data ?? []) as ParticipantRecord[]
   }
 
-  const existingEmployeesByAuthUserId = new Map<string, EmployeeRecord>()
-  for (const employee of existingEmployees) {
-    if (employee.auth_user_id) {
-      existingEmployeesByAuthUserId.set(employee.auth_user_id, employee)
+  const existingParticipantsByAuthUserId = new Map<string, ParticipantRecord>()
+  for (const participant of existingParticipants) {
+    if (participant.auth_user_id) {
+      existingParticipantsByAuthUserId.set(participant.auth_user_id, participant)
     }
   }
-  const nextEmployeeNumberRef = { current: getNextEmployeeNumber(existingEmployees) }
+  const nextParticipantNumberRef = { current: getNextParticipantNumber(existingParticipants) }
 
   const existingUsersByEmail = new Map<string, string>()
   let page = 1
@@ -316,16 +316,16 @@ export async function POST(request: Request) {
     page++
   }
 
-  const outputRows: Array<{ email: string; accountType: AccountType; employeeId: string; password: string; status: string }> = []
+  const outputRows: Array<{ email: string; accountType: AccountType; participantId: string; password: string; status: string }> = []
 
   for (const email of parsed.invalidRows) {
-    outputRows.push({ email, accountType, employeeId: '', password: '', status: 'invalid-email' })
+    outputRows.push({ email, accountType, participantId: '', password: '', status: 'invalid-email' })
   }
 
   for (const email of parsed.emails) {
     const password = randomPassword(8)
     let userId = existingUsersByEmail.get(email)
-    let employeeId = ''
+    let participantId = ''
     let status: 'created' | 'updated' = 'created'
 
     try {
@@ -342,32 +342,32 @@ export async function POST(request: Request) {
       existingUsersByEmail.set(email, userId)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create user'
-      outputRows.push({ email, accountType, employeeId: '', password, status: `error:${message}` })
+      outputRows.push({ email, accountType, participantId: '', password, status: `error:${message}` })
       continue
     }
 
-    if (config.createsEmployeeRecord) {
+    if (config.createsParticipantRecord) {
       try {
-        employeeId = await ensureEmployeeRecord(
+        participantId = await ensureParticipantRecord(
           adminClient,
-          existingEmployeesByAuthUserId,
-          nextEmployeeNumberRef,
+          existingParticipantsByAuthUserId,
+          nextParticipantNumberRef,
           userId,
           email,
         )
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to create employee record'
-        outputRows.push({ email, accountType, employeeId: '', password, status: `error:${message}` })
+        const message = error instanceof Error ? error.message : 'Failed to create participant record'
+        outputRows.push({ email, accountType, participantId: '', password, status: `error:${message}` })
         continue
       }
     }
 
-    outputRows.push({ email, accountType, employeeId, password, status })
+    outputRows.push({ email, accountType, participantId, password, status })
   }
 
   const outputCsv = [
-    'email,account_type,employee_id,password,status',
-    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.accountType), csvEscape(row.employeeId), csvEscape(row.password), csvEscape(row.status)].join(',')),
+    'email,account_type,participant_id,password,status',
+    ...outputRows.map((row) => [csvEscape(row.email), csvEscape(row.accountType), csvEscape(row.participantId), csvEscape(row.password), csvEscape(row.status)].join(',')),
   ].join('\n')
 
   return new NextResponse(outputCsv, {

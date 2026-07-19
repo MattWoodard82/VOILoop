@@ -14,20 +14,20 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const access = await getUserAccess(session.user.id)
-  if (access.role !== 'employee') {
+  if (access.role !== 'participant') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const supabase = createAdminSupabaseClient()
 
-  const { data: employee, error: employeeError } = await supabase
-    .from('employees')
+  const { data: participantRecord, error: participantError } = await supabase
+    .from('participants')
     .select('id')
     .eq('auth_user_id', session.user.id)
     .maybeSingle()
 
-  if (employeeError) return NextResponse.json({ error: employeeError.message }, { status: 500 })
-  if (!employee) {
+  if (participantError) return NextResponse.json({ error: participantError.message }, { status: 500 })
+  if (!participantRecord) {
     return NextResponse.json({
       visibility_state: 'none',
       challenge: null,
@@ -58,16 +58,16 @@ export async function GET() {
     return NextResponse.json({ visibility_state: 'none', challenge: null })
   }
 
-  const { data: participant, error: participantError } = await supabase
+  const { data: challengeParticipant, error: challengeParticipantError } = await supabase
     .from('challenge_participants')
     .select('is_eligible, eligibility_reason, progress_value, completed, completed_at, updated_at')
     .eq('challenge_id', resolvedChallenge.id)
-    .eq('employee_id', employee.id)
+    .eq('participant_id', participantRecord.id)
     .maybeSingle()
 
-  if (participantError) return NextResponse.json({ error: participantError.message }, { status: 500 })
+  if (challengeParticipantError) return NextResponse.json({ error: challengeParticipantError.message }, { status: 500 })
 
-  if (!participant || !participant.is_eligible) {
+  if (!challengeParticipant || !challengeParticipant.is_eligible) {
     return NextResponse.json({
       visibility_state: 'ineligible',
       challenge: {
@@ -75,8 +75,8 @@ export async function GET() {
         progress_value: 0,
         completed: false,
         completed_at: null,
-        last_computed_at: participant?.updated_at ?? resolvedChallenge.updated_at,
-        eligibility_reason: participant?.eligibility_reason ?? 'not_seeded',
+        last_computed_at: challengeParticipant?.updated_at ?? resolvedChallenge.updated_at,
+        eligibility_reason: challengeParticipant?.eligibility_reason ?? 'not_seeded',
       },
     })
   }
@@ -85,10 +85,10 @@ export async function GET() {
     visibility_state: 'eligible',
     challenge: {
       ...resolvedChallenge,
-      progress_value: participant.progress_value,
-      completed: participant.completed,
-      completed_at: participant.completed_at,
-      last_computed_at: participant.updated_at,
+      progress_value: challengeParticipant.progress_value,
+      completed: challengeParticipant.completed,
+      completed_at: challengeParticipant.completed_at,
+      last_computed_at: challengeParticipant.updated_at,
     },
   })
 }

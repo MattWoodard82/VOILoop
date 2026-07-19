@@ -7,19 +7,19 @@ import { OutcomesCharts } from './OutcomesCharts'
 export const dynamic = 'force-dynamic'
 
 export default async function OutcomesPage() {
-  const [{ employees, stats, interventions }, trend] = await Promise.all([
+  const [{ participants, stats, interventions }, trend] = await Promise.all([
     getTeamDashboard(),
     getTeamWellnessTrend(5),
   ])
 
-  const benchmark = employees.find((e) => e.is_exact_data)
-  const employeeMap = Object.fromEntries(employees.map((e) => [e.id, e]))
+  const benchmark = participants.find((e) => e.is_exact_data)
+  const participantMap = Object.fromEntries(participants.map((e) => [e.id, e]))
   const pending = interventions.filter((i) => i.outcome === 'Pending')
   const inProgress = interventions.filter((i) => i.outcome === 'In Progress')
   const monitoring = interventions.filter((i) => i.outcome === 'Monitoring')
   const resolved = interventions.filter((i) => i.outcome === 'Resolved')
   const openInterventions = pending.length + inProgress.length + monitoring.length
-  const highRisk = employees.filter((e) => e.risk_level === 'High')
+  const highRisk = participants.filter((e) => e.risk_level === 'High')
 
   return (
     <DashboardShell title="Outcomes Validation">
@@ -41,8 +41,8 @@ export default async function OutcomesPage() {
       </Alert>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Team avg recovery" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_employees} active employees`} deltaDir="neutral" />
-        <KpiCard label="High risk employees" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map((e) => e.first_name).join(' · ') : 'No high-risk employees'} deltaDir="neutral" />
+        <KpiCard label="Team avg recovery" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_participants} active participants`} deltaDir="neutral" />
+        <KpiCard label="High risk participants" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map((e) => e.first_name).join(' · ') : 'No high-risk participants'} deltaDir="neutral" />
         <KpiCard label="Open interventions" value={openInterventions} color="#FFA500" delta={`Pending ${pending.length} · In progress ${inProgress.length} · Monitoring ${monitoring.length}`} deltaDir="neutral" />
         <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${interventions.length} total intervention records`} deltaDir="neutral" />
       </div>
@@ -95,7 +95,7 @@ export default async function OutcomesPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Employee</th>
+                  <th>Participant</th>
                   <th>Department</th>
                   <th>Trigger</th>
                   <th>Intervention</th>
@@ -104,10 +104,10 @@ export default async function OutcomesPage() {
               </thead>
               <tbody>
                 {resolved.slice(0, 10).map((entry) => {
-                  const employee = employeeMap[entry.employee_id]
+                  const participant = participantMap[entry.participant_id]
                   return (
                     <tr key={entry.id}>
-                      <td style={{ fontWeight: 600 }}>{employee ? `${employee.first_name} ${employee.last_name}` : entry.employee_id}</td>
+                      <td style={{ fontWeight: 600 }}>{participant ? `${participant.first_name} ${participant.last_name}` : entry.participant_id}</td>
                       <td>{entry.department ?? '—'}</td>
                       <td>{entry.trigger_metric ?? '—'}</td>
                       <td>{entry.intervention_type ?? '—'}</td>

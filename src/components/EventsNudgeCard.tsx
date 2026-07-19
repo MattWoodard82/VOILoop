@@ -37,7 +37,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 interface Props {
-  employeeId: string
+  participantId: string
 }
 
 const typeIcon: Record<string, string> = {
@@ -70,7 +70,7 @@ function daysUntil(d: string) {
   return `In ${diff} days`
 }
 
-export function EventsNudgeCard({ employeeId }: Props) {
+export function EventsNudgeCard({ participantId }: Props) {
   const [events, setEvents] = useState<Event[]>([])
   const [nudge, setNudge] = useState<Nudge | null>(null)
   const [rsvps, setRsvps] = useState<string[]>([])
@@ -112,7 +112,7 @@ export function EventsNudgeCard({ employeeId }: Props) {
         const { data: rsvpData, error: rsvpError } = await supabase
           .from('event_rsvps')
           .select('event_id')
-          .eq('employee_id', employeeId)
+          .eq('participant_id', participantId)
 
         if (rsvpError) {
           throw rsvpError
@@ -130,7 +130,7 @@ export function EventsNudgeCard({ employeeId }: Props) {
       }
     }
     void loadCardData()
-  }, [employeeId])
+  }, [participantId])
 
   const toggleRsvp = async (eventId: string) => {
     const supabase = createClient()
@@ -139,14 +139,14 @@ export function EventsNudgeCard({ employeeId }: Props) {
     if (isRsvped) {
       const { error } = await supabase.from('event_rsvps').delete()
         .eq('event_id', eventId)
-        .eq('employee_id', employeeId)
+        .eq('participant_id', participantId)
       if (error) {
         setError(`RSVP update failed. Detail: ${error.message}`)
         return
       }
       setRsvps(prev => prev.filter(id => id !== eventId))
     } else {
-      const { error } = await supabase.from('event_rsvps').insert({ event_id: eventId, employee_id: employeeId })
+      const { error } = await supabase.from('event_rsvps').insert({ event_id: eventId, participant_id: participantId })
       if (error) {
         setError(`RSVP update failed. Detail: ${error.message}`)
         return

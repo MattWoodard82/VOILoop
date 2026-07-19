@@ -17,7 +17,7 @@ export interface RawExerciseRow {
   'HR Zone 3 (% in zone)'?: string | number
   'HR Zone 4 (% in zone)'?: string | number
   'HR Zone 5 (% in zone)'?: string | number
-  'Employee Identifier'?: string
+  'Participant Identifier'?: string
 }
 
 export interface RawStressRow {
@@ -43,7 +43,7 @@ export interface RawStressRow {
   'Sleep debt (min)'?: string | number
   'Sleep efficiency %'?: string | number
   'Sleep consistency %'?: string | number
-  'Employee Identifier'?: string
+  'Participant Identifier'?: string
 }
 
 // Sleep tab has the same column shape as Stress for these fields
@@ -55,13 +55,13 @@ export interface RawManualEntryRow {
   'Cycle timezone'?: string
   'Question text'?: string
   'Answered yes'?: string | boolean | number
-  'Employee Identifier'?: string
+  'Participant Identifier'?: string
 }
 
 // ─── Parsed / normalized DTOs ─────────────────────────────────────────────────
 
 export interface WhoopWorkout {
-  employee_id: string
+  participant_id: string
   date: string           // YYYY-MM-DD in cycle-local timezone
   start_time: string     // ISO 8601
   end_time: string | null
@@ -79,7 +79,7 @@ export interface WhoopWorkout {
 }
 
 export interface WhoopWellness {
-  employee_id: string
+  participant_id: string
   date: string
   recovery_score: number | null
   hrv_ms: number | null
@@ -101,7 +101,7 @@ export interface WhoopWellness {
 }
 
 export interface WhoopHabit {
-  employee_id: string
+  participant_id: string
   date: string
   alcohol: boolean | null
   caffeine: boolean | null

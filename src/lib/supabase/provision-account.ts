@@ -1,6 +1,6 @@
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
-export type ProvisionableRole = 'admin' | 'employee' | 'wellness_director'
+export type ProvisionableRole = 'admin' | 'participant' | 'wellness_director'
 
 type AdminSupabaseClient = ReturnType<typeof createAdminSupabaseClient>
 

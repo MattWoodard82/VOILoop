@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { User } from '@supabase/supabase-js'
 
-export type AppRole = 'admin' | 'wellness_director' | 'employee'
+export type AppRole = 'admin' | 'wellness_director' | 'participant'
 
 export interface UserAccess {
   role: AppRole | null
@@ -14,7 +14,7 @@ export interface AuthenticatedUserSession {
 }
 
 function getRedirectPathForRole(role: AppRole | null): string {
-  if (!role || role === 'employee') return '/my'
+  if (!role || role === 'participant') return '/my'
   return '/wellness-director'
 }
 
@@ -224,7 +224,7 @@ export async function setMustChangePassword(userId: string, mustChangePassword: 
     .upsert({
       user_id: userId,
       must_change_password: mustChangePassword,
-      role: access.role ?? 'employee',
+      role: access.role ?? 'participant',
     }, { onConflict: 'user_id' })
   if (error) throw error
 }

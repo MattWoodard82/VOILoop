@@ -7,7 +7,7 @@ interface SupabaseLike {
 
 interface ChallengeParticipantRow {
   id: string
-  employee_id: string
+  participant_id: string
   completed: boolean
   updated_at: string | null
 }
@@ -36,7 +36,7 @@ export async function recomputeActiveChallengeProgress(
 
   const { data: participants, error: participantsError } = await supabase
     .from('challenge_participants')
-    .select('id, employee_id, completed, updated_at')
+    .select('id, participant_id, completed, updated_at')
     .eq('challenge_id', activeChallenge.id)
     .eq('is_eligible', true)
 
@@ -46,7 +46,7 @@ export async function recomputeActiveChallengeProgress(
 
   const { data: workouts, error: workoutsError } = await supabase
     .from('workouts')
-    .select('employee_id, start_time')
+    .select('participant_id, start_time')
     .gte('start_time', activeChallenge.window_start_at)
     .lte('start_time', activeChallenge.window_end_at)
 
@@ -56,14 +56,14 @@ export async function recomputeActiveChallengeProgress(
 
   const counts = new Map<string, number>()
   for (const workout of workouts ?? []) {
-    const employeeId = String(workout.employee_id ?? '')
-    if (!employeeId) continue
-    counts.set(employeeId, (counts.get(employeeId) ?? 0) + 1)
+    const participantId = String(workout.participant_id ?? '')
+    if (!participantId) continue
+    counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
   }
 
   const participantRows = (participants ?? []) as ChallengeParticipantRow[]
   const updateRequests = participantRows.map((participant) => {
-    const progressValue = counts.get(participant.employee_id) ?? 0
+    const progressValue = counts.get(participant.participant_id) ?? 0
     const isCompleteNow = progressValue >= activeChallenge.threshold_value
 
     const updatePayload: Record<string, unknown> = {
@@ -76,7 +76,7 @@ export async function recomputeActiveChallengeProgress(
       updatePayload.completed = true
       updatePayload.completed_at = now
       updatePayload.completion_source = source
-      updatePayload.completion_idempotency_key = buildCompletionIdempotencyKey(activeChallenge.id, participant.employee_id)
+      updatePayload.completion_idempotency_key = buildCompletionIdempotencyKey(activeChallenge.id, participant.participant_id)
     }
 
     return updatePayload
