@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
-import { parseWorkbook } from '@/lib/whoop/parser'
+import {
+  parseWorkbook,
+  TAB_EXERCISE,
+  TAB_SLEEP,
+  TAB_STRESS,
+  type ParsedWorkbook,
+} from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapWellness, mapManualEntries } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
@@ -64,6 +70,52 @@ async function getSelectedParticipantProfile(
   }
 }
 
+const REQUIRED_WHOOP_FILES = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'] as const
+
+function getUploadedFiles(formData: FormData): File[] {
+  const multiFiles = formData.getAll('files').filter((entry): entry is File => entry instanceof File)
+  if (multiFiles.length > 0) return multiFiles
+
+  const legacySingleFile = formData.get('file')
+  return legacySingleFile instanceof File ? [legacySingleFile] : []
+}
+
+function parseCsvRows(fileBuffer: Buffer): Record<string, unknown>[] {
+  const parsedFile = parseWorkbook(fileBuffer)
+  const firstSheetName = Object.keys(parsedFile)[0]
+  if (!firstSheetName) return []
+  return parsedFile[firstSheetName] ?? []
+}
+
+function validateWhoopCsvFiles(files: File[]): string[] {
+  const errors: string[] = []
+  if (files.length !== 3) {
+    errors.push('Upload exactly 3 files.')
+  }
+
+  const normalizedNames = files.map((file) => file.name.toLowerCase())
+  const nonCsvFiles = normalizedNames.filter((name) => !name.endsWith('.csv'))
+  if (nonCsvFiles.length > 0) {
+    errors.push(`Only .csv files are supported. Found: ${nonCsvFiles.join(', ')}`)
+  }
+
+  if (new Set(normalizedNames).size !== normalizedNames.length) {
+    errors.push('Duplicate file names are not allowed.')
+  }
+
+  const missingFiles = REQUIRED_WHOOP_FILES.filter((requiredName) => !normalizedNames.includes(requiredName))
+  if (missingFiles.length > 0) {
+    errors.push(`Missing required files: ${missingFiles.join(', ')}`)
+  }
+
+  const unexpectedFiles = normalizedNames.filter((name) => !REQUIRED_WHOOP_FILES.includes(name as typeof REQUIRED_WHOOP_FILES[number]))
+  if (unexpectedFiles.length > 0) {
+    errors.push(`Unexpected files: ${unexpectedFiles.join(', ')}`)
+  }
+
+  return errors
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   // AC-6: require authenticated session
   const session = await getSession()
@@ -116,9 +168,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     )
   }
 
-  const file = formData.get('file') as File | null
-  if (!file) {
-    return NextResponse.json({ error: 'No file provided' }, { status: 400 })
+  const files = getUploadedFiles(formData)
+  if (!files.length) {
+    return NextResponse.json({ error: 'No files provided' }, { status: 400 })
   }
 
   const participantId = String(formData.get('participantId') ?? '').trim()
@@ -136,22 +188,59 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Selected participant was not found or is inactive' }, { status: 422 })
   }
 
-  const fileName = file.name
-  const isXlsx = fileName.toLowerCase().endsWith('.xlsx')
-  if (!isXlsx) {
-    return NextResponse.json({ error: 'Only .xlsx WHOOP export files are supported' }, { status: 400 })
+  const fileValidationErrors = validateWhoopCsvFiles(files)
+  if (fileValidationErrors.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'Invalid WHOOP upload payload',
+        details: [
+          ...fileValidationErrors,
+          'Required files: workouts.csv, sleeps.csv, physiological_cycles.csv',
+        ],
+      },
+      { status: 400 },
+    )
   }
 
-  // Read file buffer
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
+  const filesByName = new Map(files.map((file) => [file.name.toLowerCase(), file]))
+  const workoutFile = filesByName.get('workouts.csv')
+  const sleepFile = filesByName.get('sleeps.csv')
+  const physiologicalCyclesFile = filesByName.get('physiological_cycles.csv')
+  if (!workoutFile || !sleepFile || !physiologicalCyclesFile) {
+    return NextResponse.json(
+      {
+        error: 'Invalid WHOOP upload payload',
+        details: ['Required files: workouts.csv, sleeps.csv, physiological_cycles.csv'],
+      },
+      { status: 400 },
+    )
+  }
 
-  // Parse workbook
-  let wb: ReturnType<typeof parseWorkbook>
+  let wb: ParsedWorkbook
+  let uploadFileHash = createHash('sha256')
+  let totalFileSize = 0
   try {
-    wb = parseWorkbook(buffer)
+    const workoutBuffer = Buffer.from(await workoutFile.arrayBuffer())
+    const sleepBuffer = Buffer.from(await sleepFile.arrayBuffer())
+    const physiologicalCyclesBuffer = Buffer.from(await physiologicalCyclesFile.arrayBuffer())
+
+    uploadFileHash = uploadFileHash
+      .update('workouts.csv')
+      .update(workoutBuffer)
+      .update('sleeps.csv')
+      .update(sleepBuffer)
+      .update('physiological_cycles.csv')
+      .update(physiologicalCyclesBuffer)
+
+    totalFileSize = workoutFile.size + sleepFile.size + physiologicalCyclesFile.size
+
+    wb = {
+      [TAB_EXERCISE]: parseCsvRows(workoutBuffer),
+      [TAB_SLEEP]: parseCsvRows(sleepBuffer),
+      [TAB_STRESS]: parseCsvRows(physiologicalCyclesBuffer),
+    }
   } catch (error) {
-    return NextResponse.json({ error: `Failed to parse file: ${toErrorMessage(error)}` }, { status: 400 })
+    return NextResponse.json({ error: `Failed to parse uploaded CSV files: ${toErrorMessage(error)}` }, { status: 400 })
   }
 
   // Validate tab structure (FR-2, FR-3)
@@ -188,14 +277,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const wellnessResult = mapWellness(preparedWorkbook)
   const habitsResult = mapManualEntries(preparedWorkbook)
 
-  const fileHash = createHash('sha256').update(buffer).digest('hex')
+  const fileHash = uploadFileHash.digest('hex')
+  const fileName = 'workouts.csv,sleeps.csv,physiological_cycles.csv'
 
   try {
     const result = await persistWhoopImport({
       supabase,
       userId: session.user.id,
       fileName,
-      fileSize: file.size,
+      fileSize: totalFileSize,
       fileHash,
       exerciseResult,
       wellnessResult,

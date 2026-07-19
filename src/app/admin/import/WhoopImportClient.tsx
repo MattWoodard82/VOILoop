@@ -6,6 +6,7 @@ import { parseFrontendError } from '@/lib/frontend-error'
 
 type UploadStatus = 'idle' | 'uploading' | 'success' | 'partial' | 'error'
 const MAX_DISPLAYED_ERRORS = 100
+const REQUIRED_WHOOP_FILES = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'] as const
 
 export interface ParticipantOption {
   id: string
@@ -32,12 +33,46 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
     return `${participant.label} ${participant.meta} ${participant.id}`.toLowerCase().includes(query)
   })
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+  const handleFiles = useCallback(async (files: File[]) => {
+    if (files.length !== 3) {
       setStatus('error')
-      setStructureErrors(['Only .xlsx WHOOP export files are supported'])
+      setStructureErrors(['Upload exactly 3 CSV files: workouts.csv, sleeps.csv, physiological_cycles.csv'])
       return
     }
+
+    const normalizedFileNames = files.map((file) => file.name.toLowerCase())
+    if (normalizedFileNames.some((fileName) => !fileName.endsWith('.csv'))) {
+      setStatus('error')
+      setStructureErrors(['Only .csv WHOOP files are supported'])
+      return
+    }
+
+    if (new Set(normalizedFileNames).size !== normalizedFileNames.length) {
+      setStatus('error')
+      setStructureErrors(['Duplicate file names are not allowed'])
+      return
+    }
+
+    const missingFiles = REQUIRED_WHOOP_FILES.filter((requiredName) => !normalizedFileNames.includes(requiredName))
+    if (missingFiles.length > 0) {
+      setStatus('error')
+      setStructureErrors([
+        `Missing required file(s): ${missingFiles.join(', ')}`,
+        'Required files are workouts.csv, sleeps.csv, and physiological_cycles.csv',
+      ])
+      return
+    }
+
+    const unexpectedFiles = normalizedFileNames.filter((name) => !REQUIRED_WHOOP_FILES.includes(name as typeof REQUIRED_WHOOP_FILES[number]))
+    if (unexpectedFiles.length > 0) {
+      setStatus('error')
+      setStructureErrors([
+        `Unexpected file(s): ${unexpectedFiles.join(', ')}`,
+        'Required files are workouts.csv, sleeps.csv, and physiological_cycles.csv',
+      ])
+      return
+    }
+
     if (!selectedParticipantId) {
       setStatus('error')
       setStructureErrors(['Select a participant before uploading.'])
@@ -48,7 +83,9 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
     setResult(null)
     setStructureErrors(null)
     const body = new FormData()
-    body.append('file', file)
+    files.forEach((file) => {
+      body.append('files', file)
+    })
     body.append('participantId', selectedParticipantId)
 
     try {
@@ -79,16 +116,16 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
   }, [selectedParticipantId])
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
+    const files = Array.from(e.target.files ?? [])
+    if (files.length > 0) void handleFiles(files)
   }
 
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
     if (status === 'uploading' || !selectedParticipantId) return
     setDragOver(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleFile(file)
+    const files = Array.from(e.dataTransfer.files ?? [])
+    if (files.length > 0) void handleFiles(files)
   }
 
   const openFilePicker = () => {
@@ -131,11 +168,11 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
       {/* Instructions */}
       <div style={{ marginBottom: 20, padding: '14px 18px', borderRadius: 8, background: '#001a33', border: '1px solid #0a3560' }}>
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
-          <strong style={{ color: '#fff' }}>Accepted format:</strong> WHOOP export workbook (<code>.xlsx</code>) with the standard WHOOP tabs.
+          <strong style={{ color: '#fff' }}>Accepted format:</strong> exactly 3 CSV files named <code>workouts.csv</code>, <code>sleeps.csv</code>, and <code>physiological_cycles.csv</code>.
           <br />
           <strong style={{ color: '#fff' }}>Participant assignment:</strong> Choose a participant first. Every row in the upload is linked to that participant.
           <br />
-          <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same workbook is safe — records are upserted, not duplicated.
+          <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same files is safe — records are upserted, not duplicated.
         </div>
       </div>
 
@@ -219,17 +256,18 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
             <>
               <Upload size={36} color="#0a3560" style={{ margin: '0 auto 12px', display: 'block' }} />
               <div style={{ color: '#fff', fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
-                Drop your WHOOP export here
+                Drop your WHOOP CSV files here
               </div>
               <div style={{ color: '#A5ACAF', fontSize: 13 }}>
-                {selectedParticipantId ? 'or click to browse — .xlsx files only' : 'Select a participant to enable uploads'}
+                {selectedParticipantId ? 'or click to browse — exactly workouts.csv, sleeps.csv, physiological_cycles.csv' : 'Select a participant to enable uploads'}
               </div>
             </>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".csv,text/csv"
+            multiple
             style={{ display: 'none' }}
             onChange={onInputChange}
             disabled={status === 'uploading'}
@@ -347,7 +385,7 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
           )}
 
           <button onClick={reset} style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#69BE28', fontSize: 13, background: 'none', border: '1px solid #0a3560', borderRadius: 6, padding: '8px 16px', cursor: 'pointer' }}>
-            <RotateCcw size={14} /> Import another file
+            <RotateCcw size={14} /> Import another set
           </button>
         </div>
       )}
