@@ -4,6 +4,7 @@
 -- still reference 'employee_id', 'employees', or 'all_employees' in their
 -- expressions are therefore safe to drop outright rather than rewrite.
 
+
 do $$
 declare
   policy_record record;
