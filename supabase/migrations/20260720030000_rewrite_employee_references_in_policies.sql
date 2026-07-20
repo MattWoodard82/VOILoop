@@ -2,6 +2,27 @@
 -- Some environments still have policy expressions compiled against the legacy
 -- employees table, which causes runtime errors after the rename.
 
+-- Ensure policy helper exists before recreating policies. Some environments
+-- depend on get_participant_id() in RLS expressions but may be missing it.
+do $$
+begin
+  if to_regprocedure('public.get_participant_id()') is null then
+    execute $function$
+      create function public.get_participant_id()
+      returns text
+      language sql
+      stable
+      as $$
+        select p.id
+        from public.participants p
+        where p.auth_user_id = auth.uid()
+        order by p.created_at asc
+        limit 1
+      $$;
+    $function$;
+  end if;
+end $$;
+
 do $$
 declare
   policy_record record;
@@ -103,4 +124,3 @@ begin
     execute create_policy_sql;
   end loop;
 end $$;
-
