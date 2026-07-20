@@ -22,7 +22,6 @@ as $get_participant_id$
   order by p.created_at asc
   limit 1
 $get_participant_id$;
-
 do $$
 declare
   policy_record record;
