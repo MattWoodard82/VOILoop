@@ -22,7 +22,6 @@ begin
     $function$;
   end if;
 end $$;
-
 do $$
 declare
   policy_record record;
