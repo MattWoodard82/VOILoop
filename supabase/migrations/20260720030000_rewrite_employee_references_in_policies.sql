@@ -4,31 +4,24 @@
 
 -- Ensure policy helper exists before recreating policies. Some environments
 -- depend on get_participant_id() in RLS expressions but may be missing it.
-do $$
-begin
-  if to_regprocedure('public.get_participant_id()') is null then
-    execute $function$
-      create function public.get_participant_id()
-      returns text
-      language sql
-      stable
-      as $$
-        with auth_context as (
-          select
-            coalesce(
-              nullif(current_setting('request.jwt.claim.sub', true), ''),
-              nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
-            )::uuid as auth_user_id
-        )
-        select p.id
-        from public.participants p
-        join auth_context ac on ac.auth_user_id = p.auth_user_id
-        order by p.created_at asc
-        limit 1
-      $$;
-    $function$;
-  end if;
-end $$;
+create or replace function public.get_participant_id()
+returns text
+language sql
+stable
+as $get_participant_id$
+  with auth_context as (
+    select
+      coalesce(
+        nullif(current_setting('request.jwt.claim.sub', true), ''),
+        nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+      )::uuid as auth_user_id
+  )
+  select p.id
+  from public.participants p
+  join auth_context ac on ac.auth_user_id = p.auth_user_id
+  order by p.created_at asc
+  limit 1
+$get_participant_id$;
 do $$
 declare
   policy_record record;
