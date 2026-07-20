@@ -13,9 +13,16 @@ begin
       language sql
       stable
       as $$
+        with auth_context as (
+          select
+            coalesce(
+              nullif(current_setting('request.jwt.claim.sub', true), ''),
+              nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub'
+            )::uuid as auth_user_id
+        )
         select p.id
         from public.participants p
-        where p.auth_user_id = auth.uid()
+        join auth_context ac on ac.auth_user_id = p.auth_user_id
         order by p.created_at asc
         limit 1
       $$;
