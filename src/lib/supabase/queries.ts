@@ -45,26 +45,55 @@ export async function getParticipants(): Promise<Participant[]> {
   return data ?? []
 }
 
-export async function getLatestWellness(date?: string): Promise<DailyWellness[]> {
+export async function getLatestWellness(date?: string, participantIds?: string[]): Promise<DailyWellness[]> {
+  if (participantIds && participantIds.length === 0) return []
+
   const supabase = getQueryClient()
-  let query = supabase
-    .from('daily_wellness')
-    .select('*')
-    .order('date', { ascending: false })
   if (date) {
-    query = query.eq('date', date)
-  } else {
-    const { data: latestDate } = await supabase
+    let datedQuery = supabase
       .from('daily_wellness')
-      .select('date')
-      .order('date', { ascending: false })
-      .limit(1)
-      .single()
-    if (latestDate) query = query.eq('date', latestDate.date)
+      .select('*')
+      .eq('date', date)
+      .order('participant_id', { ascending: true })
+      .order('id', { ascending: true })
+
+    if (participantIds && participantIds.length > 0) {
+      datedQuery = datedQuery.in('participant_id', participantIds)
+    }
+
+    const { data, error } = await datedQuery
+    if (error) throw error
+    return data ?? []
   }
-  const { data, error } = await query
-  if (error) throw error
-  return data ?? []
+
+  let targetParticipantIds = participantIds
+  if (!targetParticipantIds || targetParticipantIds.length === 0) {
+    const { data: participantRows, error: participantError } = await supabase
+      .from('daily_wellness')
+      .select('participant_id')
+      .order('participant_id', { ascending: true })
+    if (participantError) throw participantError
+
+    const participantIdSet = new Set((participantRows ?? []).map((row) => row.participant_id))
+    targetParticipantIds = Array.from(participantIdSet)
+  }
+
+  if (targetParticipantIds.length === 0) return []
+
+  const latestRows = await Promise.all(targetParticipantIds.map(async (participantId) => {
+    const { data, error } = await supabase
+      .from('daily_wellness')
+      .select('*')
+      .eq('participant_id', participantId)
+      .order('date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+
+    if (error) throw error
+    return data?.[0] ?? null
+  }))
+
+  return latestRows.filter((row): row is DailyWellness => row !== null)
 }
 
 export async function getWellnessTrend(participantId: string, days: number = 30): Promise<DailyWellness[]> {
@@ -227,9 +256,10 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
-  const [participants, wellness, workouts, habits, pulse, interventions] = await Promise.all([
-    getParticipants(),
-    getLatestWellness(),
+  const participants = await getParticipants()
+  const participantIds = participants.map((participant) => participant.id)
+  const [wellness, workouts, habits, pulse, interventions] = await Promise.all([
+    getLatestWellness(undefined, participantIds),
     getLatestWorkouts(),
     getLatestHabits(),
     getLatestPulse(),
