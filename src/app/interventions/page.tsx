@@ -1,8 +1,8 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getInterventions, getParticipants } from '@/lib/supabase/queries'
-import { KpiCard, Card, Badge, Alert, TimelineItem } from '@/components/ui'
-import { AlertTriangle, Plus } from 'lucide-react'
+import { KpiCard, Card, Badge, TimelineItem } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+import { InterventionCreateClient } from './InterventionCreateClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,11 +30,19 @@ export default async function InterventionsPage() {
         <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${Math.max(interventions.length - resolved.length, 0)} still open`} deltaDir="neutral" />
       </div>
 
-      <Card title="Active intervention log" badge={
-        <button className="btn-primary" style={{ fontSize: 10, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 4 }} type="button" disabled title="Intervention creation is not wired yet">
-          <Plus size={10} /> Log new (coming soon)
-        </button>
-      }>
+      <Card
+        title="Active intervention log"
+        badge={(
+          <InterventionCreateClient
+            participants={participants.map((participant) => ({
+              id: participant.id,
+              first_name: participant.first_name,
+              last_name: participant.last_name,
+              department: participant.department,
+            }))}
+          />
+        )}
+      >
         <table className="data-table">
           <thead>
             <tr>
