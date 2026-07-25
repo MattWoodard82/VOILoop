@@ -79,34 +79,38 @@ export function InterventionCreateClient({ participants }: Props) {
   const handleSubmit = async () => {
     setSaving(true)
     setError(null)
-    const response = await fetch('/api/interventions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        participant_id: participantId,
-        date_triggered: dateTriggered,
-        trigger_metric: triggerMetric,
-        trigger_value: triggerValue,
-        intervention_type: interventionType,
-        assigned_to: assignedTo,
-        notes,
-      }),
-    })
+    try {
+      const response = await fetch('/api/interventions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          participant_id: participantId,
+          date_triggered: dateTriggered,
+          trigger_metric: triggerMetric,
+          trigger_value: triggerValue,
+          intervention_type: interventionType,
+          assigned_to: assignedTo,
+          notes,
+        }),
+      })
 
-    if (!response.ok) {
-      const parsed = await parseFrontendError(response, 'Failed to create intervention')
-      const detail = parsed.detail ? ` (${parsed.detail})` : ''
-      setError(`${parsed.message}${detail}`)
+      if (!response.ok) {
+        const parsed = await parseFrontendError(response, 'Failed to create intervention')
+        const detail = parsed.detail ? ` (${parsed.detail})` : ''
+        setError(`${parsed.message}${detail}`)
+        return
+      }
+
+      const created = await response.json()
+      setOpen(false)
+      router.refresh()
+      if (created?.id) {
+        router.push(`/interventions/${created.id}`)
+      }
+    } catch {
+      setError('Failed to create intervention (network error)')
+    } finally {
       setSaving(false)
-      return
-    }
-
-    const created = await response.json()
-    setSaving(false)
-    setOpen(false)
-    router.refresh()
-    if (created?.id) {
-      router.push(`/interventions/${created.id}`)
     }
   }
 
@@ -122,8 +126,15 @@ export function InterventionCreateClient({ participants }: Props) {
       </button>
       {open && (
         <div style={modalOverlay}>
-          <div style={modalPanel}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 12 }}>Log New Intervention</div>
+          <div
+            style={modalPanel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="intervention-create-title"
+          >
+            <div id="intervention-create-title" style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 12 }}>
+              Log New Intervention
+            </div>
             {error && <Alert variant="warn">{error}</Alert>}
 
             {participants.length === 0 ? (

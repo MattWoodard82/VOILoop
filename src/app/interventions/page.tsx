@@ -30,7 +30,19 @@ export default async function InterventionsPage() {
         <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${Math.max(interventions.length - resolved.length, 0)} still open`} deltaDir="neutral" />
       </div>
 
-      <Card title="Active intervention log" badge={<InterventionCreateClient participants={participants} />}>
+      <Card
+        title="Active intervention log"
+        badge={(
+          <InterventionCreateClient
+            participants={participants.map((participant) => ({
+              id: participant.id,
+              first_name: participant.first_name,
+              last_name: participant.last_name,
+              department: participant.department,
+            }))}
+          />
+        )}
+      >
         <table className="data-table">
           <thead>
             <tr>
