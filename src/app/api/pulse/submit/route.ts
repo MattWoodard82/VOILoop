@@ -35,7 +35,8 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (participantError) {
-    return NextResponse.json({ error: participantError.message }, { status: 500 })
+    console.error('Pulse submit participant lookup failed', participantError)
+    return NextResponse.json({ error: 'Unable to submit pulse survey right now.' }, { status: 500 })
   }
 
   if (!participantRecord) {
@@ -50,7 +51,8 @@ export async function POST(request: Request) {
     .upsert(upsertRecord, { onConflict: 'participant_id,date' })
 
   if (upsertError) {
-    return NextResponse.json({ error: upsertError.message }, { status: 500 })
+    console.error('Pulse submit upsert failed', upsertError)
+    return NextResponse.json({ error: 'Unable to submit pulse survey right now.' }, { status: 500 })
   }
 
   return NextResponse.json({ success: true, date })

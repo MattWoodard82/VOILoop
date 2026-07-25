@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 interface Event {
@@ -44,10 +44,28 @@ export function AdminEventsClient() {
 
   const [nudgeMsg, setNudgeMsg] = useState('')
   const [nudgeAuthor, setNudgeAuthor] = useState('Heather Simpson')
+  const savedResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     void loadData()
+    return () => {
+      if (savedResetTimeoutRef.current) {
+        clearTimeout(savedResetTimeoutRef.current)
+        savedResetTimeoutRef.current = null
+      }
+    }
   }, [])
+
+  const triggerSavedState = () => {
+    setSaved(true)
+    if (savedResetTimeoutRef.current) {
+      clearTimeout(savedResetTimeoutRef.current)
+    }
+    savedResetTimeoutRef.current = setTimeout(() => {
+      setSaved(false)
+      savedResetTimeoutRef.current = null
+    }, 2000)
+  }
 
   const loadData = async () => {
     const supabase = createClient()
@@ -87,8 +105,7 @@ export function AdminEventsClient() {
     setNewEvent({ title: '', description: '', event_date: '', event_time: '', location: '', event_type: 'general', recurring: false, recurrence: '' })
     await loadData()
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    triggerSavedState()
   }
 
   const deleteEvent = async (id: string) => {
@@ -119,8 +136,7 @@ export function AdminEventsClient() {
     setNudgeMsg('')
     await loadData()
     setSaving(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    triggerSavedState()
   }
 
   const s = {
