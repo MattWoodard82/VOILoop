@@ -8,6 +8,7 @@ import { ChallengesAdminClient } from './challenges/ChallengesAdminClient'
 import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import type { Participant } from '@/types'
+import Link from 'next/link'
 
 async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, string>> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -88,6 +89,32 @@ export default async function AdminPage() {
           ) : (
             <ChallengesAdminClient />
           )}
+        </section>
+
+        <section id="events-nudges" className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+            Events and nudges
+          </div>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 14 }}>
+            Manage participant-facing events and weekly nudges.
+          </div>
+          <Link
+            href="/admin/events"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#69BE28',
+              color: '#002244',
+              borderRadius: 7,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Open events manager
+          </Link>
         </section>
       </div>
     </DashboardShell>
