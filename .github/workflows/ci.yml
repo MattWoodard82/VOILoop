@@ -147,6 +147,26 @@ jobs:
             psql "postgresql://postgres:postgres@127.0.0.1:5432/${db_name}" \
               -v ON_ERROR_STOP=1 <<'SQL'
           do $$
+          declare
+            table_name text;
+            required_rls_tables text[] := array[
+              'participants',
+              'daily_wellness',
+              'workouts',
+              'habits',
+              'pulse_surveys',
+              'interventions',
+              'user_access',
+              'upload_batches',
+              'import_logs',
+              'import_row_outcomes',
+              'challenges',
+              'challenge_participants',
+              'challenge_audit_log',
+              'events',
+              'weekly_nudges',
+              'event_rsvps'
+            ];
           begin
             if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'participants') then
               raise exception 'participants table missing after migration';
@@ -163,6 +183,20 @@ jobs:
             if exists (select 1 from user_roles where role = 'staff') then
               raise exception 'legacy staff role should be normalized to wellness_director';
             end if;
+
+            foreach table_name in array required_rls_tables loop
+              if exists (
+                select 1
+                from pg_class c
+                join pg_namespace n on n.oid = c.relnamespace
+                where n.nspname = 'public'
+                  and c.relname = table_name
+                  and c.relkind = 'r'
+                  and c.relrowsecurity is not true
+              ) then
+                raise exception 'RLS must be enabled on public.%', table_name;
+              end if;
+            end loop;
           end $$;
           SQL
           }
