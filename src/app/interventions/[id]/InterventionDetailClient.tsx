@@ -2,7 +2,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts'
-import { createClient } from '@/lib/supabase/client'
 
 interface Props {
   intervention: any
@@ -51,6 +50,7 @@ export function InterventionDetailClient({ intervention, participant, wellness, 
   const [wdNotes, setWdNotes] = useState(intervention.wd_notes ?? '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const first = wellness[0]
   const latest = wellness[wellness.length - 1]
@@ -66,13 +66,26 @@ export function InterventionDetailClient({ intervention, participant, wellness, 
 
   const handleSave = async () => {
     setSaving(true)
-    const supabase = createClient()
-    await supabase.from('interventions').update({
-      outcome: status,
-      notes,
-      wd_notes: wdNotes,
-      date_resolved: status === 'Resolved' ? new Date().toISOString().split('T')[0] : null,
-    }).eq('id', intervention.id)
+    setSaveError('')
+    const response = await fetch(`/api/interventions/${encodeURIComponent(intervention.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status,
+        notes,
+        wdNotes,
+      }),
+    })
+    if (!response.ok) {
+      let errorMessage = 'Unable to save intervention.'
+      try {
+        const payload = await response.json() as { error?: string }
+        if (payload.error) errorMessage = payload.error
+      } catch {}
+      setSaveError(errorMessage)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -230,6 +243,7 @@ export function InterventionDetailClient({ intervention, participant, wellness, 
             {saving ? 'Saving...' : status === 'Resolved' ? '✅ Mark resolved & save' : '💾 Save changes'}
           </button>
           {saved && <span style={{ fontSize: 12, color: '#69BE28' }}>✓ Saved successfully</span>}
+          {saveError && <span style={{ fontSize: 12, color: '#ffb4b4' }}>{saveError}</span>}
         </div>
       </div>
 
