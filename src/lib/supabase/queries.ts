@@ -45,26 +45,37 @@ export async function getParticipants(): Promise<Participant[]> {
   return data ?? []
 }
 
-export async function getLatestWellness(date?: string): Promise<DailyWellness[]> {
+export async function getLatestWellness(date?: string, participantIds?: string[]): Promise<DailyWellness[]> {
+  if (participantIds && participantIds.length === 0) return []
+
   const supabase = getQueryClient()
-  let query = supabase
-    .from('daily_wellness')
-    .select('*')
-    .order('date', { ascending: false })
+
+  let query = supabase.from('daily_wellness').select('*')
+  if (participantIds && participantIds.length > 0) {
+    query = query.in('participant_id', participantIds)
+  }
+
   if (date) {
     query = query.eq('date', date)
   } else {
-    const { data: latestDate } = await supabase
-      .from('daily_wellness')
-      .select('date')
+    query = query
+      .order('participant_id', { ascending: true })
       .order('date', { ascending: false })
-      .limit(1)
-      .single()
-    if (latestDate) query = query.eq('date', latestDate.date)
   }
+
   const { data, error } = await query
   if (error) throw error
-  return data ?? []
+  const rows = data ?? []
+  if (date) return rows
+
+  const seen = new Set<string>()
+  const latestByParticipant: DailyWellness[] = []
+  for (const row of rows) {
+    if (seen.has(row.participant_id)) continue
+    seen.add(row.participant_id)
+    latestByParticipant.push(row)
+  }
+  return latestByParticipant
 }
 
 export async function getWellnessTrend(participantId: string, days: number = 30): Promise<DailyWellness[]> {
@@ -227,9 +238,10 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
-  const [participants, wellness, workouts, habits, pulse, interventions] = await Promise.all([
-    getParticipants(),
-    getLatestWellness(),
+  const participants = await getParticipants()
+  const participantIds = participants.map((participant) => participant.id)
+  const [wellness, workouts, habits, pulse, interventions] = await Promise.all([
+    getLatestWellness(undefined, participantIds),
     getLatestWorkouts(),
     getLatestHabits(),
     getLatestPulse(),

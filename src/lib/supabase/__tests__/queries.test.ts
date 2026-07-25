@@ -1,8 +1,15 @@
-import { getLatestWorkouts } from '../queries'
+import { getLatestWellness, getLatestWorkouts, getTeamDashboard } from '../queries'
 import { createClient } from '../client'
+import { createServerSupabaseClient } from '../server'
 
 jest.mock('../client', () => ({
   createClient: jest.fn(),
+}))
+
+jest.mock('../server', () => ({
+  createServerSupabaseClient: jest.fn(() => {
+    throw new Error('Server client unavailable in unit test')
+  }),
 }))
 
 type QueryResult<T> = { data: T | null; error: { code?: string; message?: string } | null }
@@ -28,6 +35,85 @@ function makeSupabaseClient<T>(resultForStartTime: QueryResult<T>, fallbackResul
   })
 
   return { from }
+}
+
+function makeTableClient(tables: Record<string, any[]>) {
+  const from = jest.fn((table: string) => {
+    const rows = [...(tables[table] ?? [])]
+    const filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }> = []
+    const orders: Array<{ column: string; ascending: boolean }> = []
+    let limitCount: number | null = null
+
+    const builder: any = {
+      select: jest.fn(() => builder),
+      eq: jest.fn((column: string, value: any) => {
+        filters.push({ kind: 'eq', column, value })
+        return builder
+      }),
+      in: jest.fn((column: string, value: any[]) => {
+        filters.push({ kind: 'in', column, value })
+        return builder
+      }),
+      order: jest.fn((column: string, options?: { ascending?: boolean }) => {
+        orders.push({ column, ascending: options?.ascending !== false })
+        return builder
+      }),
+      limit: jest.fn((count: number) => {
+        limitCount = count
+        return builder
+      }),
+      single: jest.fn(async () => {
+        const resultRows = runQuery(rows, filters, orders, limitCount)
+        return { data: resultRows[0] ?? null, error: null }
+      }),
+      then: (resolve: (value: QueryResult<any[]>) => void, reject: (reason: unknown) => void) => {
+        const resultRows = runQuery(rows, filters, orders, limitCount)
+        return Promise.resolve({ data: resultRows, error: null }).then(resolve, reject)
+      },
+    }
+
+    return builder
+  })
+
+  return { from }
+}
+
+function runQuery(
+  rows: any[],
+  filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }>,
+  orders: Array<{ column: string; ascending: boolean }>,
+  limitCount: number | null
+) {
+  let result = [...rows]
+
+  for (const filter of filters) {
+    if (filter.kind === 'eq') {
+      result = result.filter((row) => row[filter.column] === filter.value)
+      continue
+    }
+    result = result.filter((row) => filter.value.includes(row[filter.column]))
+  }
+
+  if (orders.length > 0) {
+    result.sort((left, right) => {
+      for (const order of orders) {
+        const a = left[order.column]
+        const b = right[order.column]
+        if (a === b) continue
+        if (a == null) return order.ascending ? -1 : 1
+        if (b == null) return order.ascending ? 1 : -1
+        if (a < b) return order.ascending ? -1 : 1
+        return order.ascending ? 1 : -1
+      }
+      return 0
+    })
+  }
+
+  if (limitCount !== null) {
+    result = result.slice(0, limitCount)
+  }
+
+  return result
 }
 
 describe('getLatestWorkouts', () => {
@@ -72,5 +158,124 @@ describe('getLatestWorkouts', () => {
     )
 
     await expect(getLatestWorkouts()).rejects.toMatchObject({ code: '42P01' })
+  })
+})
+
+describe('getLatestWellness', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+  const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+
+  const wellnessRows = [
+    { id: 'w-1', participant_id: 'P1', date: '2024-06-06', recovery_score: 83, hrv_ms: 72, sleep_perf: 91, sleep_debt: 0 },
+    { id: 'w-2', participant_id: 'P1', date: '2024-06-05', recovery_score: 68, hrv_ms: 68, sleep_perf: 85, sleep_debt: 0 },
+    { id: 'w-3', participant_id: 'P2', date: '2024-06-05', recovery_score: 41, hrv_ms: 49, sleep_perf: 70, sleep_debt: 1 },
+    { id: 'w-4', participant_id: 'P2', date: '2024-06-04', recovery_score: 36, hrv_ms: 46, sleep_perf: 65, sleep_debt: 1 },
+    { id: 'w-5', participant_id: 'P3', date: '2024-06-07', recovery_score: 95, hrv_ms: 80, sleep_perf: 94, sleep_debt: 0 },
+  ]
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCreateServerSupabaseClient.mockImplementation(() => {
+      throw new Error('Server client unavailable in unit test')
+    })
+  })
+
+  test('returns latest record per participant when date is omitted', async () => {
+    mockCreateClient.mockReturnValue(makeTableClient({ daily_wellness: wellnessRows }) as never)
+
+    await expect(getLatestWellness(undefined, ['P1', 'P2', 'P3'])).resolves.toEqual([
+      wellnessRows[0],
+      wellnessRows[2],
+      wellnessRows[4],
+    ])
+  })
+
+  test('returns all records for an explicit date filter', async () => {
+    mockCreateClient.mockReturnValue(makeTableClient({ daily_wellness: wellnessRows }) as never)
+
+    await expect(getLatestWellness('2024-06-05')).resolves.toEqual([
+      wellnessRows[1],
+      wellnessRows[2],
+    ])
+  })
+})
+
+describe('getTeamDashboard', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+  const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCreateServerSupabaseClient.mockImplementation(() => {
+      throw new Error('Server client unavailable in unit test')
+    })
+  })
+
+  test('uses each participant latest wellness row when calculating stats', async () => {
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alice',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+      {
+        id: 'P2',
+        first_name: 'Bob',
+        last_name: 'Baker',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Tech',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0 },
+      { id: 'w2', participant_id: 'P1', date: '2024-06-07', recovery_score: 74, hrv_ms: 68, sleep_perf: 87, sleep_debt: 0 },
+      { id: 'w3', participant_id: 'P2', date: '2024-06-07', recovery_score: 40, hrv_ms: 50, sleep_perf: 60, sleep_debt: 0 },
+      { id: 'w4', participant_id: 'P3', date: '2024-06-09', recovery_score: 99, hrv_ms: 90, sleep_perf: 98, sleep_debt: 0 },
+    ]
+
+    const pulseSurveys = [
+      { id: 'pulse1', participant_id: 'P1', date: '2024-06-08', wellbeing_score: 7, burnout_score: 3, manager_support: 7, energy_score: 6, psych_safety: 8, workload_score: 7, work_life_balance: 6, recommend_score: 7 },
+      { id: 'pulse2', participant_id: 'P2', date: '2024-06-08', wellbeing_score: 6, burnout_score: 4, manager_support: 6, energy_score: 6, psych_safety: 7, workload_score: 6, work_life_balance: 6, recommend_score: 6 },
+      { id: 'pulse-old', participant_id: 'P1', date: '2024-06-07', wellbeing_score: 5, burnout_score: 5, manager_support: 5, energy_score: 5, psych_safety: 5, workload_score: 5, work_life_balance: 5, recommend_score: 5 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participantById = Object.fromEntries(dashboard.participants.map((participant) => [participant.id, participant]))
+
+    expect(participantById.P1.latest_wellness?.date).toBe('2024-06-08')
+    expect(participantById.P2.latest_wellness?.date).toBe('2024-06-07')
+    expect(dashboard.stats.avg_recovery).toBe(60)
+    expect(dashboard.stats.avg_hrv).toBe(60)
+    expect(dashboard.stats.avg_sleep_perf).toBe(75)
+    expect(dashboard.stats.total_participants).toBe(2)
+    expect(dashboard.stats.participation_rate).toBe(100)
   })
 })
