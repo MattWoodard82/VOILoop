@@ -198,6 +198,22 @@ describe('getLatestWellness', () => {
       wellnessRows[2],
     ])
   })
+
+  test('returns explicit-date rows in deterministic participant order', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        daily_wellness: [
+          { id: 'w-10', participant_id: 'P2', date: '2024-06-12', recovery_score: 45, hrv_ms: 50, sleep_perf: 71, sleep_debt: 1 },
+          { id: 'w-11', participant_id: 'P1', date: '2024-06-12', recovery_score: 70, hrv_ms: 66, sleep_perf: 88, sleep_debt: 0 },
+        ],
+      }) as never
+    )
+
+    await expect(getLatestWellness('2024-06-12')).resolves.toEqual([
+      { id: 'w-11', participant_id: 'P1', date: '2024-06-12', recovery_score: 70, hrv_ms: 66, sleep_perf: 88, sleep_debt: 0 },
+      { id: 'w-10', participant_id: 'P2', date: '2024-06-12', recovery_score: 45, hrv_ms: 50, sleep_perf: 71, sleep_debt: 1 },
+    ])
+  })
 })
 
 describe('getTeamDashboard', () => {
