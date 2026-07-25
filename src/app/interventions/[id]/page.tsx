@@ -1,7 +1,7 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { createServerSupabaseClient } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireAuth } from '@/lib/supabase/server'
 import { InterventionDetailClient } from './InterventionDetailClient'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +10,9 @@ export default async function InterventionDetailPage({
 }: {
   params: { id: string }
 }) {
+  const access = await requireAuth(['admin', 'wellness_director'])
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+
   const supabase = createServerSupabaseClient()
 
   const { data: intervention } = await supabase

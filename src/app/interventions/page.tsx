@@ -3,10 +3,15 @@ import { getInterventions, getParticipants } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, Alert, TimelineItem } from '@/components/ui'
 import { AlertTriangle, Plus } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { requireAuth } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function InterventionsPage() {
+  const access = await requireAuth(['admin', 'wellness_director'])
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+
   const [interventions, participants] = await Promise.all([
     getInterventions(),
     getParticipants(),

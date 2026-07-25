@@ -3,10 +3,15 @@ import { getTeamDashboard, getTeamWellnessTrend } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, Alert } from '@/components/ui'
 import { Check } from 'lucide-react'
 import { OutcomesCharts } from './OutcomesCharts'
+import { requireAuth } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function OutcomesPage() {
+  const access = await requireAuth(['admin', 'wellness_director'])
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+
   const [{ participants, stats, interventions }, trend] = await Promise.all([
     getTeamDashboard(),
     getTeamWellnessTrend(5),

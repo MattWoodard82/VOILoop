@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface Event {
   id: string
@@ -21,10 +20,6 @@ interface Nudge {
   week_of: string
 }
 
-function isNoRowsError(error: { code?: string | null } | null): boolean {
-  return error?.code === 'PGRST116'
-}
-
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -34,10 +29,6 @@ function getErrorMessage(error: unknown): string {
     }
   }
   return String(error)
-}
-
-interface Props {
-  participantId: string
 }
 
 const typeIcon: Record<string, string> = {
@@ -70,7 +61,7 @@ function daysUntil(d: string) {
   return `In ${diff} days`
 }
 
-export function EventsNudgeCard({ participantId }: Props) {
+export function EventsNudgeCard() {
   const [events, setEvents] = useState<Event[]>([])
   const [nudge, setNudge] = useState<Nudge | null>(null)
   const [rsvps, setRsvps] = useState<string[]>([])
@@ -79,48 +70,21 @@ export function EventsNudgeCard({ participantId }: Props) {
 
   useEffect(() => {
     const loadCardData = async () => {
-      const supabase = createClient()
-      const today = new Date().toISOString().split('T')[0]
-
       try {
-        const { data: eventsData, error: eventsError } = await supabase
-          .from('events')
-          .select('*')
-          .gte('event_date', today)
-          .order('event_date', { ascending: true })
-          .limit(5)
-
-        if (eventsError) {
-          throw eventsError
+        const response = await fetch('/api/participant/events', { cache: 'no-store' })
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => null) as { error?: string } | null
+          throw new Error(errorPayload?.error ?? `Request failed (${response.status})`)
+        }
+        const payload = await response.json() as {
+          events?: Event[]
+          nudge?: Nudge | null
+          rsvpEventIds?: string[]
         }
 
-        const weekOf = new Date()
-        weekOf.setDate(weekOf.getDate() - weekOf.getDay() + 1)
-        const weekStr = weekOf.toISOString().split('T')[0]
-        const { data: nudgeData, error: nudgeError } = await supabase
-          .from('weekly_nudges')
-          .select('message, author, week_of')
-          .lte('week_of', weekStr)
-          .order('week_of', { ascending: false })
-          .limit(1)
-          .single()
-
-        if (nudgeError && !isNoRowsError(nudgeError)) {
-          throw nudgeError
-        }
-
-        const { data: rsvpData, error: rsvpError } = await supabase
-          .from('event_rsvps')
-          .select('event_id')
-          .eq('participant_id', participantId)
-
-        if (rsvpError) {
-          throw rsvpError
-        }
-
-        setEvents(eventsData ?? [])
-        setNudge(nudgeData ?? null)
-        setRsvps(rsvpData?.map(r => r.event_id) ?? [])
+        setEvents(payload.events ?? [])
+        setNudge(payload.nudge ?? null)
+        setRsvps(payload.rsvpEventIds ?? [])
         setError('')
       } catch (fetchError) {
         const message = getErrorMessage(fetchError)
@@ -130,28 +94,26 @@ export function EventsNudgeCard({ participantId }: Props) {
       }
     }
     void loadCardData()
-  }, [participantId])
+  }, [])
 
   const toggleRsvp = async (eventId: string) => {
-    const supabase = createClient()
     const isRsvped = rsvps.includes(eventId)
-
+    const response = await fetch('/api/participant/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, going: !isRsvped }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null
+      setError(`RSVP update failed. Detail: ${payload?.error ?? 'Request failed.'}`)
+      return
+    }
     if (isRsvped) {
-      const { error } = await supabase.from('event_rsvps').delete()
-        .eq('event_id', eventId)
-        .eq('participant_id', participantId)
-      if (error) {
-        setError(`RSVP update failed. Detail: ${error.message}`)
-        return
-      }
       setRsvps(prev => prev.filter(id => id !== eventId))
     } else {
-      const { error } = await supabase.from('event_rsvps').insert({ event_id: eventId, participant_id: participantId })
-      if (error) {
-        setError(`RSVP update failed. Detail: ${error.message}`)
-        return
+      if (!rsvps.includes(eventId)) {
+        setRsvps(prev => [...prev, eventId])
       }
-      setRsvps(prev => [...prev, eventId])
     }
   }
 
