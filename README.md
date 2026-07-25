@@ -216,6 +216,17 @@ The importer now persists each upload as a tracked batch:
    - `import_row_outcomes` contains row-level failures when validation or DB writes fail.
 5. Re-upload the same file and confirm there are no duplicate logical records.
 
+### Local RLS and role-access test runbook
+1. Start local Supabase and apply migrations:
+   - `npx supabase start`
+   - `npx supabase db reset`
+2. Ensure `.env.local` contains local Supabase URL, anon key, and service-role key.
+3. Run role-access route tests (covers participant, wellness_director, admin, unauthenticated behavior):
+   - `npm test -- --runInBand src/app/api/__tests__/role-access.e2e.test.ts`
+4. Run RLS integration tests against local Supabase:
+   - `RUN_SUPABASE_RLS_TESTS=true npm test -- --runInBand src/lib/supabase/__tests__/rls.integration.test.ts`
+   - PowerShell: `$env:RUN_SUPABASE_RLS_TESTS='true'; npm test -- --runInBand src/lib/supabase/__tests__/rls.integration.test.ts`
+
 > This branch does not apply schema changes to the hosted demo Supabase automatically.  
 > Schema updates are repository SQL changes and should be applied only to the environment you choose.
 
