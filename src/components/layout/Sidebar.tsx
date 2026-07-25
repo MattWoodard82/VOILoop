@@ -24,6 +24,7 @@ const ADMIN_NAV = [
   ...LEADERSHIP_NAV,
   { label: 'Admin', items: [
     { href: '/admin', label: 'Admin Console', icon: Users },
+    { href: '/admin/events', label: 'Events and Nudges', icon: MessageSquare },
   ]},
 ]
 
