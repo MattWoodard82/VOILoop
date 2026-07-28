@@ -1,6 +1,5 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { createClient } from '@/lib/supabase/client'
 
 interface Event {
   id: string
@@ -27,6 +26,14 @@ const TYPE_LABELS: Record<string, string> = {
   fitness: '🧘 Fitness',
   race: '🏆 Race',
   general: '📅 General',
+}
+
+async function parseErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.json() as { error?: string }
+    if (payload.error) return payload.error
+  } catch {}
+  return fallback
 }
 
 export function AdminEventsClient() {
@@ -68,37 +75,32 @@ export function AdminEventsClient() {
   }
 
   const loadData = async () => {
-    const supabase = createClient()
-    const today = new Date().toISOString().split('T')[0]
-    const { data: eventsData, error: eventsError } = await supabase
-      .from('events').select('*').gte('event_date', today).order('event_date')
-    const { data: nudgesData, error: nudgesError } = await supabase
-      .from('weekly_nudges').select('*').order('week_of', { ascending: false }).limit(8)
-
-    if (eventsError) {
-      setError(`Unable to load events: ${eventsError.message}`)
+    const response = await fetch('/api/admin/events', { cache: 'no-store' })
+    if (!response.ok) {
+      const message = await parseErrorMessage(response, 'Unable to load events and nudges.')
+      setError(`Unable to load events: ${message}`)
       return
     }
-    if (nudgesError) {
-      setError(`Unable to load nudges: ${nudgesError.message}`)
-      return
-    }
-
-    setEvents(eventsData ?? [])
-    setNudges(nudgesData ?? [])
+    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[] }
+    setEvents(payload.events ?? [])
+    setNudges(payload.nudges ?? [])
     setError('')
   }
 
   const saveEvent = async () => {
     if (!newEvent.title || !newEvent.event_date) return
     setSaving(true)
-    const supabase = createClient()
-    const { error: saveError } = await supabase.from('events').insert({
-      ...newEvent,
-      recurrence: newEvent.recurring ? newEvent.recurrence : null,
+    const response = await fetch('/api/admin/events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...newEvent,
+        recurrence: newEvent.recurring ? newEvent.recurrence : null,
+      }),
     })
-    if (saveError) {
-      setError(`Unable to save event: ${saveError.message}`)
+    if (!response.ok) {
+      const message = await parseErrorMessage(response, 'Unable to save event.')
+      setError(`Unable to save event: ${message}`)
       setSaving(false)
       return
     }
@@ -109,10 +111,12 @@ export function AdminEventsClient() {
   }
 
   const deleteEvent = async (id: string) => {
-    const supabase = createClient()
-    const { error: deleteError } = await supabase.from('events').delete().eq('id', id)
-    if (deleteError) {
-      setError(`Unable to delete event: ${deleteError.message}`)
+    const response = await fetch(`/api/admin/events/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const message = await parseErrorMessage(response, 'Unable to delete event.')
+      setError(`Unable to delete event: ${message}`)
       return
     }
     await loadData()
@@ -121,15 +125,17 @@ export function AdminEventsClient() {
   const saveNudge = async () => {
     if (!nudgeMsg) return
     setSaving(true)
-    const supabase = createClient()
-    const weekOf = new Date()
-    weekOf.setDate(weekOf.getDate() - weekOf.getDay() + 1)
-    const weekStr = weekOf.toISOString().split('T')[0]
-    const { error: saveError } = await supabase.from('weekly_nudges').upsert({
-      week_of: weekStr, message: nudgeMsg, author: nudgeAuthor,
-    }, { onConflict: 'week_of' })
-    if (saveError) {
-      setError(`Unable to publish nudge: ${saveError.message}`)
+    const response = await fetch('/api/admin/events', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: nudgeMsg,
+        author: nudgeAuthor,
+      }),
+    })
+    if (!response.ok) {
+      const message = await parseErrorMessage(response, 'Unable to publish nudge.')
+      setError(`Unable to publish nudge: ${message}`)
       setSaving(false)
       return
     }
