@@ -180,6 +180,9 @@ export function TeamRosterClient({ participants }: { participants: ParticipantWi
                   ['Calories', String(selected.latest_workout.calories)],
                   ['Max HR', `${selected.latest_workout.max_hr} bpm`],
                   ['Avg HR', `${selected.latest_workout.avg_hr} bpm`],
+                  ...(selected.latest_workout.zone1_pct != null ? [
+                    ['HR Z1–Z5', `${selected.latest_workout.zone1_pct}% · ${selected.latest_workout.zone2_pct ?? '—'}% · ${selected.latest_workout.zone3_pct ?? '—'}% · ${selected.latest_workout.zone4_pct ?? '—'}% · ${selected.latest_workout.zone5_pct ?? '—'}%`],
+                  ] : []),
                 ].map(([k, v]) => (
                   <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #0a3560', fontSize: 11 }}>
                     <span style={{ color: '#A5ACAF' }}>{k}</span><strong>{v}</strong>
