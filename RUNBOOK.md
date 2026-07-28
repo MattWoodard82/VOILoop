@@ -36,6 +36,17 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 5. Verify production pages that rely on changed data.
 6. Do **not** run `npm run db:seed` against pilot/prod. Seed data is local-development only.
 
+### RLS-sensitive release checklist (required for PHI tables)
+
+Use this checklist whenever a PR changes Supabase schema, policies, auth checks, or any browser/API data path.
+
+1. Confirm new/modified public tables have **RLS enabled**.
+2. Confirm explicit policies exist for intended roles (`participant`, `wellness_director`, `admin`).
+3. Confirm privileged writes are server-mediated (API route/server action) unless policy is intentionally allowing browser writes.
+4. Verify participant users cannot read or write another participant's data via direct API calls.
+5. Verify leadership/admin dashboards still load with expected access.
+6. Include rollback notes (which migration to revert with PITR if needed).
+
 ## Critical configuration requirements
 
 ### Supabase schema deploy configuration
