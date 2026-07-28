@@ -61,31 +61,23 @@ create index if not exists idx_events_event_date on public.events(event_date);
 create index if not exists idx_weekly_nudges_week_of on public.weekly_nudges(week_of desc);
 do $$
 begin
-  -- Some pre-RLS environments may already have a conflicting object named
-  -- idx_event_rsvps_participant. Ensure the participant_id lookup index exists
-  -- without failing the migration on name collisions.
-  if not exists (
-    select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and tablename = 'event_rsvps'
-      and indexdef like '%(participant_id)%'
-  ) then
-    begin
-      create index idx_event_rsvps_participant on public.event_rsvps(participant_id);
-    exception
-      when duplicate_table then
-        begin
-          create index if not exists idx_event_rsvps_participant_event_rsvps
-            on public.event_rsvps(participant_id);
-        exception
-          when insufficient_privilege then
-            raise notice 'Skipping fallback event_rsvps participant index (insufficient privilege).';
-        end;
-      when insufficient_privilege then
-        raise notice 'Skipping event_rsvps participant index (insufficient privilege).';
-    end;
-  end if;
+  -- Index is performance-only. On drifted environments this step may fail due
+  -- to existing conflicting objects or ownership/privilege differences; do not
+  -- block the security migration when that happens.
+  begin
+    create index idx_event_rsvps_participant on public.event_rsvps(participant_id);
+  exception
+    when duplicate_table or duplicate_object then
+      begin
+        create index if not exists idx_event_rsvps_participant_event_rsvps
+          on public.event_rsvps(participant_id);
+      exception
+        when others then
+          raise notice 'Skipping fallback event_rsvps participant index: %', sqlerrm;
+      end;
+    when others then
+      raise notice 'Skipping event_rsvps participant index: %', sqlerrm;
+  end;
 end $$;
 
 -- ---------------------------------------------------------------------------
