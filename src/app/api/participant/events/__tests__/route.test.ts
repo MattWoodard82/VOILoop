@@ -126,7 +126,7 @@ describe('/api/participant/events', () => {
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
     const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
-    const insert = jest.fn(async () => ({ error: null }))
+    const upsert = jest.fn(async () => ({ error: null }))
 
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
@@ -139,7 +139,7 @@ describe('/api/participant/events', () => {
             })),
           }
         }
-        if (table === 'event_rsvps') return { insert }
+        if (table === 'event_rsvps') return { upsert }
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)
@@ -148,7 +148,10 @@ describe('/api/participant/events', () => {
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(200)
-    expect(insert).toHaveBeenCalledWith({ event_id: 'evt-1', participant_id: 'EMP123' })
+    expect(upsert).toHaveBeenCalledWith(
+      { event_id: 'evt-1', participant_id: 'EMP123' },
+      { onConflict: 'event_id,participant_id', ignoreDuplicates: true },
+    )
   })
 
   test('POST removes RSVP for participant when going=false', async () => {
@@ -187,5 +190,26 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(200)
     expect(eqEvent).toHaveBeenCalledWith('event_id', 'evt-1')
     expect(eqParticipant).toHaveBeenCalledWith('participant_id', 'EMP123')
+  })
+
+  test('POST returns 400 when going is not a boolean', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return { select: jest.fn(() => ({ eq: jest.fn(() => ({ maybeSingle: participantsMaybeSingle })) })) }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
+
+    const response = await POST(makePostRequest({ eventId: 'evt-1', going: 'true' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('boolean') })
   })
 })
