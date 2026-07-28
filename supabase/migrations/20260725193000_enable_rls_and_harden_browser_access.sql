@@ -59,7 +59,29 @@ create table if not exists public.event_rsvps (
 
 create index if not exists idx_events_event_date on public.events(event_date);
 create index if not exists idx_weekly_nudges_week_of on public.weekly_nudges(week_of desc);
-create index if not exists idx_event_rsvps_participant on public.event_rsvps(participant_id);
+do $$
+begin
+  -- Some pre-RLS environments may already have a conflicting object named
+  -- idx_event_rsvps_participant. Ensure the participant_id lookup index exists
+  -- without failing the migration on name collisions.
+  if not exists (
+    select 1
+    from pg_index i
+    join pg_class t on t.oid = i.indrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'event_rsvps'
+      and pg_get_indexdef(i.indexrelid) like '%(participant_id)%'
+  ) then
+    begin
+      create index idx_event_rsvps_participant on public.event_rsvps(participant_id);
+    exception
+      when duplicate_table then
+        create index if not exists idx_event_rsvps_participant_event_rsvps
+          on public.event_rsvps(participant_id);
+    end;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Enable RLS on browser-reachable and PHI-relevant tables
