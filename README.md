@@ -51,6 +51,7 @@ npm run db:seed
 ```
 `db:seed` is guarded for local development and refuses non-local Supabase URLs by default.
 If you intentionally need to seed a remote non-pilot, non-production environment, set `VOILOOP_ALLOW_NON_LOCAL_SEED=true` explicitly for that one run. This override does not bypass the `VOILOOP_ENV=pilot` or `VOILOOP_ENV=production` block.
+`db:seed` uses `SUPABASE_SERVICE_ROLE_KEY` so local seeding continues to work when RLS is enabled.
 
 This inserts:
 - Travis Brandenburgh (COO) — exact WHOOP data from June 9 2026
@@ -214,6 +215,17 @@ The importer now persists each upload as a tracked batch:
    - Upserts landed in normalized tables with `source_batch_id` set.
    - `import_row_outcomes` contains row-level failures when validation or DB writes fail.
 5. Re-upload the same file and confirm there are no duplicate logical records.
+
+### Local RLS and role-access test runbook
+1. Start local Supabase and apply migrations:
+   - `npx supabase start`
+   - `npx supabase db reset`
+2. Ensure `.env.local` contains local Supabase URL, anon key, and service-role key.
+3. Run role-access route tests (covers participant, wellness_director, admin, unauthenticated behavior):
+   - `npm test -- --runInBand src/app/api/__tests__/role-access.e2e.test.ts`
+4. Run RLS integration tests against local Supabase:
+   - `RUN_SUPABASE_RLS_TESTS=true npm test -- --runInBand src/lib/supabase/__tests__/rls.integration.test.ts`
+   - PowerShell: `$env:RUN_SUPABASE_RLS_TESTS='true'; npm test -- --runInBand src/lib/supabase/__tests__/rls.integration.test.ts`
 
 > This branch does not apply schema changes to the hosted demo Supabase automatically.  
 > Schema updates are repository SQL changes and should be applied only to the environment you choose.

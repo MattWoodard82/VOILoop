@@ -2,11 +2,17 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getInterventions, getParticipants } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, TimelineItem } from '@/components/ui'
 import { formatDate } from '@/lib/utils'
+import { requireAuth } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 import { InterventionCreateClient } from './InterventionCreateClient'
 
 export const dynamic = 'force-dynamic'
 
 export default async function InterventionsPage() {
+  const access = await requireAuth()
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
+
   const [interventions, participants] = await Promise.all([
     getInterventions(),
     getParticipants(),

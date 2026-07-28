@@ -2,10 +2,16 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getTeamDashboard, getLatestPulse } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, BarRow } from '@/components/ui'
 import { initials, safeAvg } from '@/lib/utils'
+import { requireAuth } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PulsePage() {
+  const access = await requireAuth()
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
+
   const [{ participants }, pulse] = await Promise.all([
     getTeamDashboard(),
     getLatestPulse(),
