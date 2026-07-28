@@ -111,9 +111,7 @@ export function EventsNudgeCard() {
     if (isRsvped) {
       setRsvps(prev => prev.filter(id => id !== eventId))
     } else {
-      if (!rsvps.includes(eventId)) {
-        setRsvps(prev => [...prev, eventId])
-      }
+      setRsvps(prev => prev.includes(eventId) ? prev : [...prev, eventId])
     }
   }
 

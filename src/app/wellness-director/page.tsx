@@ -9,8 +9,9 @@ import { redirect } from 'next/navigation'
 export const dynamic = 'force-dynamic'
 
 export default async function WellnessDirectorPage() {
-  const access = await requireAuth(['admin', 'wellness_director'])
+  const access = await requireAuth()
   if ('redirect' in access && access.redirect) redirect(access.redirect)
+  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
 
   const { participants, stats, interventions } = await getTeamDashboard()
   const highRisk = participants.filter(e => e.risk_level === 'High')

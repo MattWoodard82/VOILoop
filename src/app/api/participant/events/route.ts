@@ -92,10 +92,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'eventId is required.' }, { status: 400 })
   }
 
-  if (payload.going) {
+  if (typeof payload.going !== 'boolean') {
+    return NextResponse.json({ error: '`going` must be a boolean.' }, { status: 400 })
+  }
+
+  if (payload.going === true) {
     const { error } = await supabase
       .from('event_rsvps')
-      .insert({ event_id: eventId, participant_id: participantId })
+      .upsert({ event_id: eventId, participant_id: participantId }, { onConflict: 'event_id,participant_id', ignoreDuplicates: true })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   } else {
     const { error } = await supabase

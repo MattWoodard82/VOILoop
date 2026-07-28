@@ -10,8 +10,9 @@ export default async function InterventionDetailPage({
 }: {
   params: { id: string }
 }) {
-  const access = await requireAuth(['admin', 'wellness_director'])
+  const access = await requireAuth()
   if ('redirect' in access && access.redirect) redirect(access.redirect)
+  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
 
   const supabase = createServerSupabaseClient()
 
