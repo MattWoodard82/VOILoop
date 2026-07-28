@@ -66,19 +66,24 @@ begin
   -- without failing the migration on name collisions.
   if not exists (
     select 1
-    from pg_index i
-    join pg_class t on t.oid = i.indrelid
-    join pg_namespace n on n.oid = t.relnamespace
-    where n.nspname = 'public'
-      and t.relname = 'event_rsvps'
-      and pg_get_indexdef(i.indexrelid) like '%(participant_id)%'
+    from pg_indexes
+    where schemaname = 'public'
+      and tablename = 'event_rsvps'
+      and indexdef like '%(participant_id)%'
   ) then
     begin
       create index idx_event_rsvps_participant on public.event_rsvps(participant_id);
     exception
       when duplicate_table then
-        create index if not exists idx_event_rsvps_participant_event_rsvps
-          on public.event_rsvps(participant_id);
+        begin
+          create index if not exists idx_event_rsvps_participant_event_rsvps
+            on public.event_rsvps(participant_id);
+        exception
+          when insufficient_privilege then
+            raise notice 'Skipping fallback event_rsvps participant index (insufficient privilege).';
+        end;
+      when insufficient_privilege then
+        raise notice 'Skipping event_rsvps participant index (insufficient privilege).';
     end;
   end if;
 end $$;
