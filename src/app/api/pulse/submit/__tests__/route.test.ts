@@ -47,11 +47,11 @@ describe('POST /api/pulse/submit', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-2' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const response = await POST(makeJsonRequest({ psychological_safety: 8 }))
+    const response = await POST(makeJsonRequest({ wellbeing_score: 8 }))
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'Unexpected field: psychological_safety',
+      error: 'Unexpected field: wellbeing_score',
     })
   })
 
@@ -69,7 +69,7 @@ describe('POST /api/pulse/submit', () => {
       })),
     } as never)
 
-    const response = await POST(makeJsonRequest({ wellbeing_score: 7 }))
+    const response = await POST(makeJsonRequest({ energy_level: 4 }))
 
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({
@@ -103,27 +103,31 @@ describe('POST /api/pulse/submit', () => {
     } as never)
 
     const response = await POST(makeJsonRequest({
-      wellbeing_score: 8,
-      burnout_score: 3,
-      manager_support: 7,
-      energy_score: 6,
-      psych_safety: 9,
-      workload_score: 5,
-      work_life_balance: 8,
-      recommend_score: 9,
+      confident_health: true,
+      body_trending_good: false,
+      energy_level: 4,
+      rest_quality: 3,
+      stress_level: 2,
+      physical_activity: ['fitness_center', 'outside'],
+      mental_wellbeing: 5,
+      program_supported: 'yes',
+      whoop_reviewed: 'yes_regularly',
+      health_flag: 'Feeling a bit tired mid-week.',
     }))
 
     expect(response.status).toBe(200)
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
       participant_id: 'EMP777',
-      wellbeing_score: 8,
-      burnout_score: 3,
-      manager_support: 7,
-      energy_score: 6,
-      psych_safety: 9,
-      workload_score: 5,
-      work_life_balance: 8,
-      recommend_score: 9,
+      confident_health: true,
+      body_trending_good: false,
+      energy_level: 4,
+      rest_quality: 3,
+      stress_level: 2,
+      physical_activity: ['fitness_center', 'outside'],
+      mental_wellbeing: 5,
+      program_supported: 'yes',
+      whoop_reviewed: 'yes_regularly',
+      health_flag: 'Feeling a bit tired mid-week.',
     }), { onConflict: 'participant_id,date' })
   })
 })
