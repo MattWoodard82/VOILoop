@@ -59,7 +59,26 @@ create table if not exists public.event_rsvps (
 
 create index if not exists idx_events_event_date on public.events(event_date);
 create index if not exists idx_weekly_nudges_week_of on public.weekly_nudges(week_of desc);
-create index if not exists idx_event_rsvps_participant on public.event_rsvps(participant_id);
+do $$
+begin
+  -- Index is performance-only. On drifted environments this step may fail due
+  -- to existing conflicting objects or ownership/privilege differences; do not
+  -- block the security migration when that happens.
+  begin
+    create index idx_event_rsvps_participant on public.event_rsvps(participant_id);
+  exception
+    when duplicate_table or duplicate_object then
+      begin
+        create index if not exists idx_event_rsvps_participant_event_rsvps
+          on public.event_rsvps(participant_id);
+      exception
+        when others then
+          raise notice 'Skipping fallback event_rsvps participant index: %', sqlerrm;
+      end;
+    when others then
+      raise notice 'Skipping event_rsvps participant index: %', sqlerrm;
+  end;
+end $$;
 
 -- ---------------------------------------------------------------------------
 -- Enable RLS on browser-reachable and PHI-relevant tables
@@ -332,6 +351,28 @@ on public.weekly_nudges
 for all
 using (public.current_app_role() = 'admin')
 with check (public.current_app_role() = 'admin');
+
+-- Align event_rsvps schema: prod has legacy 'employee_id' column name and legacy
+-- policy names from before the rename_employees_to_participants migration era.
+do $$
+begin
+  -- Rename employee_id -> participant_id if the old column name is still present.
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'event_rsvps'
+      and column_name = 'employee_id'
+  ) then
+    alter table public.event_rsvps rename column employee_id to participant_id;
+  end if;
+  -- Drop legacy policies that pre-date the RLS hardening migration.
+  drop policy if exists admin_write_rsvps on public.event_rsvps;
+  drop policy if exists all_read_rsvps on public.event_rsvps;
+  drop policy if exists employee_insert_rsvp on public.event_rsvps;
+exception
+  when others then
+    raise exception 'event_rsvps schema alignment failed: %', sqlerrm;
+end $$;
 
 drop policy if exists event_rsvps_select_scoped on public.event_rsvps;
 drop policy if exists event_rsvps_mutate_scoped on public.event_rsvps;
