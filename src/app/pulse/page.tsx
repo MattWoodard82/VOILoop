@@ -25,7 +25,7 @@ export default async function PulsePage() {
 
   const questions = [
     { label: 'I feel supported by my manager', key: 'manager_support' as const },
-    { label: 'I have energy at end of my shift', key: 'energy_score' as const },
+    { label: 'How much energy have you had this week overall?', key: 'energy_score' as const },
     { label: 'I feel safe raising wellbeing concerns', key: 'psych_safety' as const },
     { label: 'My workload feels manageable', key: 'workload_score' as const },
     { label: 'Work-life balance is satisfactory', key: 'work_life_balance' as const },
