@@ -352,6 +352,28 @@ for all
 using (public.current_app_role() = 'admin')
 with check (public.current_app_role() = 'admin');
 
+-- Align event_rsvps schema: prod has legacy 'employee_id' column name and legacy
+-- policy names from before the rename_employees_to_participants migration era.
+do $$
+begin
+  -- Rename employee_id -> participant_id if the old column name is still present.
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'event_rsvps'
+      and column_name = 'employee_id'
+  ) then
+    alter table public.event_rsvps rename column employee_id to participant_id;
+  end if;
+  -- Drop legacy policies that pre-date the RLS hardening migration.
+  drop policy if exists admin_write_rsvps on public.event_rsvps;
+  drop policy if exists all_read_rsvps on public.event_rsvps;
+  drop policy if exists employee_insert_rsvp on public.event_rsvps;
+exception
+  when others then
+    raise exception 'event_rsvps schema alignment failed: %', sqlerrm;
+end $$;
+
 drop policy if exists event_rsvps_select_scoped on public.event_rsvps;
 drop policy if exists event_rsvps_mutate_scoped on public.event_rsvps;
 create policy event_rsvps_select_scoped
