@@ -126,7 +126,7 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
   // score per participant rather than weighting heavy uploaders more.
   const byMonth: Record<string, Record<string, number>> = {}
   ;(data ?? []).forEach((row) => {
-    if (!row.recovery_score) return
+    if (row.recovery_score === null || row.recovery_score === undefined) return
     const month = row.date.slice(0, 7)
     if (!byMonth[month]) byMonth[month] = {}
     byMonth[month][row.participant_id] = row.recovery_score

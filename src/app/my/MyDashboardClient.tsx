@@ -310,7 +310,13 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
               {workout.zone1_pct != null && (
                 <MetricRow
                   label="HR zones (Z1–Z5)"
-                  value={`${workout.zone1_pct}% · ${workout.zone2_pct ?? '—'}% · ${workout.zone3_pct ?? '—'}% · ${workout.zone4_pct ?? '—'}% · ${workout.zone5_pct ?? '—'}%`}
+                  value={[
+                    workout.zone1_pct != null ? `${workout.zone1_pct}%` : '—',
+                    workout.zone2_pct != null ? `${workout.zone2_pct}%` : '—',
+                    workout.zone3_pct != null ? `${workout.zone3_pct}%` : '—',
+                    workout.zone4_pct != null ? `${workout.zone4_pct}%` : '—',
+                    workout.zone5_pct != null ? `${workout.zone5_pct}%` : '—',
+                  ].join(' · ')}
                 />
               )}
             </>
