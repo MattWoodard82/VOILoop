@@ -116,19 +116,25 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
   since.setMonth(since.getMonth() - months)
   const { data, error } = await supabase
     .from('daily_wellness')
-    .select('date, recovery_score')
+    .select('participant_id, date, recovery_score')
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
   if (error) throw error
-  const byMonth: Record<string, number[]> = {}
+
+  // Build month → participantId → latest score (later dates overwrite earlier ones
+  // because rows are ordered by date ASC). This matches the KPI methodology of one
+  // score per participant rather than weighting heavy uploaders more.
+  const byMonth: Record<string, Record<string, number>> = {}
   ;(data ?? []).forEach((row) => {
+    if (row.recovery_score === null || row.recovery_score === undefined) return
     const month = row.date.slice(0, 7)
-    if (!byMonth[month]) byMonth[month] = []
-    if (row.recovery_score) byMonth[month].push(row.recovery_score)
+    if (!byMonth[month]) byMonth[month] = {}
+    byMonth[month][row.participant_id] = row.recovery_score
   })
-  return Object.entries(byMonth).map(([month, scores]) => ({
+
+  return Object.entries(byMonth).map(([month, scoresByParticipant]) => ({
     month,
-    avg_recovery: avg(scores),
+    avg_recovery: avg(Object.values(scoresByParticipant)),
   }))
 }
 

@@ -307,6 +307,18 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
               <MetricRow label="Strain" value={workout.strain != null ? String(workout.strain) : '—'} />
               <MetricRow label="Calories" value={workout.calories != null ? String(workout.calories) : '—'} />
               <MetricRow label="Heart rate" value={workout.avg_hr != null ? `${workout.avg_hr} avg / ${workout.max_hr ?? '—'} max bpm` : '—'} />
+              {workout.zone1_pct != null && (
+                <MetricRow
+                  label="HR zones (Z1–Z5)"
+                  value={[
+                    workout.zone1_pct != null ? `${workout.zone1_pct}%` : '—',
+                    workout.zone2_pct != null ? `${workout.zone2_pct}%` : '—',
+                    workout.zone3_pct != null ? `${workout.zone3_pct}%` : '—',
+                    workout.zone4_pct != null ? `${workout.zone4_pct}%` : '—',
+                    workout.zone5_pct != null ? `${workout.zone5_pct}%` : '—',
+                  ].join(' · ')}
+                />
+              )}
             </>
           ) : (
             <div style={{ fontSize: 12, color: '#A5ACAF' }}>No workout data has been uploaded yet.</div>
