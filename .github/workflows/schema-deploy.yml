@@ -100,13 +100,23 @@ jobs:
           echo "::add-mask::$db_url"
           echo "SUPABASE_DB_URL_NORMALIZED=$db_url" >> "$GITHUB_ENV"
 
-      - name: Push Supabase migrations
-        run: npx supabase@latest db push --db-url "$SUPABASE_DB_URL_NORMALIZED" --yes
-
       - name: Install PostgreSQL client
         run: |
-          sudo apt-get update
+          sudo apt-get update -qq
           sudo apt-get install --yes postgresql-client
+
+      - name: Introspect remote event_rsvps table
+        continue-on-error: true
+        run: |
+          echo "=== event_rsvps columns ==="
+          psql "$SUPABASE_DB_URL_NORMALIZED" -c "\d public.event_rsvps" 2>&1 || echo "event_rsvps table not found"
+          echo "=== event_rsvps RLS policies ==="
+          psql "$SUPABASE_DB_URL_NORMALIZED" -c "select policyname, cmd, qual from pg_policies where tablename = 'event_rsvps';" 2>&1 || true
+          echo "=== migration tracking ==="
+          psql "$SUPABASE_DB_URL_NORMALIZED" -c "select name from supabase_migrations.schema_migrations order by name;" 2>&1 || true
+
+      - name: Push Supabase migrations
+        run: npx supabase@latest db push --db-url "$SUPABASE_DB_URL_NORMALIZED" --yes --debug 2>&1
 
       - name: Sync admin credentials
         shell: bash
