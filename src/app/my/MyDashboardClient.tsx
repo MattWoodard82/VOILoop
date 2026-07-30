@@ -177,7 +177,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
         </div>
       </div>
-
+<EventsNudgeCard />
       {challenge && challenge.visibility_state !== 'none' && challenge.data ? (
         <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.status}</Badge>}>
           <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8, lineHeight: 1.5 }}>
