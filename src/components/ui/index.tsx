@@ -20,7 +20,6 @@ export function KpiCard({ label, value, delta, deltaDir = 'neutral', color }: Kp
       <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, marginBottom: 6, color: color ?? '#fff', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
         {value}
       </div>
-      </div>
       {delta && (
         <div style={{ fontSize: 10, color: deltaColor, display: 'flex', alignItems: 'center', gap: 3 }}>
           {deltaDir === 'up' && '↑'}{deltaDir === 'down' && '↓'} {delta}
