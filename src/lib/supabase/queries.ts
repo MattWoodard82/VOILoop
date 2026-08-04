@@ -1,5 +1,7 @@
 import { createClient } from './client'
 import { createServerSupabaseClient } from './server'
+import { createAdminSupabaseClient } from './admin'
+import { backfillParticipantNamesFromAuthEmails } from '@/lib/participant-linking'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats,
@@ -262,6 +264,7 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
+  await backfillParticipantNamesFromAuthEmails(createAdminSupabaseClient())
   const participants = await getParticipants()
   const participantIds = participants.map((participant) => participant.id)
   const [wellness, workouts, habits, pulse, interventions] = await Promise.all([

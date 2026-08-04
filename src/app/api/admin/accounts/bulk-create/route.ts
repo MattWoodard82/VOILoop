@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { provisionSupabaseAccount } from '@/lib/supabase/provision-account'
+import { deriveNamesFromEmail, participantNeedsNameBackfill } from '@/lib/participant-linking'
 import { randomInt } from 'crypto'
 
 export const runtime = 'nodejs'
@@ -16,6 +17,8 @@ interface ParsedCsv {
 interface ParticipantRecord {
   id: string
   auth_user_id: string | null
+  first_name?: string
+  last_name?: string
 }
 
 interface ProvisioningConfig {
@@ -118,13 +121,6 @@ function csvEscape(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
-function deriveNameFromEmail(email: string): { firstName: string; lastName: string } {
-  return {
-    firstName: email,
-    lastName: '',
-  }
-}
-
 function getNextParticipantNumber(existingParticipants: ParticipantRecord[]): number {
   const maxParticipantNumber = existingParticipants.reduce((max, participant) => {
     const match = /^EMP(\d+)$/i.exec(participant.id)
@@ -156,13 +152,38 @@ async function ensureParticipantRecord(
 ): Promise<string> {
   const existingParticipant = existingParticipantsByAuthUserId.get(userId)
   if (existingParticipant) {
+    if (
+      typeof existingParticipant.first_name === 'string' &&
+      typeof existingParticipant.last_name === 'string' &&
+      participantNeedsNameBackfill({
+        first_name: existingParticipant.first_name,
+        last_name: existingParticipant.last_name,
+      })
+    ) {
+      const { firstName, lastName } = deriveNamesFromEmail(email)
+      const { error: updateError } = await adminClient
+        .from('participants')
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+        })
+        .eq('id', existingParticipant.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      existingParticipant.first_name = firstName
+      existingParticipant.last_name = lastName
+    }
+
     return existingParticipant.id
   }
 
   const participantId = formatParticipantId(nextParticipantNumberRef.current)
   nextParticipantNumberRef.current += 1
 
-  const { firstName, lastName } = deriveNameFromEmail(email)
+  const { firstName, lastName } = deriveNamesFromEmail(email)
   const today = new Date().toISOString().slice(0, 10)
 
   const { error } = await adminClient
@@ -259,7 +280,7 @@ export async function POST(request: Request) {
   if (config.createsParticipantRecord) {
     const { data, error: participantsError } = await adminClient
       .from('participants')
-      .select('id, auth_user_id')
+      .select('id, auth_user_id, first_name, last_name')
 
     if (participantsError) {
       return NextResponse.json({ error: participantsError.message }, { status: 500 })
