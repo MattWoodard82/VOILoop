@@ -1,5 +1,6 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { createServerSupabaseClient, requireAuth } from '@/lib/supabase/server'
+import { hasMeaningfulWellnessData } from '@/lib/supabase/queries'
 import { InterventionDetailClient } from './InterventionDetailClient'
 import { notFound, redirect } from 'next/navigation'
 
@@ -37,6 +38,8 @@ export default async function InterventionDetailPage({
     .gte('date', intervention.date_triggered ?? '2026-01-01')
     .order('date', { ascending: true })
 
+  const displayWellness = (wellness ?? []).filter((row) => hasMeaningfulWellnessData(row))
+
   const { data: habits } = await supabase
     .from('habits')
     .select('*')
@@ -58,7 +61,7 @@ export default async function InterventionDetailPage({
       <InterventionDetailClient
         intervention={intervention}
         participant={participant}
-        wellness={wellness ?? []}
+        wellness={displayWellness.length > 0 ? displayWellness : (wellness ?? [])}
         habits={habits ?? []}
         workouts={workouts ?? []}
       />

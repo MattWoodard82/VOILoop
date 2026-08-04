@@ -26,6 +26,30 @@ export function avg(nums: (number | null)[]): number {
   return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
 }
 
+const WELLNESS_METRIC_FIELDS: Array<keyof DailyWellness> = [
+  'recovery_score',
+  'hrv_ms',
+  'resting_hr',
+  'blood_oxygen',
+  'skin_temp',
+  'day_strain',
+  'calories',
+  'sleep_perf',
+  'sleep_hrs',
+  'sleep_debt',
+  'sleep_need',
+  'deep_sleep',
+  'rem_sleep',
+  'light_sleep',
+  'sleep_eff',
+  'sleep_consistency',
+  'resp_rate',
+]
+
+export function hasMeaningfulWellnessData(row: Partial<DailyWellness> | null | undefined): boolean {
+  return WELLNESS_METRIC_FIELDS.some((field) => row?.[field] !== null && row?.[field] !== undefined)
+}
+
 function getQueryClient() {
   try {
     return createServerSupabaseClient()
@@ -87,10 +111,10 @@ export async function getLatestWellness(date?: string, participantIds?: string[]
       .eq('participant_id', participantId)
       .order('date', { ascending: false })
       .order('id', { ascending: false })
-      .limit(1)
 
     if (error) throw error
-    return data?.[0] ?? null
+    const rows = data ?? []
+    return rows.find((row) => hasMeaningfulWellnessData(row)) ?? rows[0] ?? null
   }))
 
   return latestRows.filter((row): row is DailyWellness => row !== null)
@@ -107,7 +131,7 @@ export async function getWellnessTrend(participantId: string, days: number = 30)
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).filter((row) => hasMeaningfulWellnessData(row))
 }
 
 export async function getTeamWellnessTrend(months: number = 6): Promise<{ month: string; avg_recovery: number }[]> {

@@ -190,6 +190,23 @@ describe('getLatestWellness', () => {
     ])
   })
 
+  test('prefers the latest row with metrics when the newest row is an empty placeholder', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        daily_wellness: [
+          { id: 'w-empty', participant_id: 'P1', date: '2024-06-07', recovery_score: null, hrv_ms: null, sleep_perf: null, sleep_debt: null, day_strain: null },
+          wellnessRows[0],
+          wellnessRows[2],
+        ],
+      }) as never
+    )
+
+    await expect(getLatestWellness(undefined, ['P1', 'P2'])).resolves.toEqual([
+      wellnessRows[0],
+      wellnessRows[2],
+    ])
+  })
+
   test('returns all records for an explicit date filter', async () => {
     mockCreateClient.mockReturnValue(makeTableClient({ daily_wellness: wellnessRows }) as never)
 
@@ -378,5 +395,45 @@ describe('getTeamDashboard', () => {
     const dashboard = await getTeamDashboard()
     expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
     expect(dashboard.participants[0].latest_wellness?.day_strain).toBeNull()
+  })
+
+  test('falls back to the latest meaningful wellness row when a newer placeholder row is empty', async () => {
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alice',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w-empty', participant_id: 'P1', date: '2024-06-09', recovery_score: null, hrv_ms: null, sleep_perf: null, sleep_debt: null, day_strain: null },
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0, day_strain: 12.4 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
+    expect(dashboard.participants[0].latest_wellness?.day_strain).toBe(12.4)
+    expect(dashboard.participants[0].latest_wellness?.recovery_score).toBe(80)
   })
 })
