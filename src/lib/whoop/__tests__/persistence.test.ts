@@ -308,6 +308,7 @@ describe('persistWhoopImport', () => {
     const firstResult = await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP900',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-1',
@@ -320,6 +321,7 @@ describe('persistWhoopImport', () => {
     const secondResult = await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP900',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-2',
@@ -372,6 +374,18 @@ describe('persistWhoopImport', () => {
     })
 
     expect(supabase.tables.upload_batches).toHaveLength(2)
+    expect(supabase.tables.upload_batches).toEqual([
+      expect.objectContaining({
+        id: firstResult.batchId,
+        imported_by: 'user-1',
+        participant_id: 'EMP900',
+      }),
+      expect.objectContaining({
+        id: secondResult.batchId,
+        imported_by: 'user-1',
+        participant_id: 'EMP900',
+      }),
+    ])
     expect(supabase.tables.import_logs).toHaveLength(2)
   })
 })

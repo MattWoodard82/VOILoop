@@ -28,6 +28,7 @@ describeRlsIntegration('Supabase RLS integration', () => {
 
   let serviceClient: SupabaseClient
   let baseEventId = ''
+  let uploadBatchIds: string[] = []
   let identities: TestIdentity[] = []
 
   async function createIdentity(role: TestIdentity['role'], participantId?: string): Promise<TestIdentity> {
@@ -124,6 +125,53 @@ describeRlsIntegration('Supabase RLS integration', () => {
       ], { onConflict: 'participant_id,date' })
     if (wellnessError) throw wellnessError
 
+    const { data: uploadBatchData, error: uploadBatchError } = await serviceClient
+      .from('upload_batches')
+      .insert([
+        {
+          imported_by: admin.userId,
+          participant_id: participantAId,
+          file_name: `participant-a-${testId}.csv`,
+          file_size_bytes: 10,
+          file_hash_sha256: `${testId}-hash-a`,
+          status: 'completed',
+          rows_processed: 1,
+          rows_inserted: 1,
+          rows_updated: 0,
+          rows_skipped: 0,
+          rows_failed: 0,
+        },
+        {
+          imported_by: participantA.userId,
+          participant_id: participantBId,
+          file_name: `uploaded-by-a-${testId}.csv`,
+          file_size_bytes: 20,
+          file_hash_sha256: `${testId}-hash-b`,
+          status: 'completed',
+          rows_processed: 1,
+          rows_inserted: 1,
+          rows_updated: 0,
+          rows_skipped: 0,
+          rows_failed: 0,
+        },
+        {
+          imported_by: admin.userId,
+          participant_id: participantBId,
+          file_name: `participant-b-${testId}.csv`,
+          file_size_bytes: 30,
+          file_hash_sha256: `${testId}-hash-c`,
+          status: 'completed',
+          rows_processed: 1,
+          rows_inserted: 1,
+          rows_updated: 0,
+          rows_skipped: 0,
+          rows_failed: 0,
+        },
+      ])
+      .select('id')
+    if (uploadBatchError) throw uploadBatchError
+    uploadBatchIds = (uploadBatchData ?? []).map((row) => row.id)
+
     const { data: eventData, error: eventError } = await serviceClient
       .from('events')
       .insert({
@@ -144,6 +192,9 @@ describeRlsIntegration('Supabase RLS integration', () => {
   afterAll(async () => {
     if (!serviceClient) return
 
+    if (uploadBatchIds.length > 0) {
+      await serviceClient.from('upload_batches').delete().in('id', uploadBatchIds)
+    }
     await serviceClient.from('event_rsvps').delete().eq('event_id', baseEventId)
     await serviceClient.from('events').delete().eq('id', baseEventId)
     await serviceClient.from('daily_wellness').delete().in('participant_id', [participantAId, participantBId])
@@ -168,6 +219,30 @@ describeRlsIntegration('Supabase RLS integration', () => {
     expect(error).toBeNull()
     expect(data).toHaveLength(1)
     expect(data?.[0]?.participant_id).toBe(participantAId)
+  })
+
+  test('participant can read participant-owned and uploader-visible batches only', async () => {
+    const participantA = identities.find((identity) => identity.role === 'participant' && identity.participantId === participantAId)
+    if (!participantA) throw new Error('participantA identity not found')
+
+    const client = await signIn(participantA)
+    const { data, error } = await client
+      .from('upload_batches')
+      .select('participant_id,imported_by,file_name')
+      .order('file_name', { ascending: true })
+
+    expect(error).toBeNull()
+    expect(data).toEqual([
+      expect.objectContaining({
+        participant_id: participantAId,
+        file_name: `participant-a-${testId}.csv`,
+      }),
+      expect.objectContaining({
+        participant_id: participantBId,
+        imported_by: participantA.userId,
+        file_name: `uploaded-by-a-${testId}.csv`,
+      }),
+    ])
   })
 
   test('participant cannot RSVP on behalf of another participant', async () => {
@@ -199,6 +274,24 @@ describeRlsIntegration('Supabase RLS integration', () => {
 
     expect(error).toBeNull()
     expect(data?.map((row) => row.participant_id)).toEqual([participantAId, participantBId])
+  })
+
+  test('admin can read all participant-linked upload batches', async () => {
+    const admin = identities.find((identity) => identity.role === 'admin')
+    if (!admin) throw new Error('admin identity not found')
+
+    const client = await signIn(admin)
+    const { data, error } = await client
+      .from('upload_batches')
+      .select('file_name')
+      .order('file_name', { ascending: true })
+
+    expect(error).toBeNull()
+    expect(data?.map((row) => row.file_name)).toEqual([
+      `participant-a-${testId}.csv`,
+      `participant-b-${testId}.csv`,
+      `uploaded-by-a-${testId}.csv`,
+    ])
   })
 
   test('wellness director cannot mutate events, admin can', async () => {

@@ -1,4 +1,4 @@
-import { getLatestWellness, getLatestWorkouts, getTeamDashboard } from '../queries'
+import { getLatestWellness, getLatestWorkouts, getParticipantImportBatches, getTeamDashboard } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
 
@@ -212,6 +212,52 @@ describe('getLatestWellness', () => {
     await expect(getLatestWellness('2024-06-12')).resolves.toEqual([
       { id: 'w-11', participant_id: 'P1', date: '2024-06-12', recovery_score: 70, hrv_ms: 66, sleep_perf: 88, sleep_debt: 0 },
       { id: 'w-10', participant_id: 'P2', date: '2024-06-12', recovery_score: 45, hrv_ms: 50, sleep_perf: 71, sleep_debt: 1 },
+    ])
+  })
+})
+
+describe('getParticipantImportBatches', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+  const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCreateServerSupabaseClient.mockImplementation(() => {
+      throw new Error('Server client unavailable in unit test')
+    })
+  })
+
+  test('returns recent batches for a participant only', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        upload_batches: [
+          { id: 'batch-1', participant_id: 'P1', imported_by: 'admin-1', started_at: '2026-07-02T10:00:00Z' },
+          { id: 'batch-2', participant_id: 'P2', imported_by: 'admin-1', started_at: '2026-07-03T10:00:00Z' },
+          { id: 'batch-3', participant_id: 'P1', imported_by: 'admin-2', started_at: '2026-07-04T10:00:00Z' },
+        ],
+      }) as never
+    )
+
+    await expect(getParticipantImportBatches('P1', 5)).resolves.toEqual([
+      { id: 'batch-3', participant_id: 'P1', imported_by: 'admin-2', started_at: '2026-07-04T10:00:00Z' },
+      { id: 'batch-1', participant_id: 'P1', imported_by: 'admin-1', started_at: '2026-07-02T10:00:00Z' },
+    ])
+  })
+
+  test('applies the requested limit after ordering newest first', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        upload_batches: [
+          { id: 'batch-1', participant_id: 'P1', started_at: '2026-07-02T10:00:00Z' },
+          { id: 'batch-2', participant_id: 'P1', started_at: '2026-07-03T10:00:00Z' },
+          { id: 'batch-3', participant_id: 'P1', started_at: '2026-07-04T10:00:00Z' },
+        ],
+      }) as never
+    )
+
+    await expect(getParticipantImportBatches('P1', 2)).resolves.toEqual([
+      { id: 'batch-3', participant_id: 'P1', started_at: '2026-07-04T10:00:00Z' },
+      { id: 'batch-2', participant_id: 'P1', started_at: '2026-07-03T10:00:00Z' },
     ])
   })
 })

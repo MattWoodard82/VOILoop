@@ -11,6 +11,7 @@ const MANUAL_TAB = 'Manual Entries'
 interface PersistWhoopImportParams {
   supabase: SupabaseClient
   userId: string
+  participantId: string
   fileName: string
   fileSize: number
   fileHash: string
@@ -306,6 +307,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
   const {
     supabase,
     userId,
+    participantId,
     fileName,
     fileSize,
     fileHash,
@@ -325,6 +327,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     .from('upload_batches')
     .insert({
       imported_by: userId,
+      participant_id: participantId,
       file_name: fileName,
       file_size_bytes: fileSize,
       file_hash_sha256: fileHash,
