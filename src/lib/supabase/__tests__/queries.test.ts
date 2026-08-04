@@ -40,7 +40,10 @@ function makeSupabaseClient<T>(resultForStartTime: QueryResult<T>, fallbackResul
 function makeTableClient(tables: Record<string, any[]>) {
   const from = jest.fn((table: string) => {
     const rows = [...(tables[table] ?? [])]
-    const filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }> = []
+    const filters: Array<
+      | { kind: 'eq' | 'in'; column: string; value: any }
+      | { kind: 'or-not-null'; columns: string[] }
+    > = []
     const orders: Array<{ column: string; ascending: boolean }> = []
     let limitCount: number | null = null
 
@@ -52,6 +55,15 @@ function makeTableClient(tables: Record<string, any[]>) {
       }),
       in: jest.fn((column: string, value: any[]) => {
         filters.push({ kind: 'in', column, value })
+        return builder
+      }),
+      or: jest.fn((expression: string) => {
+        const columns = expression
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => part.replace(/\.not\.is\.null$/, ''))
+        filters.push({ kind: 'or-not-null', columns })
         return builder
       }),
       order: jest.fn((column: string, options?: { ascending?: boolean }) => {
@@ -80,13 +92,20 @@ function makeTableClient(tables: Record<string, any[]>) {
 
 function runQuery(
   rows: any[],
-  filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }>,
+  filters: Array<
+    | { kind: 'eq' | 'in'; column: string; value: any }
+    | { kind: 'or-not-null'; columns: string[] }
+  >,
   orders: Array<{ column: string; ascending: boolean }>,
   limitCount: number | null
 ) {
   let result = [...rows]
 
   for (const filter of filters) {
+    if (filter.kind === 'or-not-null') {
+      result = result.filter((row) => filter.columns.some((column) => row[column] !== null && row[column] !== undefined))
+      continue
+    }
     if (filter.kind === 'eq') {
       result = result.filter((row) => row[filter.column] === filter.value)
       continue

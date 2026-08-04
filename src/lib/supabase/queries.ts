@@ -46,6 +46,10 @@ const WELLNESS_METRIC_FIELDS: Array<keyof DailyWellness> = [
   'resp_rate',
 ]
 
+const WELLNESS_MEANINGFUL_FILTER = WELLNESS_METRIC_FIELDS
+  .map((field) => `${field}.not.is.null`)
+  .join(',')
+
 export function hasMeaningfulWellnessData(row: Partial<DailyWellness> | null | undefined): boolean {
   return WELLNESS_METRIC_FIELDS.some((field) => row?.[field] !== null && row?.[field] !== undefined)
 }
@@ -105,16 +109,31 @@ export async function getLatestWellness(date?: string, participantIds?: string[]
   if (targetParticipantIds.length === 0) return []
 
   const latestRows = await Promise.all(targetParticipantIds.map(async (participantId) => {
-    const { data, error } = await supabase
+    const meaningfulQuery = supabase
+      .from('daily_wellness')
+      .select('*')
+      .eq('participant_id', participantId)
+      .or(WELLNESS_MEANINGFUL_FILTER)
+      .order('date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+
+    const { data: meaningfulRows, error: meaningfulError } = await meaningfulQuery
+    if (meaningfulError) throw meaningfulError
+    if ((meaningfulRows ?? []).length > 0) {
+      return meaningfulRows?.[0] ?? null
+    }
+
+    const { data: latestRows, error: latestError } = await supabase
       .from('daily_wellness')
       .select('*')
       .eq('participant_id', participantId)
       .order('date', { ascending: false })
       .order('id', { ascending: false })
+      .limit(1)
 
-    if (error) throw error
-    const rows = data ?? []
-    return rows.find((row) => hasMeaningfulWellnessData(row)) ?? rows[0] ?? null
+    if (latestError) throw latestError
+    return latestRows?.[0] ?? null
   }))
 
   return latestRows.filter((row): row is DailyWellness => row !== null)
