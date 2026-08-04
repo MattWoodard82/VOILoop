@@ -53,17 +53,17 @@ describe('POST /api/pulse/submit', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'Unexpected field: wellbeing_score',
     })
+  })
 
-    test('returns 400 when physical_activity is an empty array and no other answers are provided', async () => {
-      mockGetSession.mockResolvedValue({ user: { id: 'user-2' } } as never)
-      mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+  test('returns 400 when physical_activity is an empty array and no other answers are provided', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'user-2' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-      const response = await POST(makeJsonRequest({ physical_activity: [] }))
+    const response = await POST(makeJsonRequest({ physical_activity: [] }))
 
-      expect(response.status).toBe(400)
-      await expect(response.json()).resolves.toMatchObject({
-        error: 'At least one pulse response is required.',
-      })
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'At least one pulse response is required.',
     })
   })
 
