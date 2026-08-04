@@ -61,8 +61,12 @@ export function statusBadgeClass(status: string): string {
   return map[status] ?? 'badge-wolf'
 }
 
-export function initials(first: string, last: string): string {
-  return `${first[0]}${last[0]}`
+export function initials(first?: string | null, last?: string | null): string {
+  const normalizedFirst = first?.trim() ?? ''
+  const normalizedLast = last?.trim() ?? ''
+  const firstInitial = normalizedFirst ? normalizedFirst.charAt(0).toUpperCase() : ''
+  const lastInitial = normalizedLast ? normalizedLast.charAt(0).toUpperCase() : ''
+  return `${firstInitial}${lastInitial}` || 'U'
 }
 
 export function formatDate(dateStr: string): string {
