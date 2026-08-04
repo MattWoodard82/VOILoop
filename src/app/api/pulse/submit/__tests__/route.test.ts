@@ -67,6 +67,18 @@ describe('POST /api/pulse/submit', () => {
     })
   })
 
+  test('returns 400 when health_flag is whitespace only and no other answers are provided', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'user-2' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const response = await POST(makeJsonRequest({ health_flag: '   ' }))
+
+    expect(response.status).toBe(400)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'At least one pulse response is required.',
+    })
+  })
+
   test('returns 403 when participant record is not linked', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'user-3' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })

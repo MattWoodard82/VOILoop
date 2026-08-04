@@ -124,7 +124,12 @@ export function validatePulseSubmissionPayload(input: unknown): PulseSubmissionV
       if (typeof rawValue !== 'string') {
         return { ok: false, error: 'Field health_flag must be a string or null.' }
       }
-      payload.health_flag = rawValue
+      const trimmed = rawValue.trim()
+      if (trimmed.length === 0) {
+        payload.health_flag = null
+        continue
+      }
+      payload.health_flag = trimmed
       answeredCount += 1
       continue
     }
