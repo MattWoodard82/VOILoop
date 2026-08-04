@@ -87,6 +87,10 @@ export function validatePulseSubmissionPayload(input: unknown): PulseSubmissionV
       if (!Array.isArray(rawValue)) {
         return { ok: false, error: 'Field physical_activity must be an array or null.' }
       }
+      if (rawValue.length === 0) {
+        payload.physical_activity = null
+        continue
+      }
       const validOptions = new Set<string>(PHYSICAL_ACTIVITY_OPTIONS)
       for (const item of rawValue) {
         if (typeof item !== 'string' || !validOptions.has(item)) {
@@ -149,4 +153,3 @@ export function buildPulseSurveyUpsertRecord(participantId: string, date: string
     health_flag: payload.health_flag ?? null,
   }
 }
-

@@ -1,6 +1,5 @@
 'use client'
 import { useState } from 'react'
-import { PHYSICAL_ACTIVITY_OPTIONS, PhysicalActivityValue } from '@/lib/pulse-submission'
 
 // ── Question definitions ─────────────────────────────────────────────────────
 type QuestionType = 'boolean' | 'scale5' | 'multiselect' | 'choice' | 'text'
@@ -539,4 +538,3 @@ export default function SurveyPage() {
     </div>
   )
 }
-
