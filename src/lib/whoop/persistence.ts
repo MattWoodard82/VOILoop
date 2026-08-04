@@ -66,6 +66,21 @@ function logImportRowErrors(batchId: string, fileName: string, userId: string, e
   })
 }
 
+function preserveExistingDayStrain(
+  row: MappedWellness['wellness'][number],
+  existingRow?: { day_strain?: unknown } | null,
+) {
+  const existingDayStrain = typeof existingRow?.day_strain === 'number' ? existingRow.day_strain : null
+  if (row.day_strain !== null || existingDayStrain === null) {
+    return row
+  }
+
+  return {
+    ...row,
+    day_strain: existingDayStrain,
+  }
+}
+
 export function deriveBatchStatus(totals: BatchTotals): ImportBatchStatus {
   const successes = totals.inserted + totals.updated
   if (totals.failed === 0) return 'completed'
@@ -226,7 +241,7 @@ async function upsertDailyWellness(
 
     const { data: existingRows, error: existingError } = await supabase
       .from('daily_wellness')
-      .select('participant_id,date')
+      .select('participant_id,date,day_strain')
       .in('participant_id', participantIds)
       .in('date', dates)
 
@@ -236,8 +251,17 @@ async function upsertDailyWellness(
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.date}`))
-    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const existingRowsByKey = new Map<string, { day_strain?: unknown }>(
+      (existingRows ?? []).map((row) => [`${row.participant_id}|${row.date}`, row]),
+    )
+    const existingKeys = new Set<string>(existingRowsByKey.keys())
+    const chunkRows = chunk.map((row) => {
+      const key = `${row.participant_id}|${row.date}`
+      return {
+        ...preserveExistingDayStrain(row, existingRowsByKey.get(key)),
+        source_batch_id: batchId,
+      }
+    })
     const { error: upsertError } = await supabase
       .from('daily_wellness')
       .upsert(chunkRows, { onConflict: 'participant_id,date' })

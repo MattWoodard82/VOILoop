@@ -9,12 +9,43 @@ interface Props {
   participants: ParticipantWithWellness[]
 }
 
+export interface DayStrainChartDatum {
+  name: string
+  value: number
+  color: string
+}
+
+export interface DayStrainChartModel {
+  data: DayStrainChartDatum[]
+  missingParticipants: string[]
+}
+
+export function getDayStrainChartModel(participants: ParticipantWithWellness[]): DayStrainChartModel {
+  return participants.reduce<DayStrainChartModel>((acc, participant) => {
+    const label = participant.first_name + (participant.is_exact_data ? ' ★' : '')
+    const displayName = `${participant.first_name} ${participant.last_name}`.trim()
+    const dayStrain = participant.latest_wellness?.day_strain ?? null
+
+    if (dayStrain === null) {
+      acc.missingParticipants.push(displayName)
+      return acc
+    }
+
+    acc.data.push({
+      name: label,
+      value: dayStrain,
+      color: dayStrain > 14 ? '#ff6b6b' : dayStrain > 10 ? '#FFA500' : '#69BE28',
+    })
+    return acc
+  }, { data: [], missingParticipants: [] })
+}
+
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
 
   const departments = useMemo(() => {
-const depts = Array.from(new Set(participants.map(e => e.department))).sort()
+    const depts = Array.from(new Set(participants.map(e => e.department))).sort()
     return ['All', ...depts]
   }, [participants])
 
@@ -24,6 +55,8 @@ const depts = Array.from(new Set(participants.map(e => e.department))).sort()
     if (personFilter !== 'All') result = result.filter(e => e.id === personFilter)
     return result
   }, [participants, deptFilter, personFilter])
+
+  const dayStrainChart = useMemo(() => getDayStrainChartModel(filtered), [filtered])
 
   const deptAverages = useMemo(() => {
     if (personFilter !== 'All') return null
@@ -168,11 +201,24 @@ const depts = Array.from(new Set(participants.map(e => e.department))).sort()
           }))} />
         </Card>
         <Card title="Day strain">
-          <WellnessDirectorCharts type="strain" data={filtered.map(e => ({
-            name: e.first_name,
-            value: e.latest_wellness?.day_strain ?? 0,
-            color: (e.latest_wellness?.day_strain ?? 0) > 14 ? '#ff6b6b' : (e.latest_wellness?.day_strain ?? 0) > 10 ? '#FFA500' : '#69BE28',
-          }))} />
+          {dayStrainChart.data.length > 0 ? (
+            <WellnessDirectorCharts type="strain" data={dayStrainChart.data} />
+          ) : (
+            <div
+              data-testid="day-strain-empty"
+              style={{ minHeight: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#A5ACAF' }}
+            >
+              No latest-day strain data available.
+            </div>
+          )}
+          {dayStrainChart.missingParticipants.length > 0 && (
+            <div
+              data-testid="day-strain-missing"
+              style={{ marginTop: 10, fontSize: 11, color: '#A5ACAF', lineHeight: 1.5 }}
+            >
+              Missing latest-day strain: {dayStrainChart.missingParticipants.join(', ')}
+            </div>
+          )}
         </Card>
         <Card title="Sleep debt flags">
         {[...filtered]
