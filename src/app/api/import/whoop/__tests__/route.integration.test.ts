@@ -3,6 +3,7 @@ import { POST } from '../route'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
+import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
 import { persistWhoopImport } from '@/lib/whoop/persistence'
 import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 
@@ -65,6 +66,9 @@ describe('POST /api/import/whoop integration', () => {
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
   const mockPrepareWhoopWorkbookForImport =
     prepareWhoopWorkbookForImport as jest.MockedFunction<typeof prepareWhoopWorkbookForImport>
+  const mockMapExercise = mapExercise as jest.MockedFunction<typeof mapExercise>
+  const mockMapWellness = mapWellness as jest.MockedFunction<typeof mapWellness>
+  const mockMapManualEntries = mapManualEntries as jest.MockedFunction<typeof mapManualEntries>
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -73,6 +77,9 @@ describe('POST /api/import/whoop integration', () => {
       workbook: {},
       participantProfiles: [],
     })
+    mockMapExercise.mockReturnValue({ workouts: [], errors: [], processed: 0 } as never)
+    mockMapWellness.mockReturnValue({ wellness: [], errors: [], processed: 0 } as never)
+    mockMapManualEntries.mockReturnValue({ habits: [], errors: [], processed: 0 } as never)
   })
 
   test('returns 401 for unauthenticated requests', async () => {
@@ -270,5 +277,79 @@ describe('POST /api/import/whoop integration', () => {
     const body = await response.json()
     expect(body.error).toBe('Invalid WHOOP upload payload')
     expect(body.details).toContain('Upload exactly 3 files.')
+  })
+
+  test('passes the validated participant id into persistence', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user-1' } } as never)
+    mockParseWorkbook.mockReturnValue({ Sheet1: [{}] } as never)
+    mockValidateTabStructure.mockReturnValue({
+      valid: true,
+      missingRequiredTabs: [],
+      missingAtLeastOneTab: false,
+      missingColumns: {},
+    })
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      participantProfiles: [],
+    })
+    mockPersistWhoopImport.mockResolvedValue({
+      batchId: 'batch-1',
+      status: 'completed',
+      success: true,
+      fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
+      tabs: [],
+      totals: { processed: 0, inserted: 0, updated: 0, skipped: 0, failed: 0 },
+      errors: [],
+    })
+
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        if (table === 'user_roles') {
+          return {
+            select: jest.fn(() => ({
+              single: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+            })),
+          }
+        }
+        return {}
+      }),
+    }
+    mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
+
+    const response = await POST(makeRequest())
+    expect(response.status).toBe(200)
+    expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'admin-user-1',
+      participantId: 'EMP001',
+    }))
   })
 })

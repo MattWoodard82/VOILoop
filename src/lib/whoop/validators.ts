@@ -291,7 +291,7 @@ export function validateWellnessRow(
   row: Record<string, unknown>,
   rowIndex: number,
   errors: ImportRowError[],
-  fallbackDate?: string | null,
+  preferredDate?: string | null,
 ): ValidatedWellnessRow | null {
   const participantId = String(row['Participant Identifier'] ?? '').trim()
   if (!participantId) {
@@ -299,7 +299,7 @@ export function validateWellnessRow(
     return null
   }
 
-  const date = resolveWellnessDate(row) ?? fallbackDate ?? null
+  const date = preferredDate ?? resolveWellnessDate(row) ?? null
   if (!date) {
     errors.push({ tab: tabName, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing WHOOP cycle date' })
     return null

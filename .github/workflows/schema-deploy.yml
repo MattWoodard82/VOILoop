@@ -116,7 +116,9 @@ jobs:
           psql "$SUPABASE_DB_URL_NORMALIZED" -c "select name from supabase_migrations.schema_migrations order by name;" 2>&1 || true
 
       - name: Push Supabase migrations
-        run: npx supabase@latest db push --db-url "$SUPABASE_DB_URL_NORMALIZED" --yes --debug 2>&1
+        run: |
+          # Allow the deploy job to backfill any unapplied local migrations before newer remote ones.
+          npx supabase@latest db push --db-url "$SUPABASE_DB_URL_NORMALIZED" --include-all --yes --debug 2>&1
 
       - name: Sync admin credentials
         shell: bash

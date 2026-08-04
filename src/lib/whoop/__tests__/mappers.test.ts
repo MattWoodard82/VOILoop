@@ -214,6 +214,40 @@ describe('mapWellness', () => {
     expect(wellness[0].date).toBe('2024-01-15')
     expect(wellness[0].day_strain).toBe(14)
   })
+
+  test('uses the matching sleep row date when stress resolves the same cycle to the prior day', () => {
+    const wb: ParsedWorkbook = {
+      Stress: [
+        {
+          'Participant Identifier': 'E1',
+          'Cycle start time': '2024-01-14 22:41:02',
+          'Cycle end time': '2024-01-14 23:59:00',
+          'Cycle timezone': 'UTC-06:00',
+          'Day Strain': 13.2,
+          'Sleep performance %': 86,
+          'Asleep duration (min)': 430,
+        },
+      ],
+      Sleep: [
+        {
+          'Participant Identifier': 'E1',
+          'Cycle start time': '2024-01-14 22:41:02',
+          'Wake onset': '2024-01-15 07:15:00',
+          'Cycle timezone': 'UTC-06:00',
+          'Recovery score %': 74,
+          'Sleep performance %': 86,
+          'Asleep duration (min)': 430,
+        },
+      ],
+    }
+
+    const { wellness, errors } = mapWellness(wb)
+    expect(errors).toHaveLength(0)
+    expect(wellness).toHaveLength(1)
+    expect(wellness[0].date).toBe('2024-01-15')
+    expect(wellness[0].day_strain).toBe(13.2)
+    expect(wellness[0].recovery_score).toBe(74)
+  })
 })
 
 // ─── Manual entries mapper ────────────────────────────────────────────────────

@@ -231,6 +231,101 @@ describe('deriveBatchStatus', () => {
 })
 
 describe('persistWhoopImport', () => {
+  test('preserves an existing day strain when a re-import omits it for the same day', async () => {
+    const supabase = new FakeSupabase()
+
+    const participantProfile = {
+      participantId: 'EMP901',
+      sourceIdentifier: 'EMP901',
+      fullName: 'Second Tester',
+      firstName: 'Second',
+      lastName: 'Tester',
+      department: 'Ops',
+    }
+
+    await persistWhoopImport({
+      supabase: supabase as never,
+      userId: 'user-1',
+      participantId: 'EMP901',
+      fileName: 'whoop-export.xlsx',
+      fileSize: 1234,
+      fileHash: 'hash-initial',
+      exerciseResult: { workouts: [], errors: [], processed: 0 },
+      wellnessResult: {
+        wellness: [{
+          participant_id: 'EMP901',
+          date: '2026-07-02',
+          recovery_score: 76,
+          hrv_ms: 55,
+          resting_hr: 58,
+          blood_oxygen: 97,
+          skin_temp: 33.1,
+          day_strain: 12.1,
+          calories: 2200,
+          sleep_perf: 89,
+          sleep_hrs: 7.4,
+          sleep_debt: 0.3,
+          sleep_need: 7.8,
+          deep_sleep: 1.7,
+          rem_sleep: 1.6,
+          light_sleep: 4.1,
+          sleep_eff: 93,
+          sleep_consistency: 86,
+          resp_rate: 14.4,
+        }],
+        errors: [],
+        processed: 1,
+      },
+      habitsResult: { habits: [], errors: [], processed: 0 },
+      participantProfiles: [participantProfile],
+    })
+
+    await persistWhoopImport({
+      supabase: supabase as never,
+      userId: 'user-1',
+      participantId: 'EMP901',
+      fileName: 'whoop-export.xlsx',
+      fileSize: 1234,
+      fileHash: 'hash-reimport',
+      exerciseResult: { workouts: [], errors: [], processed: 0 },
+      wellnessResult: {
+        wellness: [{
+          participant_id: 'EMP901',
+          date: '2026-07-02',
+          recovery_score: 79,
+          hrv_ms: 57,
+          resting_hr: 57,
+          blood_oxygen: 97,
+          skin_temp: 33.0,
+          day_strain: null,
+          calories: 2250,
+          sleep_perf: 91,
+          sleep_hrs: 7.6,
+          sleep_debt: 0.2,
+          sleep_need: 7.9,
+          deep_sleep: 1.8,
+          rem_sleep: 1.7,
+          light_sleep: 4.1,
+          sleep_eff: 94,
+          sleep_consistency: 87,
+          resp_rate: 14.3,
+        }],
+        errors: [],
+        processed: 1,
+      },
+      habitsResult: { habits: [], errors: [], processed: 0 },
+      participantProfiles: [participantProfile],
+    })
+
+    expect(supabase.tables.daily_wellness).toHaveLength(1)
+    expect(supabase.tables.daily_wellness[0]).toMatchObject({
+      participant_id: 'EMP901',
+      date: '2026-07-02',
+      recovery_score: 79,
+      day_strain: 12.1,
+    })
+  })
+
   test('updates existing WHOOP records instead of inserting duplicates on re-import', async () => {
     const supabase = new FakeSupabase()
 
@@ -308,6 +403,7 @@ describe('persistWhoopImport', () => {
     const firstResult = await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP900',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-1',
@@ -320,6 +416,7 @@ describe('persistWhoopImport', () => {
     const secondResult = await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP900',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-2',
@@ -372,6 +469,18 @@ describe('persistWhoopImport', () => {
     })
 
     expect(supabase.tables.upload_batches).toHaveLength(2)
+    expect(supabase.tables.upload_batches).toEqual([
+      expect.objectContaining({
+        id: firstResult.batchId,
+        imported_by: 'user-1',
+        participant_id: 'EMP900',
+      }),
+      expect.objectContaining({
+        id: secondResult.batchId,
+        imported_by: 'user-1',
+        participant_id: 'EMP900',
+      }),
+    ])
     expect(supabase.tables.import_logs).toHaveLength(2)
   })
 })

@@ -165,8 +165,8 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     expect(insertParticipant).toHaveBeenCalledWith(expect.objectContaining({
       id: 'EMP001',
       auth_user_id: 'emp-auth-1',
-      first_name: 'pilot@example.com',
-      last_name: '',
+      first_name: 'Pilot',
+      last_name: 'Account',
     }))
 
     const body = await response.text()
@@ -229,5 +229,68 @@ describe('POST /api/admin/accounts/bulk-create', () => {
 
     const body = await response.text()
     expect(body).toContain('"pilot2@example.com","participant","EMP010","')
+  })
+
+  test('backfills existing blank-name participant rows when the auth user is reprocessed', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const upsertUserAccess = jest.fn(async () => ({ error: null }))
+    const updateParticipantEq = jest.fn(async () => ({ error: null }))
+    const updateParticipant = jest.fn(() => ({
+      eq: updateParticipantEq,
+    }))
+    const createUser = jest.fn(async () => ({ data: { user: { id: 'emp-auth-3' } }, error: null }))
+    const listUsers = jest.fn(async () => ({ data: { users: [] }, error: null }))
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      auth: {
+        admin: {
+          listUsers,
+          createUser,
+          updateUserById: jest.fn(),
+        },
+      },
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return { upsert: upsertUserAccess }
+        }
+
+        if (table === 'participants') {
+          return {
+            select: jest.fn(async () => ({
+              data: [{
+                id: 'EMP010',
+                auth_user_id: 'emp-auth-3',
+                first_name: 'pilot3@example.com',
+                last_name: '',
+              }],
+              error: null,
+            })),
+            insert: jest.fn(async () => ({ error: null })),
+            update: updateParticipant,
+          }
+        }
+
+        return {}
+      }),
+    } as never)
+
+    const response = await POST(makeRequest('email\npilot3@example.com', 'participant'))
+
+    expect(response.status).toBe(200)
+    expect(updateParticipant).toHaveBeenCalledWith({
+      first_name: 'Pilot',
+      last_name: 'Account',
+    })
+    expect(updateParticipantEq).toHaveBeenCalledWith('id', 'EMP010')
   })
 })

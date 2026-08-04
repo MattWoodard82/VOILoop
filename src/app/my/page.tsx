@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { ensureParticipantForAuthUser } from '@/lib/participant-linking'
+import { getParticipantImportBatches } from '@/lib/supabase/queries'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
@@ -74,12 +75,7 @@ export default async function MyPage() {
   const { data: habits } = await supabase.from('habits').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
   const { data: workouts } = await supabase.from('workouts').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(4)
-  const { data: importBatches } = await supabase
-    .from('upload_batches')
-    .select('*')
-    .eq('imported_by', user.id)
-    .order('started_at', { ascending: false })
-    .limit(5)
+  const importBatches = await getParticipantImportBatches(participant.id, 5)
 
   let challenge: {
     visibility_state: 'none' | 'ineligible' | 'eligible'
@@ -157,7 +153,7 @@ export default async function MyPage() {
         workout={workouts?.[0] ?? null}
         pulse={pulse ?? []}
         challenge={challenge}
-        importBatches={importBatches ?? []}
+        importBatches={importBatches}
       />
     </DashboardShell>
   )
