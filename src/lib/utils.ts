@@ -62,8 +62,10 @@ export function statusBadgeClass(status: string): string {
 }
 
 export function initials(first?: string | null, last?: string | null): string {
-  const firstInitial = first?.trim().charAt(0).toUpperCase() ?? ''
-  const lastInitial = last?.trim().charAt(0).toUpperCase() ?? ''
+  const normalizedFirst = first?.trim() ?? ''
+  const normalizedLast = last?.trim() ?? ''
+  const firstInitial = normalizedFirst ? normalizedFirst.charAt(0).toUpperCase() : ''
+  const lastInitial = normalizedLast ? normalizedLast.charAt(0).toUpperCase() : ''
   return `${firstInitial}${lastInitial}` || 'U'
 }
 

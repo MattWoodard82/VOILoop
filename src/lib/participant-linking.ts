@@ -8,8 +8,8 @@ interface ParticipantRow {
   auth_user_id: string | null
 }
 
-interface ListUsersResult {
-  data: { users?: Array<{ id: string; email?: string | null }> } | null
+interface GetUserByIdResult {
+  data: { user?: { email?: string | null } | null } | null
   error: { message: string } | null
 }
 
@@ -52,33 +52,6 @@ function buildGeneratedParticipantId(userId: string): string {
   return `USR${compact.slice(0, 10).toUpperCase()}`
 }
 
-async function listAuthUserEmailsById(adminClient: ReturnType<typeof createAdminSupabaseClient>) {
-  const emailsByUserId = new Map<string, string>()
-  let page = 1
-
-  while (true) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 1000 }) as ListUsersResult
-    if (error) {
-      throw new Error(error.message)
-    }
-
-    const users = data?.users ?? []
-    for (const user of users) {
-      if (user.email) {
-        emailsByUserId.set(user.id, user.email)
-      }
-    }
-
-    if (users.length < 1000) {
-      break
-    }
-
-    page += 1
-  }
-
-  return emailsByUserId
-}
-
 export async function backfillParticipantNamesFromAuthEmails(
   adminClient: ReturnType<typeof createAdminSupabaseClient>
 ): Promise<number> {
@@ -97,11 +70,21 @@ export async function backfillParticipantNamesFromAuthEmails(
     return 0
   }
 
-  const emailsByUserId = await listAuthUserEmailsById(adminClient)
   let updatedCount = 0
 
   for (const participant of candidates) {
-    const email = participant.auth_user_id ? emailsByUserId.get(participant.auth_user_id) : null
+    if (!participant.auth_user_id) continue
+
+    const { data, error } = await adminClient.auth.admin.getUserById(participant.auth_user_id) as GetUserByIdResult
+    if (error) {
+      const lowerMessage = error.message.toLowerCase()
+      if (lowerMessage.includes('not found') || lowerMessage.includes('does not exist')) {
+        continue
+      }
+      throw new Error(error.message)
+    }
+
+    const email = data?.user?.email
     if (!email) continue
 
     const { firstName, lastName } = deriveNamesFromEmail(email)

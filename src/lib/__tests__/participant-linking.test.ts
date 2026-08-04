@@ -33,12 +33,11 @@ describe('backfillParticipantNamesFromAuthEmails', () => {
     const adminClient = {
       auth: {
         admin: {
-          listUsers: jest.fn(async () => ({
+          getUserById: jest.fn(async (userId: string) => ({
             data: {
-              users: [
-                { id: 'user-1', email: 'pilot@example.com' },
-                { id: 'user-2', email: 'alice.able@example.com' },
-              ],
+              user: {
+                email: userId === 'user-1' ? 'pilot@example.com' : 'alice.able@example.com',
+              },
             },
             error: null,
           })),
@@ -59,5 +58,6 @@ describe('backfillParticipantNamesFromAuthEmails', () => {
     await expect(backfillParticipantNamesFromAuthEmails(adminClient as never)).resolves.toBe(1)
     expect(update).toHaveBeenCalledWith({ first_name: 'Pilot', last_name: 'Account' })
     expect(updateEq).toHaveBeenCalledWith('id', 'EMP001')
+    expect(adminClient.auth.admin.getUserById).toHaveBeenCalledTimes(1)
   })
 })

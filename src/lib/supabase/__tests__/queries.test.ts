@@ -1,8 +1,6 @@
 import { getLatestWellness, getLatestWorkouts, getTeamDashboard } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
-import { createAdminSupabaseClient } from '../admin'
-import { backfillParticipantNamesFromAuthEmails } from '@/lib/participant-linking'
 
 jest.mock('../client', () => ({
   createClient: jest.fn(),
@@ -12,14 +10,6 @@ jest.mock('../server', () => ({
   createServerSupabaseClient: jest.fn(() => {
     throw new Error('Server client unavailable in unit test')
   }),
-}))
-
-jest.mock('../admin', () => ({
-  createAdminSupabaseClient: jest.fn(),
-}))
-
-jest.mock('@/lib/participant-linking', () => ({
-  backfillParticipantNamesFromAuthEmails: jest.fn(async () => 0),
 }))
 
 type QueryResult<T> = { data: T | null; error: { code?: string; message?: string } | null }
@@ -229,16 +219,12 @@ describe('getLatestWellness', () => {
 describe('getTeamDashboard', () => {
   const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
-  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
-  const mockBackfillParticipantNamesFromAuthEmails = backfillParticipantNamesFromAuthEmails as jest.MockedFunction<typeof backfillParticipantNamesFromAuthEmails>
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockCreateServerSupabaseClient.mockImplementation(() => {
       throw new Error('Server client unavailable in unit test')
     })
-    mockCreateAdminSupabaseClient.mockReturnValue({} as never)
-    mockBackfillParticipantNamesFromAuthEmails.mockResolvedValue(0)
   })
 
   test('uses each participant latest wellness row when calculating stats', async () => {
