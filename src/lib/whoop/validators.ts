@@ -249,8 +249,8 @@ export function validateExerciseRow(
     endTimeIso,
     timezone,
     activity: row['Activity name'] ? String(row['Activity name']).trim() || null : null,
-    durationMin: nonNegative(toInt(row['Duration (min)'])),
-    strain: toFloat(row['Activity Strain']),
+    durationMin: nonNegative(toInt(getRowValue(row, ['Duration (min)', 'Duration (mins)']))),
+    strain: toFloat(getRowValue(row, ['Activity Strain', 'Strain'])),
     calories: nonNegative(toInt(row['Energy burned (cal)'])),
     maxHr: nonNegative(toInt(row['Max HR (bpm)'])),
     avgHr: nonNegative(toInt(row['Average HR (bpm)'])),
@@ -291,7 +291,7 @@ export function validateWellnessRow(
   row: Record<string, unknown>,
   rowIndex: number,
   errors: ImportRowError[],
-  fallbackDate?: string | null,
+  preferredDate?: string | null,
 ): ValidatedWellnessRow | null {
   const participantId = String(row['Participant Identifier'] ?? '').trim()
   if (!participantId) {
@@ -299,7 +299,7 @@ export function validateWellnessRow(
     return null
   }
 
-  const date = resolveWellnessDate(row) ?? fallbackDate ?? null
+  const date = preferredDate ?? resolveWellnessDate(row) ?? null
   if (!date) {
     errors.push({ tab: tabName, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing WHOOP cycle date' })
     return null

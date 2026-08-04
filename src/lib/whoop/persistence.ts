@@ -11,6 +11,7 @@ const MANUAL_TAB = 'Manual Entries'
 interface PersistWhoopImportParams {
   supabase: SupabaseClient
   userId: string
+  participantId: string
   fileName: string
   fileSize: number
   fileHash: string
@@ -64,6 +65,21 @@ function logImportRowErrors(batchId: string, fileName: string, userId: string, e
       message: error.message,
     })
   })
+}
+
+function preserveExistingDayStrain(
+  row: MappedWellness['wellness'][number],
+  existingRow?: { day_strain?: unknown } | null,
+) {
+  const existingDayStrain = typeof existingRow?.day_strain === 'number' ? existingRow.day_strain : null
+  if (row.day_strain !== null || existingDayStrain === null) {
+    return row
+  }
+
+  return {
+    ...row,
+    day_strain: existingDayStrain,
+  }
 }
 
 export function deriveBatchStatus(totals: BatchTotals): ImportBatchStatus {
@@ -226,7 +242,7 @@ async function upsertDailyWellness(
 
     const { data: existingRows, error: existingError } = await supabase
       .from('daily_wellness')
-      .select('participant_id,date')
+      .select('participant_id,date,day_strain')
       .in('participant_id', participantIds)
       .in('date', dates)
 
@@ -236,8 +252,17 @@ async function upsertDailyWellness(
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.date}`))
-    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const existingRowsByKey = new Map<string, { day_strain?: unknown }>(
+      (existingRows ?? []).map((row) => [`${row.participant_id}|${row.date}`, row]),
+    )
+    const existingKeys = new Set<string>(existingRowsByKey.keys())
+    const chunkRows = chunk.map((row) => {
+      const key = `${row.participant_id}|${row.date}`
+      return {
+        ...preserveExistingDayStrain(row, existingRowsByKey.get(key)),
+        source_batch_id: batchId,
+      }
+    })
     const { error: upsertError } = await supabase
       .from('daily_wellness')
       .upsert(chunkRows, { onConflict: 'participant_id,date' })
@@ -306,6 +331,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
   const {
     supabase,
     userId,
+    participantId,
     fileName,
     fileSize,
     fileHash,
@@ -325,6 +351,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     .from('upload_batches')
     .insert({
       imported_by: userId,
+      participant_id: participantId,
       file_name: fileName,
       file_size_bytes: fileSize,
       file_hash_sha256: fileHash,

@@ -1,4 +1,4 @@
-import { getLatestWellness, getLatestWorkouts, getTeamDashboard } from '../queries'
+import { getLatestWellness, getLatestWorkouts, getParticipantImportBatches, getTeamDashboard } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
 
@@ -216,6 +216,52 @@ describe('getLatestWellness', () => {
   })
 })
 
+describe('getParticipantImportBatches', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+  const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCreateServerSupabaseClient.mockImplementation(() => {
+      throw new Error('Server client unavailable in unit test')
+    })
+  })
+
+  test('returns recent batches for a participant only', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        upload_batches: [
+          { id: 'batch-1', participant_id: 'P1', imported_by: 'admin-1', started_at: '2026-07-02T10:00:00Z' },
+          { id: 'batch-2', participant_id: 'P2', imported_by: 'admin-1', started_at: '2026-07-03T10:00:00Z' },
+          { id: 'batch-3', participant_id: 'P1', imported_by: 'admin-2', started_at: '2026-07-04T10:00:00Z' },
+        ],
+      }) as never
+    )
+
+    await expect(getParticipantImportBatches('P1', 5)).resolves.toEqual([
+      { id: 'batch-3', participant_id: 'P1', imported_by: 'admin-2', started_at: '2026-07-04T10:00:00Z' },
+      { id: 'batch-1', participant_id: 'P1', imported_by: 'admin-1', started_at: '2026-07-02T10:00:00Z' },
+    ])
+  })
+
+  test('applies the requested limit after ordering newest first', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        upload_batches: [
+          { id: 'batch-1', participant_id: 'P1', started_at: '2026-07-02T10:00:00Z' },
+          { id: 'batch-2', participant_id: 'P1', started_at: '2026-07-03T10:00:00Z' },
+          { id: 'batch-3', participant_id: 'P1', started_at: '2026-07-04T10:00:00Z' },
+        ],
+      }) as never
+    )
+
+    await expect(getParticipantImportBatches('P1', 2)).resolves.toEqual([
+      { id: 'batch-3', participant_id: 'P1', started_at: '2026-07-04T10:00:00Z' },
+      { id: 'batch-2', participant_id: 'P1', started_at: '2026-07-03T10:00:00Z' },
+    ])
+  })
+})
+
 describe('getTeamDashboard', () => {
   const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
@@ -293,5 +339,44 @@ describe('getTeamDashboard', () => {
     expect(dashboard.stats.avg_sleep_perf).toBe(75)
     expect(dashboard.stats.total_participants).toBe(2)
     expect(dashboard.stats.participation_rate).toBe(100)
+  })
+
+  test('keeps the newest wellness row even when its day strain is missing', async () => {
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alice',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0, day_strain: null },
+      { id: 'w2', participant_id: 'P1', date: '2024-06-07', recovery_score: 74, hrv_ms: 68, sleep_perf: 87, sleep_debt: 0, day_strain: 12.4 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
+    expect(dashboard.participants[0].latest_wellness?.day_strain).toBeNull()
   })
 })
