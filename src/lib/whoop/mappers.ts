@@ -143,12 +143,17 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
   // keyed by `${participantId}|${date}`
   const stressMap = new Map<string, ValidatedWellnessRow>()
   const sleepMap = new Map<string, ValidatedWellnessRow>()
+  const sleepDateByCycleStart = new Map<string, string>()
   const sleepDateBySignature = new Map<string, string>()
   let processed = 0
 
   for (const row of wb[TAB_SLEEP] ?? []) {
+    const cycleStartKey = getCycleLookupKey(row['Cycle start time'])
     const signature = getWellnessSignature(row)
     const date = resolveWellnessDate(row)
+    if (cycleStartKey && date) {
+      sleepDateByCycleStart.set(cycleStartKey, date)
+    }
     if (signature && date) {
       sleepDateBySignature.set(signature, date)
     }
@@ -158,9 +163,13 @@ export function mapWellness(wb: ParsedWorkbook): MappedWellness {
     const rows = wb[TAB_STRESS]
     processed += rows.length
     for (let i = 0; i < rows.length; i++) {
+      const cycleStartKey = getCycleLookupKey(rows[i]['Cycle start time'])
       const signature = getWellnessSignature(rows[i])
-      const fallbackDate = signature ? sleepDateBySignature.get(signature) ?? null : null
-      const v = validateWellnessRow(TAB_STRESS, rows[i], i + 2, errors, fallbackDate)
+      const preferredDate =
+        (cycleStartKey ? sleepDateByCycleStart.get(cycleStartKey) : null) ??
+        (signature ? sleepDateBySignature.get(signature) : null) ??
+        null
+      const v = validateWellnessRow(TAB_STRESS, rows[i], i + 2, errors, preferredDate)
       if (!v) continue
       const key = `${v.participantId}|${v.date}`
       const existing = stressMap.get(key)

@@ -294,4 +294,43 @@ describe('getTeamDashboard', () => {
     expect(dashboard.stats.total_participants).toBe(2)
     expect(dashboard.stats.participation_rate).toBe(100)
   })
+
+  test('keeps the newest wellness row even when its day strain is missing', async () => {
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alice',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0, day_strain: null },
+      { id: 'w2', participant_id: 'P1', date: '2024-06-07', recovery_score: 74, hrv_ms: 68, sleep_perf: 87, sleep_debt: 0, day_strain: 12.4 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
+    expect(dashboard.participants[0].latest_wellness?.day_strain).toBeNull()
+  })
 })
