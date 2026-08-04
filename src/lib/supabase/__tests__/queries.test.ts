@@ -313,9 +313,9 @@ describe('getTeamDashboard', () => {
     ]
 
     const pulseSurveys = [
-      { id: 'pulse1', participant_id: 'P1', date: '2024-06-08', wellbeing_score: 7, burnout_score: 3, manager_support: 7, energy_score: 6, psych_safety: 8, workload_score: 7, work_life_balance: 6, recommend_score: 7 },
-      { id: 'pulse2', participant_id: 'P2', date: '2024-06-08', wellbeing_score: 6, burnout_score: 4, manager_support: 6, energy_score: 6, psych_safety: 7, workload_score: 6, work_life_balance: 6, recommend_score: 6 },
-      { id: 'pulse-old', participant_id: 'P1', date: '2024-06-07', wellbeing_score: 5, burnout_score: 5, manager_support: 5, energy_score: 5, psych_safety: 5, workload_score: 5, work_life_balance: 5, recommend_score: 5 },
+      { id: 'pulse1', participant_id: 'P1', date: '2024-06-08', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+      { id: 'pulse2', participant_id: 'P2', date: '2024-06-08', confident_health: true, body_trending_good: false, energy_level: 3, rest_quality: 3, stress_level: 3, physical_activity: ['outside'], mental_wellbeing: 3, program_supported: 'neutral', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-old', participant_id: 'P1', date: '2024-06-07', confident_health: false, body_trending_good: false, energy_level: 2, rest_quality: 2, stress_level: 4, physical_activity: ['none'], mental_wellbeing: 2, program_supported: 'no', whoop_reviewed: 'no', health_flag: null },
     ]
 
     mockCreateClient.mockReturnValue(

@@ -1,6 +1,6 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getTeamDashboard, getLatestPulse } from '@/lib/supabase/queries'
-import { KpiCard, Card, Badge, BarRow } from '@/components/ui'
+import { KpiCard, Card, Badge } from '@/components/ui'
 import { initials, safeAvg } from '@/lib/utils'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -19,36 +19,36 @@ export default async function PulsePage() {
 
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
   const responded = pulse.length
-  const avgWellbeing = safeAvg(pulse.map((p) => p.wellbeing_score))
-  const avgBurnout = safeAvg(pulse.map((p) => p.burnout_score))
-  const avgPsychSafety = safeAvg(pulse.map((p) => p.psych_safety))
+  const avgMentalWellbeing = safeAvg(pulse.map((p) => p.mental_wellbeing))
+  const avgEnergy = safeAvg(pulse.map((p) => p.energy_level))
+  const pctConfident = responded > 0
+    ? Math.round((pulse.filter((p) => p.confident_health === true).length / responded) * 100)
+    : 0
 
-  const questions = [
-    { label: 'I feel supported by my manager', key: 'manager_support' as const },
-    { label: 'How much energy have you had this week overall?', key: 'energy_score' as const },
-    { label: 'I feel safe raising wellbeing concerns', key: 'psych_safety' as const },
-    { label: 'My workload feels manageable', key: 'workload_score' as const },
-    { label: 'Work-life balance is satisfactory', key: 'work_life_balance' as const },
-    { label: 'I would recommend this workplace', key: 'recommend_score' as const },
+  const scale5Questions = [
+    { label: 'Energy levels', key: 'energy_level' as const },
+    { label: 'Rest quality', key: 'rest_quality' as const },
+    { label: 'Stress levels (lower = better)', key: 'stress_level' as const },
+    { label: 'Mental wellbeing', key: 'mental_wellbeing' as const },
   ]
 
   return (
     <DashboardShell title="Pulse Survey Dashboard">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
         <KpiCard label="Response rate" value={`${Math.round((responded / participants.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${participants.length} responded`} deltaDir="up" />
-        <KpiCard label="Avg wellbeing" value={`${avgWellbeing}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
-        <KpiCard label="Burnout index" value={`${avgBurnout}/10`} color="#ff6b6b" delta="Lower is better" deltaDir="neutral" />
-        <KpiCard label="Psych safety" value={`${avgPsychSafety}/10`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Avg mental wellbeing" value={`${avgMentalWellbeing}/5`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Avg energy level" value={`${avgEnergy}/5`} color="#69BE28" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Confident about health" value={`${pctConfident}%`} color="#fff" delta={responded > 0 ? 'Said true this week' : 'No responses yet'} deltaDir="neutral" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card title="Wellbeing scores by participant" badge={<Badge variant="wolf">{responded} responses</Badge>}>
+        <Card title="Mental wellbeing by participant" badge={<Badge variant="wolf">{responded} responses</Badge>}>
           {[...participants]
             .filter((e) => pulseMap[e.id])
-            .sort((a, b) => (pulseMap[b.id]?.wellbeing_score ?? 0) - (pulseMap[a.id]?.wellbeing_score ?? 0))
-            .map((e, idx) => {
-              const score = pulseMap[e.id]?.wellbeing_score ?? 0
-              const color = score >= 7 ? '#69BE28' : score >= 5 ? '#FFA500' : '#ff6b6b'
+            .sort((a, b) => (pulseMap[b.id]?.mental_wellbeing ?? 0) - (pulseMap[a.id]?.mental_wellbeing ?? 0))
+            .map((e) => {
+              const score = pulseMap[e.id]?.mental_wellbeing ?? 0
+              const color = score >= 4 ? '#69BE28' : score >= 3 ? '#FFA500' : '#ff6b6b'
               return (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
                   <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#1a4a2e', color: '#69BE28', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
@@ -58,7 +58,7 @@ export default async function PulsePage() {
                     {e.first_name}{e.is_exact_data ? ' ★' : ''}
                   </span>
                   <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${score * 10}%`, height: '100%', background: color, borderRadius: 3 }} />
+                    <div style={{ width: `${score * 20}%`, height: '100%', background: color, borderRadius: 3 }} />
                   </div>
                   <span style={{ width: 24, textAlign: 'right', fontSize: 11, fontWeight: 700, color }}>{score}</span>
                 </div>
@@ -67,21 +67,62 @@ export default async function PulsePage() {
         </Card>
 
         <Card title="Question breakdown">
-          {questions.map((q) => {
+          {scale5Questions.map((q) => {
             const avg = safeAvg(pulse.map((p) => p[q.key]))
-            const color = avg >= 7 ? '#69BE28' : avg >= 5 ? '#FFA500' : '#ff6b6b'
+            const isStress = q.key === 'stress_level'
+            const color = isStress
+              ? (avg <= 2 ? '#69BE28' : avg <= 3 ? '#FFA500' : '#ff6b6b')
+              : (avg >= 4 ? '#69BE28' : avg >= 3 ? '#FFA500' : '#ff6b6b')
             return (
               <div key={q.key} style={{ padding: '8px 0', borderBottom: '1px solid #0a3560' }}>
                 <div style={{ fontSize: 11, color: '#fff', marginBottom: 5 }}>{q.label}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${avg * 10}%`, height: '100%', background: color, borderRadius: 3 }} />
+                    <div style={{ width: `${avg * 20}%`, height: '100%', background: color, borderRadius: 3 }} />
                   </div>
                   <span style={{ fontSize: 11, fontWeight: 700, width: 24, color }}>{avg}</span>
                 </div>
               </div>
             )
           })}
+          {/* Boolean questions */}
+          {responded > 0 && (
+            <>
+              {[
+                { label: 'Confident about health/progress', key: 'confident_health' as const },
+                { label: 'Body/results trending well', key: 'body_trending_good' as const },
+              ].map((q) => {
+                const pct = Math.round((pulse.filter((p) => p[q.key] === true).length / responded) * 100)
+                const color = pct >= 70 ? '#69BE28' : pct >= 50 ? '#FFA500' : '#ff6b6b'
+                return (
+                  <div key={q.key} style={{ padding: '8px 0', borderBottom: '1px solid #0a3560' }}>
+                    <div style={{ fontSize: 11, color: '#fff', marginBottom: 5 }}>{q.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, width: 32, color }}>{pct}%</span>
+                    </div>
+                  </div>
+                )
+              })}
+              {/* Program supported distribution */}
+              <div style={{ padding: '8px 0', borderBottom: '1px solid #0a3560' }}>
+                <div style={{ fontSize: 11, color: '#fff', marginBottom: 5 }}>Program supported wellbeing</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(['yes', 'neutral', 'no'] as const).map((opt) => {
+                    const count = pulse.filter((p) => p.program_supported === opt).length
+                    const color = opt === 'yes' ? '#69BE28' : opt === 'neutral' ? '#FFA500' : '#ff6b6b'
+                    return (
+                      <span key={opt} style={{ fontSize: 10, color, fontWeight: 600 }}>
+                        {opt.charAt(0).toUpperCase() + opt.slice(1)}: {count}
+                      </span>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </Card>
       </div>
     </DashboardShell>

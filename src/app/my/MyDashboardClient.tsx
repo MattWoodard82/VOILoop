@@ -118,9 +118,9 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     .reverse()
     .map((entry) => ({
       date: entry.date.slice(5),
-      wellbeing: entry.wellbeing_score,
-      burnout: entry.burnout_score,
-      energy: entry.energy_score,
+      mental_wellbeing: entry.mental_wellbeing,
+      energy_level: entry.energy_level,
+      stress_level: entry.stress_level,
     }))
 
   const importSyncLabel = latestImport?.completed_at
@@ -330,15 +330,17 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
         <Card title="Pulse check-ins" badge={<Badge variant="wolf">{pulse.length} recent</Badge>}>
           {latestPulse ? (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: pulseTrendData.length > 1 ? 16 : 0 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: pulseTrendData.length > 1 ? 16 : 0 }}>
                 {[
-                  { label: 'Wellbeing', value: latestPulse.wellbeing_score },
-                  { label: 'Burnout', value: latestPulse.burnout_score },
-                  { label: 'Energy', value: latestPulse.energy_score },
-                  { label: 'Work-life', value: latestPulse.work_life_balance },
+                  { label: 'Mental Wellbeing', value: latestPulse.mental_wellbeing },
+                  { label: 'Energy Level', value: latestPulse.energy_level },
+                  { label: 'Stress Level', value: latestPulse.stress_level },
                 ].map((item) => {
                   const numericValue = item.value ?? null
-                  const color = numericValue == null ? '#A5ACAF' : numericValue >= 7 ? '#69BE28' : numericValue >= 5 ? '#FFA500' : '#ff6b6b'
+                  const isStress = item.label === 'Stress Level'
+                  const color = numericValue == null ? '#A5ACAF' : 
+                    isStress ? (numericValue <= 2 ? '#69BE28' : numericValue <= 3 ? '#FFA500' : '#ff6b6b') :
+                    (numericValue >= 4 ? '#69BE28' : numericValue >= 3 ? '#FFA500' : '#ff6b6b')
 
                   return (
                     <div key={item.label} style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
@@ -347,7 +349,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
                       </div>
                       <div style={{ fontSize: 22, fontWeight: 700, color }}>
                         {numericValue ?? '—'}
-                        <span style={{ fontSize: 10, color: '#A5ACAF', marginLeft: 2 }}>/10</span>
+                        <span style={{ fontSize: 10, color: '#A5ACAF', marginLeft: 2 }}>/5</span>
                       </div>
                     </div>
                   )
@@ -359,11 +361,11 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
                   <LineChart data={pulseTrendData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
                     <CartesianGrid stroke="rgba(10,53,96,0.6)" strokeDasharray="3 3" />
                     <XAxis dataKey="date" tick={{ fill: '#A5ACAF', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: '#A5ACAF', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} width={28} domain={[0, 10]} />
+                    <YAxis tick={{ fill: '#A5ACAF', fontSize: 10, fontFamily: 'Inter' }} axisLine={false} tickLine={false} width={28} domain={[0, 5]} />
                     <Tooltip contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }} labelStyle={{ color: '#fff' }} />
-                    <Line type="monotone" dataKey="wellbeing" stroke="#69BE28" strokeWidth={2} dot={{ r: 3, fill: '#69BE28' }} name="Wellbeing" />
-                    <Line type="monotone" dataKey="energy" stroke="#378ADD" strokeWidth={2} dot={{ r: 3, fill: '#378ADD' }} strokeDasharray="4 3" name="Energy" />
-                    <Line type="monotone" dataKey="burnout" stroke="#ff6b6b" strokeWidth={2} dot={{ r: 3, fill: '#ff6b6b' }} name="Burnout" />
+                    <Line type="monotone" dataKey="mental_wellbeing" stroke="#69BE28" strokeWidth={2} dot={{ r: 3, fill: '#69BE28' }} name="Mental Wellbeing" />
+                    <Line type="monotone" dataKey="energy_level" stroke="#378ADD" strokeWidth={2} dot={{ r: 3, fill: '#378ADD' }} strokeDasharray="4 3" name="Energy Level" />
+                    <Line type="monotone" dataKey="stress_level" stroke="#ff6b6b" strokeWidth={2} dot={{ r: 3, fill: '#ff6b6b' }} name="Stress Level" />
                   </LineChart>
                 </ResponsiveContainer>
               ) : null}
@@ -414,3 +416,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
+
+
+
+

@@ -205,23 +205,23 @@ export async function getLatestPulse(): Promise<PulseSurvey[]> {
   return data ?? []
 }
 
-export async function getPulseTrend(): Promise<{ date: string; avg_wellbeing: number; avg_burnout: number }[]> {
+export async function getPulseTrend(): Promise<{ date: string; avg_mental_wellbeing: number; avg_energy_level: number }[]> {
   const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('pulse_surveys')
-    .select('date, wellbeing_score, burnout_score')
+    .select('date, mental_wellbeing, energy_level')
     .order('date', { ascending: true })
   if (error) throw error
-  const byDate: Record<string, { w: number[]; b: number[] }> = {}
+  const byDate: Record<string, { w: number[]; e: number[] }> = {}
   ;(data ?? []).forEach((row) => {
-    if (!byDate[row.date]) byDate[row.date] = { w: [], b: [] }
-    if (row.wellbeing_score) byDate[row.date].w.push(row.wellbeing_score)
-    if (row.burnout_score) byDate[row.date].b.push(row.burnout_score)
+    if (!byDate[row.date]) byDate[row.date] = { w: [], e: [] }
+    if (row.mental_wellbeing) byDate[row.date].w.push(row.mental_wellbeing)
+    if (row.energy_level) byDate[row.date].e.push(row.energy_level)
   })
   return Object.entries(byDate).map(([date, v]) => ({
     date,
-    avg_wellbeing: avg(v.w),
-    avg_burnout: avg(v.b),
+    avg_mental_wellbeing: avg(v.w),
+    avg_energy_level: avg(v.e),
   }))
 }
 

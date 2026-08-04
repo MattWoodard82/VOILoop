@@ -90,14 +90,16 @@ export interface PulseSurvey {
   id: string
   participant_id: string
   date: string
-  wellbeing_score: number | null
-  burnout_score: number | null
-  manager_support: number | null
-  energy_score: number | null
-  psych_safety: number | null
-  workload_score: number | null
-  work_life_balance: number | null
-  recommend_score: number | null
+  confident_health: boolean | null
+  body_trending_good: boolean | null
+  energy_level: number | null
+  rest_quality: number | null
+  stress_level: number | null
+  physical_activity: string[] | null
+  mental_wellbeing: number | null
+  program_supported: 'yes' | 'neutral' | 'no' | null
+  whoop_reviewed: 'yes_regularly' | 'yes_once' | 'no' | null
+  health_flag: string | null
 }
 
 export interface Intervention {
