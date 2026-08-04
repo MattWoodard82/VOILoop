@@ -246,6 +246,7 @@ describe('persistWhoopImport', () => {
     await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP901',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-initial',
@@ -282,6 +283,7 @@ describe('persistWhoopImport', () => {
     await persistWhoopImport({
       supabase: supabase as never,
       userId: 'user-1',
+      participantId: 'EMP901',
       fileName: 'whoop-export.xlsx',
       fileSize: 1234,
       fileHash: 'hash-reimport',
