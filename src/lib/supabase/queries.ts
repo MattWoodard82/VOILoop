@@ -26,6 +26,34 @@ export function avg(nums: (number | null)[]): number {
   return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
 }
 
+const WELLNESS_METRIC_FIELDS: Array<keyof DailyWellness> = [
+  'recovery_score',
+  'hrv_ms',
+  'resting_hr',
+  'blood_oxygen',
+  'skin_temp',
+  'day_strain',
+  'calories',
+  'sleep_perf',
+  'sleep_hrs',
+  'sleep_debt',
+  'sleep_need',
+  'deep_sleep',
+  'rem_sleep',
+  'light_sleep',
+  'sleep_eff',
+  'sleep_consistency',
+  'resp_rate',
+]
+
+const WELLNESS_MEANINGFUL_FILTER = WELLNESS_METRIC_FIELDS
+  .map((field) => `${field}.not.is.null`)
+  .join(',')
+
+export function hasMeaningfulWellnessData(row: Partial<DailyWellness> | null | undefined): boolean {
+  return WELLNESS_METRIC_FIELDS.some((field) => row?.[field] !== null && row?.[field] !== undefined)
+}
+
 function getQueryClient() {
   try {
     return createServerSupabaseClient()
@@ -81,7 +109,22 @@ export async function getLatestWellness(date?: string, participantIds?: string[]
   if (targetParticipantIds.length === 0) return []
 
   const latestRows = await Promise.all(targetParticipantIds.map(async (participantId) => {
-    const { data, error } = await supabase
+    const meaningfulQuery = supabase
+      .from('daily_wellness')
+      .select('*')
+      .eq('participant_id', participantId)
+      .or(WELLNESS_MEANINGFUL_FILTER)
+      .order('date', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(1)
+
+    const { data: meaningfulRows, error: meaningfulError } = await meaningfulQuery
+    if (meaningfulError) throw meaningfulError
+    if ((meaningfulRows ?? []).length > 0) {
+      return meaningfulRows?.[0] ?? null
+    }
+
+    const { data: latestRows, error: latestError } = await supabase
       .from('daily_wellness')
       .select('*')
       .eq('participant_id', participantId)
@@ -89,8 +132,8 @@ export async function getLatestWellness(date?: string, participantIds?: string[]
       .order('id', { ascending: false })
       .limit(1)
 
-    if (error) throw error
-    return data?.[0] ?? null
+    if (latestError) throw latestError
+    return latestRows?.[0] ?? null
   }))
 
   return latestRows.filter((row): row is DailyWellness => row !== null)
@@ -107,7 +150,7 @@ export async function getWellnessTrend(participantId: string, days: number = 30)
     .gte('date', since.toISOString().split('T')[0])
     .order('date', { ascending: true })
   if (error) throw error
-  return data ?? []
+  return (data ?? []).filter((row) => hasMeaningfulWellnessData(row))
 }
 
 export async function getTeamWellnessTrend(months: number = 6): Promise<{ month: string; avg_recovery: number }[]> {

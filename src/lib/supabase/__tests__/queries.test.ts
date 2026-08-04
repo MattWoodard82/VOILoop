@@ -40,7 +40,10 @@ function makeSupabaseClient<T>(resultForStartTime: QueryResult<T>, fallbackResul
 function makeTableClient(tables: Record<string, any[]>) {
   const from = jest.fn((table: string) => {
     const rows = [...(tables[table] ?? [])]
-    const filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }> = []
+    const filters: Array<
+      | { kind: 'eq' | 'in'; column: string; value: any }
+      | { kind: 'or-not-null'; columns: string[] }
+    > = []
     const orders: Array<{ column: string; ascending: boolean }> = []
     let limitCount: number | null = null
 
@@ -52,6 +55,15 @@ function makeTableClient(tables: Record<string, any[]>) {
       }),
       in: jest.fn((column: string, value: any[]) => {
         filters.push({ kind: 'in', column, value })
+        return builder
+      }),
+      or: jest.fn((expression: string) => {
+        const columns = expression
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean)
+          .map((part) => part.replace(/\.not\.is\.null$/, ''))
+        filters.push({ kind: 'or-not-null', columns })
         return builder
       }),
       order: jest.fn((column: string, options?: { ascending?: boolean }) => {
@@ -80,13 +92,20 @@ function makeTableClient(tables: Record<string, any[]>) {
 
 function runQuery(
   rows: any[],
-  filters: Array<{ kind: 'eq' | 'in'; column: string; value: any }>,
+  filters: Array<
+    | { kind: 'eq' | 'in'; column: string; value: any }
+    | { kind: 'or-not-null'; columns: string[] }
+  >,
   orders: Array<{ column: string; ascending: boolean }>,
   limitCount: number | null
 ) {
   let result = [...rows]
 
   for (const filter of filters) {
+    if (filter.kind === 'or-not-null') {
+      result = result.filter((row) => filter.columns.some((column) => row[column] !== null && row[column] !== undefined))
+      continue
+    }
     if (filter.kind === 'eq') {
       result = result.filter((row) => row[filter.column] === filter.value)
       continue
@@ -187,6 +206,23 @@ describe('getLatestWellness', () => {
       wellnessRows[0],
       wellnessRows[2],
       wellnessRows[4],
+    ])
+  })
+
+  test('prefers the latest row with metrics when the newest row is an empty placeholder', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        daily_wellness: [
+          { id: 'w-empty', participant_id: 'P1', date: '2024-06-07', recovery_score: null, hrv_ms: null, sleep_perf: null, sleep_debt: null, day_strain: null },
+          wellnessRows[0],
+          wellnessRows[2],
+        ],
+      }) as never
+    )
+
+    await expect(getLatestWellness(undefined, ['P1', 'P2'])).resolves.toEqual([
+      wellnessRows[0],
+      wellnessRows[2],
     ])
   })
 
@@ -378,5 +414,45 @@ describe('getTeamDashboard', () => {
     const dashboard = await getTeamDashboard()
     expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
     expect(dashboard.participants[0].latest_wellness?.day_strain).toBeNull()
+  })
+
+  test('falls back to the latest meaningful wellness row when a newer placeholder row is empty', async () => {
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alice',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: null,
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w-empty', participant_id: 'P1', date: '2024-06-09', recovery_score: null, hrv_ms: null, sleep_perf: null, sleep_debt: null, day_strain: null },
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0, day_strain: 12.4 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    expect(dashboard.participants[0].latest_wellness?.date).toBe('2024-06-08')
+    expect(dashboard.participants[0].latest_wellness?.day_strain).toBe(12.4)
+    expect(dashboard.participants[0].latest_wellness?.recovery_score).toBe(80)
   })
 })

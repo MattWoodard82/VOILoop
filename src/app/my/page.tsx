@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { ensureParticipantForAuthUser } from '@/lib/participant-linking'
-import { getParticipantImportBatches } from '@/lib/supabase/queries'
+import { getLatestWellness, getParticipantImportBatches, hasMeaningfulWellnessData } from '@/lib/supabase/queries'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
@@ -61,15 +61,12 @@ export default async function MyPage() {
     .gte('date', trendWindowStartDate)
     .order('date', { ascending: false })
 
-  if (!wellness?.length) {
-    const { data: latestWellness } = await supabase
-      .from('daily_wellness')
-      .select('*')
-      .eq('participant_id', participant.id)
-      .order('date', { ascending: false })
-      .limit(1)
+  const meaningfulWellness = (wellness ?? []).filter((row) => hasMeaningfulWellnessData(row))
 
-    wellness = latestWellness ?? []
+  if (meaningfulWellness.length > 0) {
+    wellness = meaningfulWellness
+  } else {
+    wellness = await getLatestWellness(undefined, [participant.id])
   }
 
   const { data: habits } = await supabase.from('habits').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
