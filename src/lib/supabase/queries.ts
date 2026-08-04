@@ -323,6 +323,18 @@ export async function getRecentImportBatches(limit: number = 20): Promise<Import
   return data ?? []
 }
 
+export async function getParticipantImportBatches(participantId: string, limit: number = 5): Promise<ImportBatch[]> {
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('upload_batches')
+    .select('*')
+    .eq('participant_id', participantId)
+    .order('started_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data ?? []
+}
+
 export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOutcome[]> {
   const supabase = getQueryClient()
   const { data, error } = await supabase

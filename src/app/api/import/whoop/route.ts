@@ -284,6 +284,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const result = await persistWhoopImport({
       supabase,
       userId: session.user.id,
+      participantId: selectedParticipantProfile.participantId,
       fileName,
       fileSize: totalFileSize,
       fileHash,

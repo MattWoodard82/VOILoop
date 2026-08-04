@@ -140,6 +140,7 @@ export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partia
 export interface ImportBatch {
   id: string
   imported_by: string | null
+  participant_id: string | null
   file_name: string
   file_size_bytes: number
   file_hash_sha256: string

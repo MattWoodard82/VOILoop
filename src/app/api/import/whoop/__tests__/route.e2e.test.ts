@@ -268,6 +268,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
       supabase,
       userId: 'user-1',
+      participantId: 'EMP001',
       fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
       fileSize: expect.any(Number),
       fileHash: expect.any(String),
