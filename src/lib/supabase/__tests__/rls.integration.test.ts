@@ -276,6 +276,52 @@ describeRlsIntegration('Supabase RLS integration', () => {
     expect(data?.map((row) => row.participant_id)).toEqual([participantAId, participantBId])
   })
 
+  test('participants can acknowledge their own nudges but cannot read other participants acknowledgements', async () => {
+    const participantA = identities.find((identity) => identity.role === 'participant' && identity.participantId === participantAId)
+    const participantB = identities.find((identity) => identity.role === 'participant' && identity.participantId === participantBId)
+    if (!participantA || !participantB) throw new Error('participant identities not found')
+
+    const admin = identities.find((identity) => identity.role === 'admin')
+    if (!admin) throw new Error('admin identity not found')
+
+    const adminClient = await signIn(admin)
+    const { data: nudge } = await adminClient
+      .from('weekly_nudges')
+      .insert({
+        week_of: '2026-08-03',
+        message: `Stay hydrated ${testId}`,
+        author: 'Heather',
+      })
+      .select('id')
+      .single()
+    expect(nudge?.id).toBeTruthy()
+
+    const participantClient = await signIn(participantA)
+    const { error: insertError } = await participantClient
+      .from('nudge_acknowledgements')
+      .insert({
+        nudge_id: nudge!.id,
+        participant_id: participantAId,
+        response_text: 'Acknowledged',
+      })
+    expect(insertError).toBeNull()
+
+    const { data: selfAck, error: selfAckError } = await participantClient
+      .from('nudge_acknowledgements')
+      .select('participant_id,response_text')
+      .eq('participant_id', participantAId)
+      .single()
+    expect(selfAckError).toBeNull()
+    expect(selfAck?.participant_id).toBe(participantAId)
+
+    const { data: otherAck, error: otherAckError } = await participantClient
+      .from('nudge_acknowledgements')
+      .select('participant_id,response_text')
+      .eq('participant_id', participantBId)
+    expect(otherAckError).not.toBeNull()
+    expect(otherAck).toBeNull()
+  })
+
   test('admin can read all participant-linked upload batches', async () => {
     const admin = identities.find((identity) => identity.role === 'admin')
     if (!admin) throw new Error('admin identity not found')

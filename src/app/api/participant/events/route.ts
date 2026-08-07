@@ -52,7 +52,7 @@ export async function GET() {
       .limit(5),
     supabase
       .from('weekly_nudges')
-      .select('message, author, week_of')
+      .select('id, message, author, week_of')
       .lte('week_of', weekOf)
       .order('week_of', { ascending: false })
       .limit(1)
@@ -67,9 +67,22 @@ export async function GET() {
   if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
   if (rsvpError) return NextResponse.json({ error: rsvpError.message }, { status: 500 })
 
+  let acknowledgement = null
+  if (nudge?.id) {
+    const { data, error } = await supabase
+      .from('nudge_acknowledgements')
+      .select('acknowledged_at, response_text, response_due_at')
+      .eq('nudge_id', nudge.id)
+      .eq('participant_id', participantId)
+      .maybeSingle()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    acknowledgement = data
+  }
+
   return NextResponse.json({
     events: events ?? [],
     nudge: nudge ?? null,
+    acknowledgement,
     rsvpEventIds: (rsvps ?? []).map((entry) => entry.event_id),
   })
 }
@@ -110,5 +123,40 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  return NextResponse.json({ ok: true })
+}
+
+export async function PATCH(request: Request) {
+  const participantAccess = await requireParticipantSession()
+  if ('error' in participantAccess) return participantAccess.error
+
+  const { supabase, participantId } = participantAccess
+
+  let payload: { nudgeId?: string; responseText?: string }
+  try {
+    payload = await request.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
+  }
+
+  const nudgeId = (payload.nudgeId ?? '').trim()
+  const responseText = (payload.responseText ?? '').trim()
+  if (!nudgeId) {
+    return NextResponse.json({ error: 'nudgeId is required.' }, { status: 400 })
+  }
+  if (!responseText) {
+    return NextResponse.json({ error: 'Response text is required.' }, { status: 400 })
+  }
+
+  const { error } = await supabase
+    .from('nudge_acknowledgements')
+    .upsert({
+      nudge_id: nudgeId,
+      participant_id: participantId,
+      response_text: responseText,
+      acknowledged_at: new Date().toISOString(),
+    }, { onConflict: 'nudge_id,participant_id' })
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }

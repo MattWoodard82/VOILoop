@@ -69,6 +69,17 @@ describe('role access e2e (route-level)', () => {
             })),
           }
         }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({ data: null, error: null })),
+                })),
+              })),
+            })),
+          }
+        }
         if (table === 'event_rsvps') {
           return {
             select: jest.fn(() => ({
@@ -148,6 +159,16 @@ describe('role access e2e (route-level)', () => {
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
         if (table === 'events') return { insert }
+        if (table === 'weekly_nudges') {
+          return {
+            upsert: jest.fn(() => ({
+              select: jest.fn(() => ({
+                single: jest.fn(async () => ({ data: { id: 'nudge-1' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') return { upsert: jest.fn(async () => ({ error: null })) }
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)

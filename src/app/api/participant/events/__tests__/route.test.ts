@@ -1,4 +1,4 @@
-import { GET, POST } from '../route'
+import { GET, PATCH, POST } from '../route'
 import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
 
 jest.mock('@/lib/supabase/server', () => ({
@@ -55,7 +55,11 @@ describe('/api/participant/events', () => {
       error: null,
     }))
     const nudgeMaybeSingle = jest.fn(async () => ({
-      data: { message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      error: null,
+    }))
+    const ackMaybeSingle = jest.fn(async () => ({
+      data: { acknowledged_at: '2026-07-20T12:00:00Z', response_text: 'Will do', response_due_at: '2026-07-22T12:00:00Z' },
       error: null,
     }))
     const rsvpsEq = jest.fn(async () => ({
@@ -105,6 +109,17 @@ describe('/api/participant/events', () => {
             })),
           }
         }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: ackMaybeSingle,
+                })),
+              })),
+            })),
+          }
+        }
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)
@@ -116,7 +131,8 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(200)
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Walk Club' }],
-      nudge: { message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      nudge: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      acknowledgement: { acknowledged_at: '2026-07-20T12:00:00Z', response_text: 'Will do', response_due_at: '2026-07-22T12:00:00Z' },
       rsvpEventIds: ['evt-1'],
     })
   })
@@ -211,5 +227,39 @@ describe('/api/participant/events', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('boolean') })
+  })
+
+  test('PATCH records an acknowledgement response', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const upsert = jest.fn(async () => ({ error: null }))
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_acknowledgements') return { upsert }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(200)
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      nudge_id: 'nudge-1',
+      participant_id: 'EMP123',
+      response_text: 'Will do',
+    }), { onConflict: 'nudge_id,participant_id' })
   })
 })

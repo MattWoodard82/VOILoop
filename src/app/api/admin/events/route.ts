@@ -18,6 +18,9 @@ interface NudgePayload {
   message?: string
   author?: string
   week_of?: string
+  target_type?: 'all' | 'subgroup' | 'participant'
+  target_label?: string
+  participant_id?: string
 }
 
 const VALID_EVENT_TYPES = new Set(['outdoor', 'fitness', 'race', 'general'])
@@ -120,21 +123,51 @@ export async function PUT(request: Request) {
   const message = (payload.message ?? '').trim()
   const author = (payload.author ?? '').trim() || 'VOILoop'
   const weekOf = (payload.week_of ?? '').trim() || getMondayOfCurrentWeekIso()
+  const targetType = payload.target_type ?? 'all'
+  const targetLabel = (payload.target_label ?? '').trim()
+  const participantId = (payload.participant_id ?? '').trim()
   if (!message) {
     return NextResponse.json({ error: 'Nudge message is required.' }, { status: 400 })
   }
+  if (!['all', 'subgroup', 'participant'].includes(targetType)) {
+    return NextResponse.json({ error: 'Invalid target type.' }, { status: 400 })
+  }
+  if (targetType !== 'all' && !targetLabel) {
+    return NextResponse.json({ error: 'Target label is required for targeted nudges.' }, { status: 400 })
+  }
+  if (targetType === 'participant' && !participantId) {
+    return NextResponse.json({ error: 'Participant id is required for individual nudges.' }, { status: 400 })
+  }
 
   const supabase = createServerSupabaseClient()
-  const { error } = await supabase
+  const { data: nudge, error } = await supabase
     .from('weekly_nudges')
     .upsert({
       week_of: weekOf,
       message,
       author,
     }, { onConflict: 'week_of' })
+    .select('id')
+    .single()
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  if (!nudge?.id) {
+    return NextResponse.json({ error: 'Failed to persist nudge.' }, { status: 500 })
+  }
+
+  const { error: targetError } = await supabase
+    .from('nudge_targets')
+    .upsert({
+      nudge_id: nudge.id,
+      target_type: targetType,
+      target_label: targetLabel,
+      participant_id: targetType === 'participant' ? participantId : null,
+    })
+
+  if (targetError) {
+    return NextResponse.json({ error: targetError.message }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })
