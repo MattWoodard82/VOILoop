@@ -35,6 +35,37 @@ async function requireParticipantSession() {
   return { supabase, participantId: participant.id }
 }
 
+type NudgeRow = {
+  id: string
+  message: string
+  author: string
+  week_of: string
+  target_type: string
+  participant_id: string | null
+}
+
+function isEligibleTarget(nudge: Pick<NudgeRow, 'target_type' | 'participant_id'>, participantId: string) {
+  return nudge.target_type === 'all' || (nudge.target_type === 'participant' && nudge.participant_id === participantId)
+}
+
+async function getLatestTargetedNudge(supabase: ReturnType<typeof createServerSupabaseClient>, participantId: string, weekOf: string) {
+  const { data: nudges, error } = await supabase
+    .from('weekly_nudges')
+    .select('id, message, author, week_of, nudge_targets!inner(target_type, participant_id)')
+    .lte('week_of', weekOf)
+    .order('week_of', { ascending: false })
+    .limit(10)
+
+  if (error) return { error }
+
+  const eligible = (nudges ?? []).find((entry) => {
+    const nudge = entry as NudgeRow
+    return isEligibleTarget(nudge, participantId)
+  }) as NudgeRow | undefined
+
+  return { nudge: eligible ?? null }
+}
+
 export async function GET() {
   const participantAccess = await requireParticipantSession()
   if ('error' in participantAccess) return participantAccess.error
@@ -43,20 +74,14 @@ export async function GET() {
   const today = new Date().toISOString().split('T')[0]
   const weekOf = mondayOfCurrentWeekIso()
 
-  const [{ data: events, error: eventsError }, { data: nudge, error: nudgeError }, { data: rsvps, error: rsvpError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, nudgeResult, { data: rsvps, error: rsvpError }] = await Promise.all([
     supabase
       .from('events')
       .select('*')
       .gte('event_date', today)
       .order('event_date', { ascending: true })
       .limit(5),
-    supabase
-      .from('weekly_nudges')
-      .select('id, message, author, week_of')
-      .lte('week_of', weekOf)
-      .order('week_of', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+    getLatestTargetedNudge(supabase, participantId, weekOf),
     supabase
       .from('event_rsvps')
       .select('event_id')
@@ -64,9 +89,10 @@ export async function GET() {
   ])
 
   if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 })
-  if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
+  if ('error' in nudgeResult) return NextResponse.json({ error: nudgeResult.error.message }, { status: 500 })
   if (rsvpError) return NextResponse.json({ error: rsvpError.message }, { status: 500 })
 
+  const nudge = 'nudge' in nudgeResult ? nudgeResult.nudge : null
   let acknowledgement = null
   if (nudge?.id) {
     const { data, error } = await supabase
@@ -148,6 +174,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Response text is required.' }, { status: 400 })
   }
 
+  const { data: nudge, error: nudgeError } = await supabase
+    .from('weekly_nudges')
+    .select('id, week_of, nudge_targets!inner(target_type, participant_id)')
+    .eq('id', nudgeId)
+    .maybeSingle()
+
+  if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
+  if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
+
+  const target = nudge as NudgeRow
+  if (!isEligibleTarget(target, participantId)) {
+    return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
+  }
+  const responseDueAt = new Date(`${nudge.week_of}T00:00:00Z`)
+  responseDueAt.setHours(responseDueAt.getHours() + 48)
+  if (responseDueAt.getTime() < Date.now()) {
+    return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
+  }
+
   const { error } = await supabase
     .from('nudge_acknowledgements')
     .upsert({
@@ -155,6 +200,7 @@ export async function PATCH(request: Request) {
       participant_id: participantId,
       response_text: responseText,
       acknowledged_at: new Date().toISOString(),
+      response_due_at: responseDueAt.toISOString(),
     }, { onConflict: 'nudge_id,participant_id' })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

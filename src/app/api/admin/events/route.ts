@@ -147,7 +147,7 @@ export async function PUT(request: Request) {
       message,
       author,
     }, { onConflict: 'week_of' })
-    .select('id')
+    .select('id, created_at')
     .single()
 
   if (error) {
@@ -157,14 +157,16 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: 'Failed to persist nudge.' }, { status: 500 })
   }
 
+  const targetPayload = {
+    nudge_id: nudge.id,
+    target_type: targetType,
+    target_label: targetLabel,
+    participant_id: targetType === 'participant' ? participantId : null,
+  }
+
   const { error: targetError } = await supabase
     .from('nudge_targets')
-    .upsert({
-      nudge_id: nudge.id,
-      target_type: targetType,
-      target_label: targetLabel,
-      participant_id: targetType === 'participant' ? participantId : null,
-    })
+    .upsert(targetPayload, { onConflict: 'nudge_id,target_type,target_label,participant_id' })
 
   if (targetError) {
     return NextResponse.json({ error: targetError.message }, { status: 500 })

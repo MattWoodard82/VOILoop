@@ -158,7 +158,7 @@ describe('admin events routes', () => {
       target_type: 'participant',
       target_label: 'Night Shift',
       participant_id: 'EMP-1',
-    })
+    }, { onConflict: 'nudge_id,target_type,target_label,participant_id' })
     expect(nudgeSelectSingle).toHaveBeenCalled()
   })
 
