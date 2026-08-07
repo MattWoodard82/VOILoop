@@ -220,17 +220,18 @@ export function calculateRiskTier(
     : null
 
   // Combine risks: worst case wins
-  const riskOrder = { red: 3, yellow: 2, green: 1 }
-  let maxRisk: RiskTier = 'green'
+  type ComparableRiskTier = Exclude<RiskTier, 'no_data'>
+  const riskOrder: Record<ComparableRiskTier, number> = { red: 3, yellow: 2, green: 1 }
+  let maxRisk: ComparableRiskTier = 'green'
 
   if (scoreRisk) {
-    const scoreLevel = riskOrder[scoreRisk as RiskTier]
-    if (scoreLevel > riskOrder[maxRisk]) maxRisk = scoreRisk as RiskTier
+    const scoreLevel = riskOrder[scoreRisk as ComparableRiskTier]
+    if (scoreLevel > riskOrder[maxRisk]) maxRisk = scoreRisk as ComparableRiskTier
   }
 
   if (trendRisk) {
-    const trendLevel = riskOrder[trendRisk as RiskTier]
-    if (trendLevel > riskOrder[maxRisk]) maxRisk = trendRisk as RiskTier
+    const trendLevel = riskOrder[trendRisk as ComparableRiskTier]
+    if (trendLevel > riskOrder[maxRisk]) maxRisk = trendRisk as ComparableRiskTier
   }
 
   return maxRisk
