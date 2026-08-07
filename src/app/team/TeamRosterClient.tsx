@@ -8,7 +8,7 @@ const METRICS: Array<{ key: LeaderboardMetric; label: string; helper: string }> 
   { key: 'recovery', label: 'Recovery', helper: 'Recovery score percentile' },
   { key: 'workouts_logged', label: 'Workouts', helper: 'Workout logging context' },
   { key: 'points_earned', label: 'Points', helper: 'Points earned context' },
-  { key: 'consistency_streak', label: 'Streak', helper: 'Consistency streak context' },
+  { key: 'consistency_streak', label: 'Sleep consistency', helper: 'Sleep consistency context' },
 ]
 
 export function TeamRosterClient({ participantContext }: { participantContext: ParticipantRankContext }) {

@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
 import type {
   Participant, DailyWellness, Workout, Habit,
@@ -62,8 +63,21 @@ function getQueryClient() {
   }
 }
 
-export async function getParticipants(): Promise<Participant[]> {
-  const supabase = getQueryClient()
+function getPrivilegedQueryClient() {
+  return createAdminSupabaseClient()
+}
+
+export class ParticipantRankContextError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ParticipantRankContextError'
+    this.status = status
+  }
+}
+
+export async function getParticipants(supabase = getQueryClient()): Promise<Participant[]> {
   const { data, error } = await supabase
     .from('participants')
     .select('*')
@@ -73,10 +87,12 @@ export async function getParticipants(): Promise<Participant[]> {
   return data ?? []
 }
 
-export async function getLatestWellness(date?: string, participantIds?: string[]): Promise<DailyWellness[]> {
+export async function getLatestWellness(
+  date?: string,
+  participantIds?: string[],
+  supabase = getQueryClient(),
+): Promise<DailyWellness[]> {
   if (participantIds && participantIds.length === 0) return []
-
-  const supabase = getQueryClient()
   if (date) {
     let datedQuery = supabase
       .from('daily_wellness')
@@ -181,8 +197,7 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
   }))
 }
 
-export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
-  const supabase = getQueryClient()
+export async function getLatestWorkouts(date?: string, supabase = getQueryClient()): Promise<Workout[]> {
   const buildQuery = (includeStartTimeSort: boolean) => {
     let q = supabase
       .from('workouts')
@@ -222,8 +237,7 @@ function isMissingStartTimeColumnError(error: { code?: string; message?: string 
   )
 }
 
-export async function getLatestHabits(date?: string): Promise<Habit[]> {
-  const supabase = getQueryClient()
+export async function getLatestHabits(date?: string, supabase = getQueryClient()): Promise<Habit[]> {
   let q = supabase.from('habits').select('*').order('date', { ascending: false })
   if (date) q = q.eq('date', date)
   const { data, error } = await q
@@ -231,8 +245,7 @@ export async function getLatestHabits(date?: string): Promise<Habit[]> {
   return data ?? []
 }
 
-export async function getLatestPulse(): Promise<PulseSurvey[]> {
-  const supabase = getQueryClient()
+export async function getLatestPulse(supabase = getQueryClient()): Promise<PulseSurvey[]> {
   const { data: latestDate } = await supabase
     .from('pulse_surveys')
     .select('date')
@@ -360,10 +373,10 @@ function buildParticipantRankContext(
   participantValue: number,
   rank: number,
   cohortSize: number,
+  rankContext: { ahead: number; behind: number },
 ): ParticipantRankContext {
   const cohortPercentile = cohortSize > 0 ? Math.round(((cohortSize - rank + 1) / cohortSize) * 100) : 0
-  const ahead = Math.max(0, rank - 1)
-  const behind = Math.max(0, cohortSize - rank)
+  const { ahead, behind } = rankContext
   const percentileLabel = cohortPercentile >= 90 ? 'Top 10%'
     : cohortPercentile >= 75 ? 'Top quartile'
       : cohortPercentile >= 50 ? 'Upper half'
@@ -388,9 +401,9 @@ function buildParticipantRankContext(
       metric_description: 'Higher point totals rank better.',
     },
     consistency_streak: {
-      metric_label: 'Consistency streak',
-      metric_value_label: `${participantValue} days`,
-      metric_description: 'Longer streaks rank better.',
+      metric_label: 'Sleep consistency',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher sleep consistency scores rank better.',
     },
   }
 
@@ -412,14 +425,19 @@ function buildParticipantRankContext(
 }
 
 export async function getParticipantRankContext(participantId: string, metric: LeaderboardMetric): Promise<ParticipantRankContext> {
-  const participants = await getParticipants()
+  const supabase = getPrivilegedQueryClient()
+  const participants = await getParticipants(supabase)
+  const participant = participants.find((row) => row.auth_user_id === participantId)
+  if (!participant) {
+    throw new ParticipantRankContextError('Participant not found.', 404)
+  }
   const participantIds = participants.map((participant) => participant.id)
   const cohortSize = participantIds.length
   const [wellness, workouts, habits, pulse] = await Promise.all([
-    getLatestWellness(undefined, participantIds),
-    getLatestWorkouts(),
-    getLatestHabits(),
-    getLatestPulse(),
+    getLatestWellness(undefined, participantIds, supabase),
+    getLatestWorkouts(undefined, supabase),
+    getLatestHabits(undefined, supabase),
+    getLatestPulse(supabase),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
@@ -427,7 +445,14 @@ export async function getParticipantRankContext(participantId: string, metric: L
     if (!map[workout.participant_id]) map[workout.participant_id] = workout
     return map
   }, {})
-  const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
+  const workoutCounts = workouts.reduce<Record<string, number>>((map, workout) => {
+    map[workout.participant_id] = (map[workout.participant_id] ?? 0) + 1
+    return map
+  }, {})
+  const habitsMap = habits.reduce<Record<string, Habit>>((map, habit) => {
+    if (!map[habit.participant_id]) map[habit.participant_id] = habit
+    return map
+  }, {})
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
 
   const rows = participantIds.map((id) => {
@@ -436,7 +461,7 @@ export async function getParticipantRankContext(participantId: string, metric: L
     const habitRow = habitsMap[id] ?? null
     const pulseRow = pulseMap[id] ?? null
     const recovery = wellnessRow?.recovery_score ?? 0
-    const workoutsLogged = workoutRow ? 1 : 0
+    const workoutsLogged = workoutCounts[id] ?? 0
     const pointsEarned = Math.round(
       recovery +
       (workoutRow?.strain ?? 0) * 2 +
@@ -454,13 +479,17 @@ export async function getParticipantRankContext(participantId: string, metric: L
     consistency_streak: (row: typeof rows[number]) => row.consistencyStreak,
   }[metric]
 
-  const ranked = [...rows].sort((a, b) => {
-    const delta = metricValue(b) - metricValue(a)
-    return delta !== 0 ? delta : a.id.localeCompare(b.id)
-  })
-  const resolved = ranked.find((row) => row.id === participantId) ?? ranked[0]
-  const rank = resolved ? ranked.findIndex((row) => row.id === resolved.id) + 1 : 0
-  return buildParticipantRankContext(metric, resolved ? metricValue(resolved) : 0, rank, cohortSize)
+  const resolved = rows.find((row) => row.id === participant.id)
+  if (!resolved) {
+    throw new ParticipantRankContextError('Participant not found.', 404)
+  }
+
+  const participantValue = metricValue(resolved)
+  const ahead = rows.filter((row) => metricValue(row) < participantValue).length
+  const behind = rows.filter((row) => metricValue(row) > participantValue).length
+  const rank = behind + 1
+
+  return buildParticipantRankContext(metric, participantValue, rank, cohortSize, { ahead, behind })
 }
 
 export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {
