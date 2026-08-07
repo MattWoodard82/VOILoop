@@ -325,6 +325,12 @@ export async function getTeamDashboard(): Promise<{
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
+    const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
+    const riskTriggers = [
+      ...(w?.recovery_score != null && w.recovery_score < 34 ? ['Low recovery score'] : []),
+      ...(w?.sleep_debt != null && w.sleep_debt > 2 ? ['Elevated sleep debt'] : []),
+      ...(w?.day_strain != null && w.day_strain > 14 ? ['High day strain'] : []),
+    ]
     return {
       ...emp,
       latest_wellness: w,
@@ -333,6 +339,26 @@ export async function getTeamDashboard(): Promise<{
       latest_pulse: pulseMap[emp.id] ?? null,
       risk_level: getRiskLevel(w?.recovery_score ?? null, w?.sleep_debt ?? null),
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
+      engagement_score: w ? Math.round(((w.recovery_score ?? 0) * 0.35) + ((w.hrv_ms ?? 0) * 0.15) + ((w.sleep_perf ?? 0) * 0.25) + (Math.max(0, 100 - ((w.sleep_debt ?? 0) * 20)) * 0.25)) : null,
+      engagement_score_components: w ? {
+        recovery: Math.round((w.recovery_score ?? 0) * 0.35),
+        hrv: Math.round((w.hrv_ms ?? 0) * 0.15),
+        sleep: Math.round((w.sleep_perf ?? 0) * 0.25),
+        debt_penalty: Math.round(Math.max(0, 100 - ((w.sleep_debt ?? 0) * 20)) * 0.25),
+      } : null,
+      physiological_trend: !w ? null : (w.hrv_ms != null && w.resting_hr != null && w.hrv_ms >= 65 && w.resting_hr <= 60 ? 'improving' : w.hrv_ms != null && w.resting_hr != null && w.hrv_ms < 50 && w.resting_hr > 65 ? 'declining' : 'steady'),
+      physiological_trend_metrics: [
+        ...(w?.hrv_ms != null ? ['HRV'] : []),
+        ...(w?.resting_hr != null ? ['resting HR'] : []),
+        ...(w?.resp_rate != null ? ['respiratory rate'] : []),
+        ...(w?.blood_oxygen != null ? ['blood oxygen'] : []),
+      ],
+      risk_tier_label: riskTriggers.length > 1 ? 'High concern' : riskTriggers.length === 1 ? 'Watch' : 'Stable',
+      risk_trigger_reasons: riskTriggers,
+      baseline_state: enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready',
+      baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
+      override_state: null,
+      override_note: null,
     }
   })
 

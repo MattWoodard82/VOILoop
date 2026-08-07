@@ -126,6 +126,16 @@ export interface ParticipantWithWellness extends Participant {
   latest_pulse: PulseSurvey | null
   risk_level: RiskLevel
   recovery_status: RecoveryStatus
+  engagement_score?: number | null
+  engagement_score_components?: Record<string, number> | null
+  physiological_trend?: 'improving' | 'steady' | 'declining' | null
+  physiological_trend_metrics?: string[] | null
+  risk_tier_label?: string | null
+  risk_trigger_reasons?: string[] | null
+  baseline_state?: 'building' | 'ready' | null
+  baseline_days_remaining?: number | null
+  override_state?: 'none' | 'snoozed' | 'dismissed' | null
+  override_note?: string | null
 }
 
 export interface TeamStats {
