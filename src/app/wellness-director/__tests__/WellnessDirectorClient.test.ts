@@ -65,4 +65,9 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Bea Able')
     expect(markup).toContain('Baseline building (13 days remaining)')
   })
+
+  test('omits missing engagement scores from the chart', () => {
+    const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
+    expect(markup).not.toContain('"value":0')
+  })
 })

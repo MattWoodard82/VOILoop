@@ -31,10 +31,12 @@ export function WellnessDirectorClient({ participants }: Props) {
   }, [participants, deptFilter, personFilter])
 
   const selected = personFilter !== 'All' ? filtered[0] ?? null : deptFilter !== 'All' ? filtered[0] ?? null : participants[0] ?? null
-  const engagementRows = filtered.map((e) => ({
-    label: `${e.first_name} ${e.last_name}`,
-    value: e.engagement_score ?? 0,
-  }))
+  const engagementRows = filtered
+    .filter((e) => e.engagement_score != null)
+    .map((e) => ({
+      label: `${e.first_name} ${e.last_name}`,
+      value: e.engagement_score as number,
+    }))
 
   return (
     <>
@@ -66,8 +68,12 @@ export function WellnessDirectorClient({ participants }: Props) {
         <Card title="Risk tier">
           {selected ? (
             <>
-              <Badge variant={selected.risk_level === 'High' ? 'red' : selected.risk_level === 'Medium' ? 'amber' : 'green'}>{selected.risk_tier_label ?? selected.risk_level}</Badge>
-              <div>{selected.risk_trigger_reasons?.join(' · ') ?? 'No triggers'}</div>
+              {selected.baseline_state === 'building' ? (
+                <Badge variant="wolf">Building baseline</Badge>
+              ) : (
+                <Badge variant={selected.risk_level === 'High' ? 'red' : selected.risk_level === 'Medium' ? 'amber' : 'green'}>{selected.risk_tier_label ?? selected.risk_level}</Badge>
+              )}
+              <div>{selected.risk_trigger_reasons && selected.risk_trigger_reasons.length > 0 ? selected.risk_trigger_reasons.join(' · ') : selected.baseline_state === 'building' ? 'Baseline still forming' : 'No triggers'}</div>
             </>
           ) : null}
         </Card>
