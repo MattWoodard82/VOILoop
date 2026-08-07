@@ -322,40 +322,87 @@ export async function getTeamDashboard(): Promise<{
   }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const engagementOrder = ['submission_consistency', 'device_wear_consistency', 'pulse_completion', 'nudge_response', 'workout_volume'] as const
+  const engagementWeights = {
+    submission_consistency: 25,
+    device_wear_consistency: 20,
+    pulse_completion: 20,
+    nudge_response: 15,
+    workout_volume: 20,
+  }
+
+  const getWindowAverage = (participantId: string, field: keyof DailyWellness | keyof Workout | keyof PulseSurvey | keyof Habit, rows: Array<DailyWellness | Workout | Habit | PulseSurvey>) => {
+    const values = rows.filter((row) => row.participant_id === participantId).map((row) => {
+      const value = row[field]
+      return typeof value === 'number' ? value : null
+    }).filter((value): value is number => value !== null)
+    if (!values.length) return null
+    return avg(values)
+  }
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
     const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
-    const riskTriggers = [
-      ...(w?.recovery_score != null && w.recovery_score < 34 ? ['Low recovery score'] : []),
-      ...(w?.sleep_debt != null && w.sleep_debt > 2 ? ['Elevated sleep debt'] : []),
-      ...(w?.day_strain != null && w.day_strain > 14 ? ['High day strain'] : []),
+    const windowDays = w ? 21 : 0
+    const recentWellness = windowDays > 0 ? wellness.filter((row) => row.participant_id === emp.id) : []
+    const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
+    const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)
+    const recentHabits = habits.filter((row) => row.participant_id === emp.id)
+    const engagementComponents = {
+      submission_consistency: recentWellness.length > 0 ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100) : null,
+      device_wear_consistency: recentWellness.length > 0 ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100) : null,
+      pulse_completion: pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null,
+      nudge_response: recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null,
+      workout_volume: recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null,
+    }
+    const engagementScore = engagementOrder.reduce((sum, key) => {
+      const component = engagementComponents[key]
+      if (component == null) return sum
+      return sum + Math.round((component * engagementWeights[key]) / 100)
+    }, 0)
+    const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
+    const recentTrend = {
+      recovery: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
+      hrv: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
+      sleep: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
+    }
+    const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
+      const earlier = rows.slice(0, Math.max(1, rows.length - 7))
+      const later = rows.slice(-7)
+      return avg(later.map((row) => typeof row[field] === 'number' ? row[field] as number : null)) - avg(earlier.map((row) => typeof row[field] === 'number' ? row[field] as number : null))
+    }
+    const recoveryDelta = trendCompare(recentTrend.recovery, 'recovery_score')
+    const hrvDelta = trendCompare(recentTrend.hrv, 'hrv_ms')
+    const sleepDelta = trendCompare(recentTrend.sleep, 'sleep_perf')
+    const decliningCount = [recoveryDelta, hrvDelta, sleepDelta].filter((delta) => delta < 0).length
+    const physiologicalTrend: ParticipantWithWellness['physiological_trend'] = decliningCount >= 2 ? 'declining' : recoveryDelta > 0 && hrvDelta > 0 && sleepDelta > 0 ? 'improving' : 'steady'
+    const physiologicalMetrics = [
+      ...(recoveryDelta !== 0 ? [`Recovery ${recoveryDelta > 0 ? 'up' : 'down'}`] : []),
+      ...(hrvDelta !== 0 ? [`HRV ${hrvDelta > 0 ? 'up' : 'down'}`] : []),
+      ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
     ]
+    const riskTriggers = [
+      ...(engagementScore < 35 ? ['Low engagement score'] : []),
+      ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
+      ...(baselineState === 'building' ? ['Baseline building'] : []),
+      ...(w == null ? ['No recent wellness data'] : []),
+    ]
+    const riskLevel = !w && enrolledDays != null && enrolledDays > 14 ? 'High' : getRiskLevel(w?.recovery_score ?? null, w?.sleep_debt ?? null)
     return {
       ...emp,
       latest_wellness: w,
       latest_workout: workoutMap[emp.id] ?? null,
       latest_habits: habitsMap[emp.id] ?? null,
       latest_pulse: pulseMap[emp.id] ?? null,
-      risk_level: getRiskLevel(w?.recovery_score ?? null, w?.sleep_debt ?? null),
+      risk_level: riskLevel,
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
-      engagement_score: w ? Math.round(((w.recovery_score ?? 0) * 0.35) + ((w.hrv_ms ?? 0) * 0.15) + ((w.sleep_perf ?? 0) * 0.25) + (Math.max(0, 100 - ((w.sleep_debt ?? 0) * 20)) * 0.25)) : null,
-      engagement_score_components: w ? {
-        recovery: Math.round((w.recovery_score ?? 0) * 0.35),
-        hrv: Math.round((w.hrv_ms ?? 0) * 0.15),
-        sleep: Math.round((w.sleep_perf ?? 0) * 0.25),
-        debt_penalty: Math.round(Math.max(0, 100 - ((w.sleep_debt ?? 0) * 20)) * 0.25),
-      } : null,
-      physiological_trend: !w ? null : (w.hrv_ms != null && w.resting_hr != null && w.hrv_ms >= 65 && w.resting_hr <= 60 ? 'improving' : w.hrv_ms != null && w.resting_hr != null && w.hrv_ms < 50 && w.resting_hr > 65 ? 'declining' : 'steady'),
-      physiological_trend_metrics: [
-        ...(w?.hrv_ms != null ? ['HRV'] : []),
-        ...(w?.resting_hr != null ? ['resting HR'] : []),
-        ...(w?.resp_rate != null ? ['respiratory rate'] : []),
-        ...(w?.blood_oxygen != null ? ['blood oxygen'] : []),
-      ],
-      risk_tier_label: riskTriggers.length > 1 ? 'High concern' : riskTriggers.length === 1 ? 'Watch' : 'Stable',
+      engagement_score: engagementScore,
+      engagement_score_components: engagementComponents,
+      physiological_trend: physiologicalTrend,
+      physiological_trend_metrics: physiologicalMetrics,
+      risk_tier_label: riskLevel === 'High' ? 'High concern' : riskLevel === 'Medium' ? 'Watch' : 'Stable',
       risk_trigger_reasons: riskTriggers,
-      baseline_state: enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready',
+      baseline_state: baselineState,
       baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
       override_state: null,
       override_note: null,

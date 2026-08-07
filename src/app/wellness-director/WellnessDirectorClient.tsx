@@ -30,7 +30,7 @@ export function WellnessDirectorClient({ participants }: Props) {
     return result
   }, [participants, deptFilter, personFilter])
 
-  const selected = personFilter !== 'All' ? filtered[0] : participants[0] ?? null
+  const selected = personFilter !== 'All' ? filtered[0] ?? null : deptFilter !== 'All' ? filtered[0] ?? null : participants[0] ?? null
   const engagementRows = filtered.map((e) => ({
     label: `${e.first_name} ${e.last_name}`,
     value: e.engagement_score ?? 0,
@@ -91,8 +91,8 @@ export function WellnessDirectorClient({ participants }: Props) {
         <Card title="Engagement-score weights">
           {Object.entries(weights).map(([key, value]) => (
             <div key={key}>
-              <label>{key}</label>
-              <input aria-label={key} type="range" min={0} max={100} value={value} onChange={(e) => setWeights((current) => ({ ...current, [key]: Number(e.target.value) }))} />
+              <label htmlFor={key}>{key}</label>
+              <input id={key} aria-label={key} type="range" min={0} max={100} value={value} onChange={(e) => setWeights((current) => ({ ...current, [key]: Number(e.target.value) }))} />
             </div>
           ))}
         </Card>
