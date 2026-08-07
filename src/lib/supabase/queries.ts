@@ -2,7 +2,7 @@ import { createClient } from './client'
 import { createServerSupabaseClient } from './server'
 import type {
   Participant, DailyWellness, Workout, Habit,
-  PulseSurvey, Intervention, ParticipantWithWellness, TeamStats,
+  PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
   RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
 } from '@/types'
 
@@ -353,6 +353,114 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { participants: enriched, stats, interventions }
+}
+
+function buildParticipantRankContext(
+  metric: LeaderboardMetric,
+  participantValue: number,
+  rank: number,
+  cohortSize: number,
+): ParticipantRankContext {
+  const cohortPercentile = cohortSize > 0 ? Math.round(((cohortSize - rank + 1) / cohortSize) * 100) : 0
+  const ahead = Math.max(0, rank - 1)
+  const behind = Math.max(0, cohortSize - rank)
+  const percentileLabel = cohortPercentile >= 90 ? 'Top 10%'
+    : cohortPercentile >= 75 ? 'Top quartile'
+      : cohortPercentile >= 50 ? 'Upper half'
+        : cohortPercentile >= 25 ? 'Lower half'
+          : 'Bottom quartile'
+  const cohortBand = cohortPercentile >= 75 ? 'top' : cohortPercentile >= 40 ? 'middle' : 'bottom'
+
+  const config: Record<LeaderboardMetric, { metric_label: string; metric_value_label: string; metric_description: string }> = {
+    recovery: {
+      metric_label: 'Recovery',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher recovery scores rank better.',
+    },
+    workouts_logged: {
+      metric_label: 'Workouts logged',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'More logged workouts rank better.',
+    },
+    points_earned: {
+      metric_label: 'Points earned',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher point totals rank better.',
+    },
+    consistency_streak: {
+      metric_label: 'Consistency streak',
+      metric_value_label: `${participantValue} days`,
+      metric_description: 'Longer streaks rank better.',
+    },
+  }
+
+  return {
+    metric,
+    participant_rank: rank,
+    participant_value: participantValue,
+    cohort_size: cohortSize,
+    cohort_percentile: cohortPercentile,
+    percentile_label: percentileLabel,
+    comparison_text: `Ahead of ${ahead} participant${ahead === 1 ? '' : 's'}, behind ${behind}.`,
+    metric_label: config[metric].metric_label,
+    metric_value_label: config[metric].metric_value_label,
+    metric_description: config[metric].metric_description,
+    rank_context: { ahead, behind },
+    cohort_band: cohortBand,
+    safe_context_note: 'Only participant-facing rank context is returned; no peer identities are exposed.',
+  }
+}
+
+export async function getParticipantRankContext(participantId: string, metric: LeaderboardMetric): Promise<ParticipantRankContext> {
+  const participants = await getParticipants()
+  const participantIds = participants.map((participant) => participant.id)
+  const cohortSize = participantIds.length
+  const [wellness, workouts, habits, pulse] = await Promise.all([
+    getLatestWellness(undefined, participantIds),
+    getLatestWorkouts(),
+    getLatestHabits(),
+    getLatestPulse(),
+  ])
+
+  const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
+  const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
+    if (!map[workout.participant_id]) map[workout.participant_id] = workout
+    return map
+  }, {})
+  const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
+  const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+
+  const rows = participantIds.map((id) => {
+    const wellnessRow = wellnessMap[id] ?? null
+    const workoutRow = workoutMap[id] ?? null
+    const habitRow = habitsMap[id] ?? null
+    const pulseRow = pulseMap[id] ?? null
+    const recovery = wellnessRow?.recovery_score ?? 0
+    const workoutsLogged = workoutRow ? 1 : 0
+    const pointsEarned = Math.round(
+      recovery +
+      (workoutRow?.strain ?? 0) * 2 +
+      (habitRow?.hydrated ? 5 : 0) +
+      (pulseRow?.energy_level ?? 0) * 3,
+    )
+    const consistencyStreak = wellnessRow?.sleep_consistency ?? 0
+    return { id, recovery, workoutsLogged, pointsEarned, consistencyStreak }
+  })
+
+  const metricValue = {
+    recovery: (row: typeof rows[number]) => row.recovery,
+    workouts_logged: (row: typeof rows[number]) => row.workoutsLogged,
+    points_earned: (row: typeof rows[number]) => row.pointsEarned,
+    consistency_streak: (row: typeof rows[number]) => row.consistencyStreak,
+  }[metric]
+
+  const ranked = [...rows].sort((a, b) => {
+    const delta = metricValue(b) - metricValue(a)
+    return delta !== 0 ? delta : a.id.localeCompare(b.id)
+  })
+  const resolved = ranked.find((row) => row.id === participantId) ?? ranked[0]
+  const rank = resolved ? ranked.findIndex((row) => row.id === resolved.id) + 1 : 0
+  return buildParticipantRankContext(metric, resolved ? metricValue(resolved) : 0, rank, cohortSize)
 }
 
 export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {

@@ -1,20 +1,19 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getTeamDashboard } from '@/lib/supabase/queries'
+import { getParticipantRankContext } from '@/lib/supabase/queries'
+import { getSession } from '@/lib/supabase/server'
 import { TeamRosterClient } from './TeamRosterClient'
-import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TeamPage() {
-  const access = await requireAuth()
-  if ('redirect' in access && access.redirect) redirect(access.redirect)
-  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
+  const session = await getSession()
+  if (!session) redirect('/login')
 
-  const { participants } = await getTeamDashboard()
+  const participantContext = await getParticipantRankContext(session.user.id, 'recovery')
   return (
     <DashboardShell title="Team Roster">
-      <TeamRosterClient participants={participants} />
+      <TeamRosterClient participantContext={participantContext} />
     </DashboardShell>
   )
 }

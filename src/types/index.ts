@@ -137,6 +137,27 @@ export interface TeamStats {
   participation_rate: number
 }
 
+export type LeaderboardMetric = 'recovery' | 'workouts_logged' | 'points_earned' | 'consistency_streak'
+
+export interface ParticipantRankContext {
+  metric: LeaderboardMetric
+  participant_rank: number
+  participant_value: number
+  cohort_size: number
+  cohort_percentile: number
+  percentile_label: string
+  comparison_text: string
+  metric_label: string
+  metric_value_label: string
+  metric_description: string
+  rank_context: {
+    ahead: number
+    behind: number
+  }
+  cohort_band: 'top' | 'middle' | 'bottom'
+  safe_context_note: string
+}
+
 export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed'
 
 export interface ImportBatch {
