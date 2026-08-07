@@ -35,21 +35,22 @@ async function requireParticipantSession() {
   return { supabase, participantId: participant.id }
 }
 
-type NudgeRow = {
-  id: string
-  message: string
-  author: string
-  week_of: string
-  target_type: string
-  participant_id: string | null
+function isParticipantTarget(targetType: string, participantId: string | null, currentParticipantId: string) {
+  return targetType === 'all' || (targetType === 'participant' && participantId === currentParticipantId)
 }
 
-function isEligibleTarget(nudge: Pick<NudgeRow, 'target_type' | 'participant_id'>, participantId: string) {
-  return nudge.target_type === 'all' || (nudge.target_type === 'participant' && nudge.participant_id === participantId)
+function getResponseDueAt(weekOf: string) {
+  const dueAt = new Date(`${weekOf}T00:00:00Z`)
+  dueAt.setHours(dueAt.getHours() + 48)
+  return dueAt
 }
 
-async function getLatestTargetedNudge(supabase: ReturnType<typeof createServerSupabaseClient>, participantId: string, weekOf: string) {
-  const { data: nudges, error } = await supabase
+async function getTargetedNudge(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  participantId: string,
+  weekOf: string,
+) {
+  const { data, error } = await supabase
     .from('weekly_nudges')
     .select('id, message, author, week_of, nudge_targets!inner(target_type, participant_id)')
     .lte('week_of', weekOf)
@@ -58,12 +59,20 @@ async function getLatestTargetedNudge(supabase: ReturnType<typeof createServerSu
 
   if (error) return { error }
 
-  const eligible = (nudges ?? []).find((entry) => {
-    const nudge = entry as NudgeRow
-    return isEligibleTarget(nudge, participantId)
-  }) as NudgeRow | undefined
+  const rows = (data ?? []) as Array<{
+    id: string
+    message: string
+    author: string
+    week_of: string
+    nudge_targets: Array<{ target_type?: string; participant_id?: string | null }> | { target_type?: string; participant_id?: string | null }
+  }>
 
-  return { nudge: eligible ?? null }
+  const nudge = rows.find((row) => {
+    const targets = Array.isArray(row.nudge_targets) ? row.nudge_targets : [row.nudge_targets]
+    return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.participant_id ?? null, participantId))
+  }) ?? null
+
+  return { nudge }
 }
 
 export async function GET() {
@@ -81,7 +90,7 @@ export async function GET() {
       .gte('event_date', today)
       .order('event_date', { ascending: true })
       .limit(5),
-    getLatestTargetedNudge(supabase, participantId, weekOf),
+    getTargetedNudge(supabase, participantId, weekOf),
     supabase
       .from('event_rsvps')
       .select('event_id')
@@ -107,7 +116,7 @@ export async function GET() {
 
   return NextResponse.json({
     events: events ?? [],
-    nudge: nudge ?? null,
+    nudge,
     acknowledgement,
     rsvpEventIds: (rsvps ?? []).map((entry) => entry.event_id),
   })
@@ -183,12 +192,15 @@ export async function PATCH(request: Request) {
   if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
   if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
 
-  const target = nudge as NudgeRow
-  if (!isEligibleTarget(target, participantId)) {
+  const targetRows = Array.isArray((nudge as { nudge_targets?: unknown }).nudge_targets)
+    ? (nudge as { nudge_targets: Array<{ target_type?: string; participant_id?: string | null }> }).nudge_targets
+    : [((nudge as { nudge_targets?: { target_type?: string; participant_id?: string | null } }).nudge_targets ?? { target_type: 'all', participant_id: null })]
+
+  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.participant_id ?? null, participantId))) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
-  const responseDueAt = new Date(`${nudge.week_of}T00:00:00Z`)
-  responseDueAt.setHours(responseDueAt.getHours() + 48)
+
+  const responseDueAt = getResponseDueAt(nudge.week_of)
   if (responseDueAt.getTime() < Date.now()) {
     return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
   }

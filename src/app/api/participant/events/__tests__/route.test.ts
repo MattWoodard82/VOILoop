@@ -263,14 +263,14 @@ describe('/api/participant/events', () => {
               lte: jest.fn(() => ({
                 order: jest.fn(() => ({
                   limit: jest.fn(async () => ({
-                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20', nudge_targets: [{ target_type: 'all', participant_id: null }] }],
+                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-08-07', nudge_targets: [{ target_type: 'all', participant_id: null }] }],
                     error: null,
                   })),
                 })),
               })),
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-07-20', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2026-08-07', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
                   error: null,
                 })),
               })),
@@ -285,9 +285,12 @@ describe('/api/participant/events', () => {
     const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
     if (!response) throw new Error('Expected response')
 
-    expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Nudge not targeted to this participant.' })
-    expect(upsert).not.toHaveBeenCalled()
+    expect(response.status).toBe(200)
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      nudge_id: 'nudge-1',
+      participant_id: 'EMP123',
+      response_text: 'Will do',
+    }), { onConflict: 'nudge_id,participant_id' })
   })
 
   test('PATCH rejects acknowledgements for untargeted nudges', async () => {
@@ -313,7 +316,7 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-08-07', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
                   error: null,
                 })),
               })),
@@ -329,7 +332,7 @@ describe('/api/participant/events', () => {
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Nudge not targeted to this participant.' })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Response window has closed.' })
     expect(upsert).not.toHaveBeenCalled()
   })
 })

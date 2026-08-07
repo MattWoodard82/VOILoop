@@ -58,12 +58,16 @@ with check (
   and exists (
     select 1
     from public.weekly_nudges wn
-    left join public.nudge_targets nt on nt.nudge_id = wn.id
     where wn.id = nudge_id
       and wn.week_of <= (now() at time zone 'utc')::date
-      and (
-        nt.target_type = 'all'
-        or (nt.target_type = 'participant' and nt.participant_id = participant_id)
+      and exists (
+        select 1
+        from public.nudge_targets nt
+        where nt.nudge_id = wn.id
+          and (
+            nt.target_type = 'all'
+            or (nt.target_type = 'participant' and nt.participant_id = participant_id)
+          )
       )
   )
 );
