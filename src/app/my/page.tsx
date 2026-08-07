@@ -6,6 +6,7 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { formatDate } from '@/lib/utils'
 import { redirect } from 'next/navigation'
 import { MyDashboardClient } from './MyDashboardClient'
+import { buildParticipantInsights } from './insights'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 import { getRoleAndSession } from '@/lib/supabase/server'
 import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
@@ -70,7 +71,7 @@ export default async function MyPage() {
   }
 
   const { data: habits } = await supabase.from('habits').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
-  const { data: workouts } = await supabase.from('workouts').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(1)
+  const { data: workouts } = await supabase.from('workouts').select('*').eq('participant_id', participant.id).order('date', { ascending: false })
   const { data: pulse } = await supabase.from('pulse_surveys').select('*').eq('participant_id', participant.id).order('date', { ascending: false }).limit(4)
   const importBatches = await getParticipantImportBatches(participant.id, 5)
 
@@ -134,6 +135,7 @@ export default async function MyPage() {
   }
 
   const latestWellnessDate = wellness?.[0]?.date ? formatDate(wellness[0].date) : null
+  const insights = buildParticipantInsights(wellness ?? [], workouts ?? [])
 
   return (
     <DashboardShell
@@ -149,8 +151,10 @@ export default async function MyPage() {
         habits={habits?.[0] ?? null}
         workout={workouts?.[0] ?? null}
         pulse={pulse ?? []}
+        workouts={workouts ?? []}
         challenge={challenge}
         importBatches={importBatches}
+        insights={insights}
       />
     </DashboardShell>
   )
