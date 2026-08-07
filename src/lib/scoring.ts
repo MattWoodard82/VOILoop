@@ -73,6 +73,14 @@ export function calculateEngagementScore(
 
   const w = weights ? { ...defaultWeights, ...weights } : defaultWeights
 
+  // Validate that total weight is positive to avoid NaN
+  const totalWeight = w.login_frequency_weight + w.pulse_survey_completion_weight +
+    w.data_submission_weight + w.intervention_follow_up_weight + w.trend_consistency_weight
+
+  if (totalWeight <= 0) {
+    throw new Error('Total engagement score weight must be positive')
+  }
+
   // Normalize each component to 0-100 scale
   // Login frequency: expect 3-5 logins per week = 100
   const loginComponent = Math.min(100, (loginCount / 5) * 100)
@@ -88,10 +96,6 @@ export function calculateEngagementScore(
 
   // Trend consistency: already normalized to 0-100
   const consistencyComponent = Math.min(100, trendConsistencyScore)
-
-  // Calculate weighted average
-  const totalWeight = w.login_frequency_weight + w.pulse_survey_completion_weight +
-    w.data_submission_weight + w.intervention_follow_up_weight + w.trend_consistency_weight
 
   const score = Math.round(
     (loginComponent * w.login_frequency_weight +
@@ -204,7 +208,8 @@ export function calculateRiskTier(
   }
 
   // Score-based risk assessment (lower engagement = higher risk)
-  const scoreRisk = engagementScore
+  // Explicitly check for null to distinguish from zero score
+  const scoreRisk = engagementScore !== null
     ? engagementScore >= 70
       ? 'green'
       : engagementScore >= 40
@@ -307,8 +312,10 @@ export function assessRisk(
   )
 
   // Determine if we have no meaningful data
+  // No data means no wellness history, no logins, no pulse surveys, no data submissions, and no intervention follow-ups
   const hasNoData =
-    recentWellnessData.length === 0 && recentLoginCount === 0 && recentPulseSurveyCount === 0
+    recentWellnessData.length === 0 && recentLoginCount === 0 && 
+    recentPulseSurveyCount === 0 && dataSubmissionCount === 0 && interventionFollowUpCount === 0
 
   // Calculate risk tier
   const riskTier = calculateRiskTier(
@@ -351,21 +358,25 @@ function avg(values: number[]): number {
 }
 
 /**
- * Track login event and return engagement metrics
+ * Track login event by writing to login_activity table
+ * Must be called from server-side context with proper authentication
  */
 export async function trackLoginEvent(
   participantId: string,
   loginTime: Date
 ): Promise<void> {
-  // This function will be called by the server to write login activity
-  // Implementation details depend on Supabase integration
-  // For now, this is a placeholder that would be implemented with actual DB writes
-  // In production, this would write to login_activity table
+  // Note: This function must be called from a server context with service role or proper auth
+  // The actual DB write is performed by writeLoginActivity in queries.ts
+  // This is a placeholder - the real implementation should import and call writeLoginActivity
+  // from a server-only module with appropriate database permissions
+  throw new Error(
+    'trackLoginEvent must be called from server context with writeLoginActivity from queries.ts'
+  )
 }
 
 /**
  * Calculate recency-weighted engagement score
- * More recent events have higher weight
+ * More recent events have higher weight; events older than 30 days are excluded
  */
 export function calculateRecencyWeightedScore(
   events: Array<{ date: Date; value: number }>,
@@ -376,12 +387,17 @@ export function calculateRecencyWeightedScore(
   let totalWeight = 0
   let weightedSum = 0
 
+  // Window: only consider events within the last 30 days
+  const thirtyDaysAgo = new Date(referenceDate)
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
   for (const event of events) {
-    // Days ago, capped at 30
-    const daysAgo = Math.min(
-      30,
-      Math.floor((referenceDate.getTime() - event.date.getTime()) / (1000 * 60 * 60 * 24))
-    )
+    // Exclude events older than 30 days
+    if (event.date < thirtyDaysAgo) {
+      continue
+    }
+
+    const daysAgo = Math.floor((referenceDate.getTime() - event.date.getTime()) / (1000 * 60 * 60 * 24))
 
     // Exponential decay: weight = e^(-daysAgo/7)
     const weight = Math.exp(-daysAgo / 7)

@@ -443,7 +443,7 @@ export async function getPulseSurveyCountForDateRange(
 
   const { count, error } = await supabase
     .from('pulse_surveys')
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'exact', head: true })
     .eq('participant_id', participantId)
     .gte('date', startDateStr)
     .lte('date', endDateStr)
@@ -474,6 +474,8 @@ export async function getRiskFlagsForParticipant(
 }
 
 export async function createRiskFlag(flag: Omit<RiskFlag, 'id' | 'created_at' | 'updated_at'>): Promise<RiskFlag> {
+  // Note: These mutations should be called from server context with service role or admin auth
+  // getQueryClient() provides anon user client for reads; writes require server-side auth
   const supabase = getQueryClient()
   const { data, error } = await supabase
     .from('risk_flags')
@@ -490,9 +492,13 @@ export async function updateRiskFlag(
   updates: Partial<RiskFlag>
 ): Promise<void> {
   const supabase = getQueryClient()
+  // Always update the updated_at timestamp when modifying a flag
   const { error } = await supabase
     .from('risk_flags')
-    .update(updates)
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', flagId)
 
   if (error) throw error
@@ -538,9 +544,16 @@ export async function saveLeaderboardSnapshot(
   snapshot: Omit<LeaderboardMetricSnapshot, 'id' | 'created_at' | 'updated_at'>
 ): Promise<LeaderboardMetricSnapshot> {
   const supabase = getQueryClient()
+  // Include updated_at timestamp so consumers can tell when snapshot was computed
   const { data, error } = await supabase
     .from('leaderboard_metric_snapshots')
-    .upsert(snapshot, { onConflict: 'participant_id,week_start_date' })
+    .upsert(
+      {
+        ...snapshot,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'participant_id,week_start_date' }
+    )
     .select()
     .single()
 
