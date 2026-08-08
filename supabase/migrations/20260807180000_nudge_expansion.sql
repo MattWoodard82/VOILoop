@@ -1,4 +1,5 @@
-create table if not exists public.nudge_targets (
+-- Note: nudge_targets already exists from PR3/PR6. This table (nudge_acknowledgement_targets) is for PR1's engagement tracking
+create table if not exists public.nudge_acknowledgement_targets (
   id uuid primary key default gen_random_uuid(),
   nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
   target_type text not null check (target_type in ('all', 'subgroup', 'participant')),
@@ -8,8 +9,8 @@ create table if not exists public.nudge_targets (
   created_at timestamptz not null default now()
 );
 
-grant select, insert on public.nudge_targets to authenticated;
-grant update, delete on public.nudge_targets to authenticated;
+grant select, insert on public.nudge_acknowledgement_targets to authenticated;
+grant update, delete on public.nudge_acknowledgement_targets to authenticated;
 
 create table if not exists public.nudge_acknowledgements (
   id uuid primary key default gen_random_uuid(),
@@ -24,6 +25,10 @@ create table if not exists public.nudge_acknowledgements (
 
 grant select, insert, update on public.nudge_acknowledgements to authenticated;
 
+-- Add cohort column to participants table for subgroup targeting
+alter table if exists public.participants
+  add column if not exists cohort text;
+
 alter table if exists public.weekly_nudges
   add column if not exists response_due_at timestamptz;
 
@@ -34,11 +39,11 @@ where response_due_at is null;
 alter table if exists public.weekly_nudges
   alter column response_due_at set not null;
 
-create index if not exists idx_nudge_targets_nudge_id on public.nudge_targets(nudge_id);
+create index if not exists idx_nudge_acknowledgement_targets_nudge_id on public.nudge_acknowledgement_targets(nudge_id);
 create index if not exists idx_nudge_acknowledgements_nudge_id on public.nudge_acknowledgements(nudge_id);
 create index if not exists idx_nudge_acknowledgements_participant_id on public.nudge_acknowledgements(participant_id);
 
-alter table if exists public.nudge_targets enable row level security;
+alter table if exists public.nudge_acknowledgement_targets enable row level security;
 alter table if exists public.nudge_acknowledgements enable row level security;
 
 -- Add RLS policy to weekly_nudges to enforce targeting at the database boundary
@@ -51,7 +56,7 @@ using (
   public.current_app_role() in ('admin', 'wellness_director')
   or id in (
     select nt.nudge_id
-    from public.nudge_targets nt
+    from public.nudge_acknowledgement_targets nt
     join public.participants p on true
     where (
       nt.target_type = 'all'
@@ -63,15 +68,15 @@ using (
   )
 );
 
-drop policy if exists nudge_targets_select_admin on public.nudge_targets;
-drop policy if exists nudge_targets_admin_mutate on public.nudge_targets;
-drop policy if exists nudge_targets_select_participants on public.nudge_targets;
-create policy nudge_targets_select_admin
-on public.nudge_targets
+drop policy if exists nudge_acknowledgement_targets_select_admin on public.nudge_acknowledgement_targets;
+drop policy if exists nudge_acknowledgement_targets_admin_mutate on public.nudge_acknowledgement_targets;
+drop policy if exists nudge_acknowledgement_targets_select_participants on public.nudge_acknowledgement_targets;
+create policy nudge_acknowledgement_targets_select_admin
+on public.nudge_acknowledgement_targets
 for select
 using (public.current_app_role() in ('admin', 'wellness_director'));
-create policy nudge_targets_select_participants
-on public.nudge_targets
+create policy nudge_acknowledgement_targets_select_participants
+on public.nudge_acknowledgement_targets
 for select
 using (
   target_type = 'all'
@@ -82,8 +87,8 @@ using (
     select coalesce(p.cohort, '') from public.participants p where p.auth_user_id = auth.uid()
   ))
 );
-create policy nudge_targets_admin_mutate
-on public.nudge_targets
+create policy nudge_acknowledgement_targets_admin_mutate
+on public.nudge_acknowledgement_targets
 for all
 using (public.current_app_role() = 'admin')
 with check (public.current_app_role() = 'admin');
@@ -113,7 +118,7 @@ with check (
       and wn.response_due_at > now()
       and exists (
         select 1
-        from public.nudge_targets nt
+        from public.nudge_acknowledgement_targets nt
         join public.participants p on true
         where nt.nudge_id = wn.id
           and (
@@ -233,9 +238,9 @@ $$ language plpgsql security definer;
 -- Grant execute permission on upsert function to authenticated users
 grant execute on function public.upsert_nudge_acknowledgement(uuid, text, text, text) to authenticated;
 
--- Create stored procedure for atomic nudge + target upsert (admin only)
+-- Create stored procedure for atomic nudge + acknowledgement target upsert (admin only)
 -- Deletes old targets and inserts new target in single transaction
-create or replace function public.upsert_nudge_with_target(
+create or replace function public.upsert_nudge_with_engagement_target(
   p_week_of date,
   p_message text,
   p_author text,
@@ -268,10 +273,10 @@ begin
   end if;
   
   -- Delete old targets for this nudge (republishing clears old recipients)
-  delete from public.nudge_targets where nudge_id = v_nudge_id;
+  delete from public.nudge_acknowledgement_targets where nudge_id = v_nudge_id;
   
   -- Insert new target
-  insert into public.nudge_targets (nudge_id, target_type, target_label, participant_id)
+  insert into public.nudge_acknowledgement_targets (nudge_id, target_type, target_label, participant_id)
   values (
     v_nudge_id,
     p_target_type,
@@ -286,4 +291,4 @@ end;
 $$ language plpgsql security definer;
 
 -- Grant execute permission to authenticated admin users
-grant execute on function public.upsert_nudge_with_target(date, text, text, text, text, text) to authenticated;
+grant execute on function public.upsert_nudge_with_engagement_target(date, text, text, text, text, text) to authenticated;
