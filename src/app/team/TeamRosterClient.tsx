@@ -1,8 +1,7 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { LeaderboardMetric, ParticipantRankContext } from '@/types'
 import { Card, Badge, ScorePill } from '@/components/ui'
-import { recoveryColor } from '@/lib/utils'
 
 const METRICS: Array<{ key: LeaderboardMetric; label: string; helper: string }> = [
   { key: 'recovery', label: 'Recovery', helper: 'Recovery score percentile' },
@@ -13,7 +12,43 @@ const METRICS: Array<{ key: LeaderboardMetric; label: string; helper: string }> 
 
 export function TeamRosterClient({ participantContext }: { participantContext: ParticipantRankContext }) {
   const [metric, setMetric] = useState<LeaderboardMetric>(participantContext.metric)
-  const context = useMemo(() => participantContext, [participantContext])
+  const [context, setContext] = useState(participantContext)
+  const [loadingMetric, setLoadingMetric] = useState<LeaderboardMetric | null>(null)
+
+  useEffect(() => {
+    setContext(participantContext)
+    setMetric(participantContext.metric)
+  }, [participantContext])
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function loadMetricContext() {
+      if (metric === context.metric) return
+      setLoadingMetric(metric)
+      try {
+        const response = await fetch(`/api/participant/ranking?metric=${encodeURIComponent(metric)}`, {
+          signal: controller.signal,
+        })
+        if (!response.ok) throw new Error('Failed to load participant ranking context.')
+        const payload = await response.json() as { context: ParticipantRankContext }
+        setContext(payload.context)
+      } finally {
+        setLoadingMetric(null)
+      }
+    }
+
+    void loadMetricContext()
+    return () => controller.abort()
+  }, [context.metric, metric])
+
+  const valueColor = context.metric === 'recovery'
+    ? '#69BE28'
+    : context.metric === 'workouts_logged'
+      ? '#A5ACAF'
+      : context.metric === 'points_earned'
+        ? '#7dd3fc'
+        : '#c084fc'
 
   return (
     <Card title="Participant ranking context">
@@ -21,6 +56,9 @@ export function TeamRosterClient({ participantContext }: { participantContext: P
         {METRICS.map((item) => (
           <button
             key={item.key}
+            type="button"
+            aria-pressed={metric === item.key}
+            aria-label={`${item.label} ranking context`}
             onClick={() => setMetric(item.key)}
             style={{
               padding: '6px 10px',
@@ -44,11 +82,13 @@ export function TeamRosterClient({ participantContext }: { participantContext: P
         </div>
         <div style={{ fontSize: 13, color: '#A5ACAF' }}>{context.metric_description}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          <ScorePill value={context.participant_value} />
+          {context.metric === 'recovery' ? <ScorePill value={context.participant_value} /> : <ScorePill value={Math.min(100, context.participant_value)} />}
           <div><strong>Rank</strong><div>{context.participant_rank} of {context.cohort_size}</div></div>
           <div><strong>Context</strong><div>{context.comparison_text}</div></div>
         </div>
-        <div style={{ fontSize: 11, color: recoveryColor(context.participant_value) }}>{context.metric_value_label}</div>
+        <div style={{ fontSize: 11, color: valueColor }}>
+          {loadingMetric === metric ? 'Loading…' : context.metric_value_label}
+        </div>
         <div style={{ fontSize: 11, color: '#A5ACAF' }}>{context.safe_context_note}</div>
       </div>
     </Card>
