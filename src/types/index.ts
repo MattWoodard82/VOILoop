@@ -252,6 +252,16 @@ export interface NudgeResponse {
   created_at: string
 }
 
+export interface NudgeAcknowledgement {
+  id: string
+  nudge_id: string
+  participant_id: string
+  acknowledged_at: string
+  response_text: string
+  response_text_encrypted: string
+  response_due_at: string
+}
+
 export interface EngagementScoreWeights {
   id: string
   organization_id: string | null
