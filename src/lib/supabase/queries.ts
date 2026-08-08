@@ -4,6 +4,7 @@ import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats,
   RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
+  LoginActivity, RiskFlag, LeaderboardMetricSnapshot,
 } from '@/types'
 
 export function getRecoveryStatus(score: number | null): RecoveryStatus {
@@ -387,4 +388,176 @@ export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOu
     .order('created_at', { ascending: true })
   if (error) throw error
   return data ?? []
+}
+
+// Scoring and engagement tracking queries
+export async function getLoginActivityForWeek(
+  participantId: string,
+  weekStartDate: Date
+): Promise<LoginActivity[]> {
+  const supabase = getQueryClient()
+  const weekEndDate = new Date(weekStartDate)
+  weekEndDate.setDate(weekEndDate.getDate() + 7)
+
+  const { data, error } = await supabase
+    .from('login_activity')
+    .select('*')
+    .eq('participant_id', participantId)
+    .gte('logged_in_at', weekStartDate.toISOString())
+    .lt('logged_in_at', weekEndDate.toISOString())
+    .order('logged_in_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getWellnessDataForDateRange(
+  participantId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<DailyWellness[]> {
+  const supabase = getQueryClient()
+  const startDateStr = startDate.toISOString().split('T')[0]
+  const endDateStr = endDate.toISOString().split('T')[0]
+
+  const { data, error } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .eq('participant_id', participantId)
+    .gte('date', startDateStr)
+    .lte('date', endDateStr)
+    .or(WELLNESS_MEANINGFUL_FILTER)
+    .order('date', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getPulseSurveyCountForDateRange(
+  participantId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<number> {
+  const supabase = getQueryClient()
+  const startDateStr = startDate.toISOString().split('T')[0]
+  const endDateStr = endDate.toISOString().split('T')[0]
+
+  const { count, error } = await supabase
+    .from('pulse_surveys')
+    .select('*', { count: 'exact', head: true })
+    .eq('participant_id', participantId)
+    .gte('date', startDateStr)
+    .lte('date', endDateStr)
+
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function getRiskFlagsForParticipant(
+  participantId: string,
+  activeOnly: boolean = false
+): Promise<RiskFlag[]> {
+  const supabase = getQueryClient()
+  let query = supabase
+    .from('risk_flags')
+    .select('*')
+    .eq('participant_id', participantId)
+
+  if (activeOnly) {
+    query = query.eq('is_active', true)
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createRiskFlag(flag: Omit<RiskFlag, 'id' | 'created_at' | 'updated_at'>): Promise<RiskFlag> {
+  // Note: These mutations should be called from server context with service role or admin auth
+  // getQueryClient() provides anon user client for reads; writes require server-side auth
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('risk_flags')
+    .insert(flag)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateRiskFlag(
+  flagId: string,
+  updates: Partial<RiskFlag>
+): Promise<void> {
+  const supabase = getQueryClient()
+  // Always update the updated_at timestamp when modifying a flag
+  const { error } = await supabase
+    .from('risk_flags')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', flagId)
+
+  if (error) throw error
+}
+
+export async function writeLoginActivity(
+  participantId: string,
+  loggedInAt: Date
+): Promise<LoginActivity> {
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('login_activity')
+    .insert({
+      participant_id: participantId,
+      logged_in_at: loggedInAt.toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getLeaderboardSnapshot(
+  participantId: string,
+  weekStartDate: Date
+): Promise<LeaderboardMetricSnapshot | null> {
+  const supabase = getQueryClient()
+  const weekStartStr = weekStartDate.toISOString().split('T')[0]
+
+  const { data, error } = await supabase
+    .from('leaderboard_metric_snapshots')
+    .select('*')
+    .eq('participant_id', participantId)
+    .eq('week_start_date', weekStartStr)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows found
+  return data ?? null
+}
+
+export async function saveLeaderboardSnapshot(
+  snapshot: Omit<LeaderboardMetricSnapshot, 'id' | 'created_at' | 'updated_at'>
+): Promise<LeaderboardMetricSnapshot> {
+  const supabase = getQueryClient()
+  // Include updated_at timestamp so consumers can tell when snapshot was computed
+  const { data, error } = await supabase
+    .from('leaderboard_metric_snapshots')
+    .upsert(
+      {
+        ...snapshot,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'participant_id,week_start_date' }
+    )
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }

@@ -36,6 +36,20 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 5. Verify production pages that rely on changed data.
 6. Do **not** run `npm run db:seed` against pilot/prod. Seed data is local-development only.
 
+### Application-layer encryption for participant text
+
+Use application-layer encryption for any participant-authored free text stored in Supabase.
+
+1. Encrypt/decrypt in server code only; browser clients must never receive raw encryption keys.
+2. Store ciphertext in `bytea` columns and keep plaintext columns only for temporary staged backfills or controlled cutovers.
+3. Use an external KMS pattern so the app can swap providers without schema changes:
+   - Store a KMS key identifier in app config (`NUDGE_RESPONSE_KMS_KEY_ID`).
+   - Resolve or unwrap the data-encryption key in server code.
+   - Encrypt with AES-256-GCM in the application layer before writing to Supabase.
+   - Decrypt in server code after reading from Supabase.
+4. For Azure portability, the decryption provider should be an adapter around Azure Key Vault or another external KMS, not a database-managed secret store.
+5. Rotate staged placeholder keys before production cutover and document the rotation in the release notes.
+
 ### RLS-sensitive release checklist (required for PHI tables)
 
 Use this checklist whenever a PR changes Supabase schema, policies, auth checks, or any browser/API data path.
