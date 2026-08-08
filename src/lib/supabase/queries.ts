@@ -322,58 +322,46 @@ export async function getTeamDashboard(): Promise<{
   }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
-  const engagementOrder = ['submission_consistency', 'device_wear_consistency', 'pulse_completion', 'nudge_response', 'workout_volume'] as const
-  const engagementWeights = {
-    submission_consistency: 25,
-    device_wear_consistency: 20,
-    pulse_completion: 20,
-    nudge_response: 15,
-    workout_volume: 20,
-  }
-
-  const getWindowAverage = (participantId: string, field: keyof DailyWellness | keyof Workout | keyof PulseSurvey | keyof Habit, rows: Array<DailyWellness | Workout | Habit | PulseSurvey>) => {
-    const values = rows.filter((row) => row.participant_id === participantId).map((row) => {
-      const value = row[field]
-      return typeof value === 'number' ? value : null
-    }).filter((value): value is number => value !== null)
-    if (!values.length) return null
-    return avg(values)
-  }
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
     const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
-    const windowDays = w ? 21 : 0
-    const recentWellness = windowDays > 0 ? wellness.filter((row) => row.participant_id === emp.id) : []
+    const recentWellness = wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21)
     const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
     const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)
     const recentHabits = habits.filter((row) => row.participant_id === emp.id)
+    const submissionConsistency = recentWellness.length > 0
+      ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100)
+      : null
+    const deviceWearConsistency = recentWellness.length > 0
+      ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100)
+      : null
+    const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
+    const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
+    const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
     const engagementComponents = {
-      submission_consistency: recentWellness.length > 0 ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100) : null,
-      device_wear_consistency: recentWellness.length > 0 ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100) : null,
-      pulse_completion: pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null,
-      nudge_response: recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null,
-      workout_volume: recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null,
+      submission_consistency: submissionConsistency,
+      device_wear_consistency: deviceWearConsistency,
+      pulse_completion: pulseCompletion,
+      nudge_response: nudgeResponse,
+      workout_volume: workoutVolume,
     }
-    const engagementScore = engagementOrder.reduce((sum, key) => {
-      const component = engagementComponents[key]
-      if (component == null) return sum
-      return sum + Math.round((component * engagementWeights[key]) / 100)
-    }, 0)
+    const engagementScore = [
+      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : null,
+      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : null,
+      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : null,
+      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : null,
+      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : null,
+    ].reduce((sum, part) => sum + (part ?? 0), 0)
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
-    const recentTrend = {
-      recovery: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
-      hrv: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
-      sleep: wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21),
-    }
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const earlier = rows.slice(0, Math.max(1, rows.length - 7))
       const later = rows.slice(-7)
       return avg(later.map((row) => typeof row[field] === 'number' ? row[field] as number : null)) - avg(earlier.map((row) => typeof row[field] === 'number' ? row[field] as number : null))
     }
-    const recoveryDelta = trendCompare(recentTrend.recovery, 'recovery_score')
-    const hrvDelta = trendCompare(recentTrend.hrv, 'hrv_ms')
-    const sleepDelta = trendCompare(recentTrend.sleep, 'sleep_perf')
+    const recoveryDelta = trendCompare(recentWellness, 'recovery_score')
+    const hrvDelta = trendCompare(recentWellness, 'hrv_ms')
+    const sleepDelta = trendCompare(recentWellness, 'sleep_perf')
     const decliningCount = [recoveryDelta, hrvDelta, sleepDelta].filter((delta) => delta < 0).length
     const physiologicalTrend: ParticipantWithWellness['physiological_trend'] = decliningCount >= 2 ? 'declining' : recoveryDelta > 0 && hrvDelta > 0 && sleepDelta > 0 ? 'improving' : 'steady'
     const physiologicalMetrics = [
@@ -381,13 +369,13 @@ export async function getTeamDashboard(): Promise<{
       ...(hrvDelta !== 0 ? [`HRV ${hrvDelta > 0 ? 'up' : 'down'}`] : []),
       ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
     ]
+    const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
     const riskTriggers = [
       ...(engagementScore < 35 ? ['Low engagement score'] : []),
       ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
-      ...(baselineState === 'building' ? ['Baseline building'] : []),
-      ...(w == null ? ['No recent wellness data'] : []),
+      ...(zeroDataFor14Days ? ['No wellness data for 14 days'] : []),
     ]
-    const riskLevel = !w && enrolledDays != null && enrolledDays > 14 ? 'High' : getRiskLevel(w?.recovery_score ?? null, w?.sleep_debt ?? null)
+    const riskLevel = zeroDataFor14Days || (engagementScore < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
     return {
       ...emp,
       latest_wellness: w,
