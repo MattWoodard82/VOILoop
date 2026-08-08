@@ -81,3 +81,76 @@ with check (
       )
   )
 );
+
+-- Enable pgcrypto extension for encryption support (portable to Azure Postgres)
+create extension if not exists pgcrypto;
+
+-- Add encrypted response_text column to nudge_acknowledgements
+alter table if exists public.nudge_acknowledgements
+  add column if not exists response_text_encrypted bytea;
+
+-- Migrate existing response_text to encrypted form (using a placeholder staging key)
+-- Note: In production, use external KMS (Azure Key Vault, AWS Secrets Manager) via application layer
+update public.nudge_acknowledgements
+set response_text_encrypted = 
+  case 
+    when response_text != '' 
+    then pgp_sym_encrypt(response_text, 'staging-placeholder-key-only-for-demo')::bytea
+    else null
+  end
+where response_text_encrypted is null;
+
+-- Make response_text_encrypted non-nullable (after migration completes)
+alter table if exists public.nudge_acknowledgements
+  alter column response_text_encrypted set not null;
+
+-- Create index on encrypted responses for participant lookup
+create index if not exists idx_nudge_acknowledgements_encrypted_participant_id
+  on public.nudge_acknowledgements(participant_id)
+  where response_text_encrypted is not null;
+
+-- Update RLS select policy to ensure encrypted column is accessible
+-- (The existing select policy will apply to all columns including encrypted response)
+
+-- Create stored procedure for decrypting nudge responses (called by application with key from KMS)
+create or replace function public.decrypt_nudge_response(encrypted_data bytea, key text)
+returns text as $$
+  select pgp_sym_decrypt(encrypted_data, key)::text
+$$ language sql security definer;
+
+-- Grant execute permission on decrypt function to authenticated users
+grant execute on function public.decrypt_nudge_response(bytea, text) to authenticated;
+
+-- Create stored procedure for upserting encrypted nudge acknowledgements
+-- This handles encryption at the database layer using the provided key
+create or replace function public.upsert_nudge_acknowledgement(
+  p_nudge_id uuid,
+  p_participant_id text,
+  p_response_text text,
+  p_encryption_key text
+)
+returns jsonb as $$
+declare
+  v_result jsonb;
+begin
+  insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text_encrypted, acknowledged_at, response_due_at)
+  values (
+    p_nudge_id,
+    p_participant_id,
+    pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
+    now(),
+    (select response_due_at from public.weekly_nudges where id = p_nudge_id)
+  )
+  on conflict (nudge_id, participant_id) do update
+  set response_text_encrypted = pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
+      acknowledged_at = now()
+  returning json_build_object('id', id, 'acknowledged_at', acknowledged_at) into v_result;
+  
+  return coalesce(v_result, '{"error": "Failed to upsert acknowledgement"}'::jsonb);
+exception when others then
+  return json_build_object('error', SQLERRM)::jsonb;
+end;
+$$ language plpgsql security definer;
+
+-- Grant execute permission on upsert function to authenticated users
+grant execute on function public.upsert_nudge_acknowledgement(uuid, text, text, text) to authenticated;

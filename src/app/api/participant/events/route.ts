@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
+import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
 export const runtime = 'nodejs'
 
@@ -106,12 +107,26 @@ export async function GET() {
   if (nudge?.id) {
     const { data, error } = await supabase
       .from('nudge_acknowledgements')
-      .select('acknowledged_at, response_text, response_due_at')
+      .select('acknowledged_at, response_text_encrypted, response_due_at')
       .eq('nudge_id', nudge.id)
       .eq('participant_id', participantId)
       .maybeSingle()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    acknowledgement = data
+    
+    if (data && data.response_text_encrypted) {
+      // Decrypt the response using the stored procedure
+      const { data: decrypted, error: decryptError } = await supabase
+        .rpc('decrypt_nudge_response', {
+          encrypted_data: data.response_text_encrypted,
+          key: getDbEncryptionKey(),
+        })
+      if (decryptError) return NextResponse.json({ error: decryptError.message }, { status: 500 })
+      acknowledgement = {
+        acknowledged_at: data.acknowledged_at,
+        response_text: decrypted,
+        response_due_at: data.response_due_at,
+      }
+    }
   }
 
   return NextResponse.json({
@@ -205,16 +220,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
   }
 
-  const { error } = await supabase
-    .from('nudge_acknowledgements')
-    .upsert({
-      nudge_id: nudgeId,
-      participant_id: participantId,
-      response_text: responseText,
-      acknowledged_at: new Date().toISOString(),
-      response_due_at: responseDueAt.toISOString(),
-    }, { onConflict: 'nudge_id,participant_id' })
+  // Use RPC to upsert encrypted acknowledgement
+  const { data, error } = await supabase
+    .rpc('upsert_nudge_acknowledgement', {
+      p_nudge_id: nudgeId,
+      p_participant_id: participantId,
+      p_response_text: responseText,
+      p_encryption_key: getDbEncryptionKey(),
+    })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (data?.error) return NextResponse.json({ error: data.error }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
