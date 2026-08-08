@@ -18,6 +18,9 @@ interface NudgePayload {
   message?: string
   author?: string
   week_of?: string
+  target_type?: 'all' | 'subgroup' | 'participant'
+  target_label?: string
+  participant_id?: string
 }
 
 const VALID_EVENT_TYPES = new Set(['outdoor', 'fitness', 'race', 'general'])
@@ -120,22 +123,41 @@ export async function PUT(request: Request) {
   const message = (payload.message ?? '').trim()
   const author = (payload.author ?? '').trim() || 'VOILoop'
   const weekOf = (payload.week_of ?? '').trim() || getMondayOfCurrentWeekIso()
+  const targetType = payload.target_type ?? 'all'
+  const targetLabel = (payload.target_label ?? '').trim()
+  const participantId = (payload.participant_id ?? '').trim()
   if (!message) {
     return NextResponse.json({ error: 'Nudge message is required.' }, { status: 400 })
   }
-
-  const supabase = createServerSupabaseClient()
-  const { error } = await supabase
-    .from('weekly_nudges')
-    .upsert({
-      week_of: weekOf,
-      message,
-      author,
-    }, { onConflict: 'week_of' })
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!['all', 'subgroup', 'participant'].includes(targetType)) {
+    return NextResponse.json({ error: 'Invalid target type.' }, { status: 400 })
+  }
+  if (targetType === 'subgroup' && !targetLabel) {
+    return NextResponse.json({ error: 'Target label is required for subgroup nudges.' }, { status: 400 })
+  }
+  if (targetType === 'participant' && !participantId) {
+    return NextResponse.json({ error: 'Participant id is required for individual nudges.' }, { status: 400 })
   }
 
-  return NextResponse.json({ ok: true })
+  const supabase = createServerSupabaseClient()
+  
+  // Delete old targets for this nudge (republishing clears old targeting)
+  // Then persist new nudge + target atomically via RPC
+  const { data: result, error: rpcError } = await supabase.rpc('upsert_nudge_with_target', {
+    p_week_of: weekOf,
+    p_message: message,
+    p_author: author,
+    p_target_type: targetType,
+    p_target_label: targetLabel || '',
+    p_participant_id: targetType === 'participant' ? participantId : null,
+  })
+
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
+  }
+  if (!result?.nudge_id) {
+    return NextResponse.json({ error: 'Failed to persist nudge and target.' }, { status: 500 })
+  }
+
+  return NextResponse.json({ ok: true, nudge_id: result.nudge_id })
 }
