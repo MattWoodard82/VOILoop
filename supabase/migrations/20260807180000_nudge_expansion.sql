@@ -1,69 +1,33 @@
--- Create nudge_targets table if it doesn't exist
--- Use separate CREATE TABLE without FK, then add FK after weekly_nudges is guaranteed
-create table if not exists public.nudge_targets (
+-- Note: nudge_targets already exists from PR3/PR6. This table (nudge_acknowledgement_targets) is for PR1's engagement tracking
+create table if not exists public.nudge_acknowledgement_targets (
   id uuid primary key default gen_random_uuid(),
-  nudge_id uuid,
+  nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
   target_type text not null check (target_type in ('all', 'subgroup', 'participant')),
   target_label text not null default '',
-  participant_id text,
+  participant_id text references public.participants(id) on delete cascade,
+  unique (nudge_id, target_type, target_label, participant_id),
   created_at timestamptz not null default now()
 );
 
-grant select, insert on public.nudge_targets to authenticated;
-grant update, delete on public.nudge_targets to authenticated;
+grant select, insert on public.nudge_acknowledgement_targets to authenticated;
+grant update, delete on public.nudge_acknowledgement_targets to authenticated;
 
--- Create nudge_acknowledgements table if it doesn't exist
 create table if not exists public.nudge_acknowledgements (
   id uuid primary key default gen_random_uuid(),
-  nudge_id uuid,
-  participant_id text,
+  nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
+  participant_id text not null references public.participants(id) on delete cascade,
   acknowledged_at timestamptz not null default now(),
   response_text text not null default '',
   response_due_at timestamptz not null default (now() + interval '48 hours'),
+  unique (nudge_id, participant_id),
   check (length(btrim(response_text)) > 0)
 );
 
 grant select, insert, update on public.nudge_acknowledgements to authenticated;
 
--- Add missing columns if they don't exist (for idempotency)
-alter table if exists public.nudge_targets
-  add column if not exists nudge_id uuid references public.weekly_nudges(id) on delete cascade;
-alter table if exists public.nudge_targets
-  add column if not exists participant_id text references public.participants(id) on delete cascade;
-
-alter table if exists public.nudge_acknowledgements
-  add column if not exists nudge_id uuid references public.weekly_nudges(id) on delete cascade;
-alter table if exists public.nudge_acknowledgements
-  add column if not exists participant_id text not null references public.participants(id) on delete cascade;
-
--- Add unique constraints if they don't exist
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.table_constraints
-    where table_schema = 'public' and table_name = 'nudge_targets'
-    and constraint_name = 'nudge_targets_unique'
-  ) then
-    alter table public.nudge_targets
-      add constraint nudge_targets_unique unique (nudge_id, target_type, target_label, participant_id);
-  end if;
-exception when others then
-  null;
-end $$;
-
-do $$
-begin
-  if not exists (
-    select 1 from information_schema.table_constraints
-    where table_schema = 'public' and table_name = 'nudge_acknowledgements'
-    and constraint_name = 'nudge_acknowledgements_unique'
-  ) then
-    alter table public.nudge_acknowledgements
-      add constraint nudge_acknowledgements_unique unique (nudge_id, participant_id);
-  end if;
-exception when others then
-  null;
-end $$;
+-- Add cohort column to participants table for subgroup targeting
+alter table if exists public.participants
+  add column if not exists cohort text;
 
 alter table if exists public.weekly_nudges
   add column if not exists response_due_at timestamptz;
@@ -75,11 +39,11 @@ where response_due_at is null;
 alter table if exists public.weekly_nudges
   alter column response_due_at set not null;
 
-create index if not exists idx_nudge_targets_nudge_id on public.nudge_targets(nudge_id);
+create index if not exists idx_nudge_acknowledgement_targets_nudge_id on public.nudge_acknowledgement_targets(nudge_id);
 create index if not exists idx_nudge_acknowledgements_nudge_id on public.nudge_acknowledgements(nudge_id);
 create index if not exists idx_nudge_acknowledgements_participant_id on public.nudge_acknowledgements(participant_id);
 
-alter table if exists public.nudge_targets enable row level security;
+alter table if exists public.nudge_acknowledgement_targets enable row level security;
 alter table if exists public.nudge_acknowledgements enable row level security;
 
 -- Add RLS policy to weekly_nudges to enforce targeting at the database boundary
@@ -92,7 +56,7 @@ using (
   public.current_app_role() in ('admin', 'wellness_director')
   or id in (
     select nt.nudge_id
-    from public.nudge_targets nt
+    from public.nudge_acknowledgement_targets nt
     join public.participants p on true
     where (
       nt.target_type = 'all'
@@ -104,15 +68,15 @@ using (
   )
 );
 
-drop policy if exists nudge_targets_select_admin on public.nudge_targets;
-drop policy if exists nudge_targets_admin_mutate on public.nudge_targets;
-drop policy if exists nudge_targets_select_participants on public.nudge_targets;
-create policy nudge_targets_select_admin
-on public.nudge_targets
+drop policy if exists nudge_acknowledgement_targets_select_admin on public.nudge_acknowledgement_targets;
+drop policy if exists nudge_acknowledgement_targets_admin_mutate on public.nudge_acknowledgement_targets;
+drop policy if exists nudge_acknowledgement_targets_select_participants on public.nudge_acknowledgement_targets;
+create policy nudge_acknowledgement_targets_select_admin
+on public.nudge_acknowledgement_targets
 for select
 using (public.current_app_role() in ('admin', 'wellness_director'));
-create policy nudge_targets_select_participants
-on public.nudge_targets
+create policy nudge_acknowledgement_targets_select_participants
+on public.nudge_acknowledgement_targets
 for select
 using (
   target_type = 'all'
@@ -123,8 +87,8 @@ using (
     select coalesce(p.cohort, '') from public.participants p where p.auth_user_id = auth.uid()
   ))
 );
-create policy nudge_targets_admin_mutate
-on public.nudge_targets
+create policy nudge_acknowledgement_targets_admin_mutate
+on public.nudge_acknowledgement_targets
 for all
 using (public.current_app_role() = 'admin')
 with check (public.current_app_role() = 'admin');
@@ -154,7 +118,7 @@ with check (
       and wn.response_due_at > now()
       and exists (
         select 1
-        from public.nudge_targets nt
+        from public.nudge_acknowledgement_targets nt
         join public.participants p on true
         where nt.nudge_id = wn.id
           and (
@@ -198,9 +162,9 @@ alter table if exists public.nudge_acknowledgements
 -- Migrate existing response_text to encrypted form (using a placeholder staging key)
 -- Note: In production, use external KMS (Azure Key Vault, AWS Secrets Manager) via application layer
 update public.nudge_acknowledgements
-set response_text_encrypted = 
-  case 
-    when response_text != '' 
+set response_text_encrypted =
+  case
+    when response_text != ''
     then pgp_sym_encrypt(response_text, 'staging-placeholder-key-only-for-demo')::bytea
     else null
   end
@@ -239,18 +203,16 @@ returns jsonb as $$
 declare
   v_result jsonb;
 begin
-  -- Validate response_text is not empty before encryption
   if length(btrim(p_response_text)) = 0 then
     return json_build_object('error', 'Response text cannot be empty')::jsonb;
   end if;
-  
-  -- Validate nudge exists and response window is open
+
   if not exists (
     select 1 from public.weekly_nudges where id = p_nudge_id and response_due_at > now()
   ) then
     return json_build_object('error', 'Nudge not found or response window has closed')::jsonb;
   end if;
-  
+
   insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text_encrypted, acknowledged_at, response_due_at)
   values (
     p_nudge_id,
@@ -264,7 +226,7 @@ begin
       acknowledged_at = now()
   where response_due_at > now()
   returning json_build_object('id', id, 'acknowledged_at', acknowledged_at) into v_result;
-  
+
   return coalesce(v_result, '{"error": "Failed to upsert acknowledgement"}'::jsonb);
 exception when others then
   return json_build_object('error', SQLERRM)::jsonb;
@@ -274,9 +236,9 @@ $$ language plpgsql security definer;
 -- Grant execute permission on upsert function to authenticated users
 grant execute on function public.upsert_nudge_acknowledgement(uuid, text, text, text) to authenticated;
 
--- Create stored procedure for atomic nudge + target upsert (admin only)
+-- Create stored procedure for atomic nudge + acknowledgement target upsert (admin only)
 -- Deletes old targets and inserts new target in single transaction
-create or replace function public.upsert_nudge_with_target(
+create or replace function public.upsert_nudge_with_engagement_target(
   p_week_of date,
   p_message text,
   p_author text,
@@ -289,37 +251,33 @@ declare
   v_nudge_id uuid;
   v_result jsonb;
 begin
-  -- Validate inputs
   if length(btrim(p_message)) = 0 then
     return json_build_object('error', 'Message cannot be empty')::jsonb;
   end if;
   if p_target_type not in ('all', 'subgroup', 'participant') then
     return json_build_object('error', 'Invalid target type')::jsonb;
   end if;
-  
-  -- Upsert nudge
+
   insert into public.weekly_nudges (week_of, message, author, response_due_at)
   values (p_week_of, p_message, p_author, p_week_of::timestamptz + interval '48 hours')
   on conflict (week_of) do update
   set message = p_message, author = p_author
   returning id into v_nudge_id;
-  
+
   if v_nudge_id is null then
     return json_build_object('error', 'Failed to upsert nudge')::jsonb;
   end if;
-  
-  -- Delete old targets for this nudge (republishing clears old recipients)
-  delete from public.nudge_targets where nudge_id = v_nudge_id;
-  
-  -- Insert new target
-  insert into public.nudge_targets (nudge_id, target_type, target_label, participant_id)
+
+  delete from public.nudge_acknowledgement_targets where nudge_id = v_nudge_id;
+
+  insert into public.nudge_acknowledgement_targets (nudge_id, target_type, target_label, participant_id)
   values (
     v_nudge_id,
     p_target_type,
     coalesce(p_target_label, ''),
     p_participant_id
   );
-  
+
   return json_build_object('nudge_id', v_nudge_id)::jsonb;
 exception when others then
   return json_build_object('error', SQLERRM)::jsonb;
@@ -327,4 +285,4 @@ end;
 $$ language plpgsql security definer;
 
 -- Grant execute permission to authenticated admin users
-grant execute on function public.upsert_nudge_with_target(date, text, text, text, text, text) to authenticated;
+grant execute on function public.upsert_nudge_with_engagement_target(date, text, text, text, text, text) to authenticated;
