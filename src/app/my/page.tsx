@@ -135,6 +135,7 @@ export default async function MyPage() {
   }
 
   const latestWellnessDate = wellness?.[0]?.date ? formatDate(wellness[0].date) : null
+  const rewardsEnabled = isPilotChallengesBasicEnabled()
   const insights = buildParticipantInsights(wellness ?? [], workouts ?? [])
 
   return (
@@ -153,6 +154,7 @@ export default async function MyPage() {
         pulse={pulse ?? []}
         challenge={challenge}
         importBatches={importBatches}
+        rewardsEnabled={rewardsEnabled}
         insights={insights}
       />
     </DashboardShell>

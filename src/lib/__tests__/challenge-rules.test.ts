@@ -4,6 +4,7 @@ import {
   canCancelChallenge,
   canEditFieldWhileActive,
   evaluateEligibility,
+  isTerminalChallengeStatus,
   normalizeEligibilityDefinition,
   validateChallengePayload,
 } from '../challenge-rules'
@@ -19,6 +20,8 @@ describe('challenge rules', () => {
     expect(canCancelChallenge('draft')).toBe(true)
     expect(canCancelChallenge('active')).toBe(true)
     expect(canCancelChallenge('completed')).toBe(false)
+    expect(isTerminalChallengeStatus('completed')).toBe(true)
+    expect(isTerminalChallengeStatus('active')).toBe(false)
   })
 
   test('only allows name/description edits while active', () => {

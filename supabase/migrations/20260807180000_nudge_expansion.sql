@@ -162,9 +162,9 @@ alter table if exists public.nudge_acknowledgements
 -- Migrate existing response_text to encrypted form (using a placeholder staging key)
 -- Note: In production, use external KMS (Azure Key Vault, AWS Secrets Manager) via application layer
 update public.nudge_acknowledgements
-set response_text_encrypted = 
-  case 
-    when response_text != '' 
+set response_text_encrypted =
+  case
+    when response_text != ''
     then pgp_sym_encrypt(response_text, 'staging-placeholder-key-only-for-demo')::bytea
     else null
   end
@@ -203,18 +203,16 @@ returns jsonb as $$
 declare
   v_result jsonb;
 begin
-  -- Validate response_text is not empty before encryption
   if length(btrim(p_response_text)) = 0 then
     return json_build_object('error', 'Response text cannot be empty')::jsonb;
   end if;
-  
-  -- Validate nudge exists and response window is open
+
   if not exists (
     select 1 from public.weekly_nudges where id = p_nudge_id and response_due_at > now()
   ) then
     return json_build_object('error', 'Nudge not found or response window has closed')::jsonb;
   end if;
-  
+
   insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text_encrypted, acknowledged_at, response_due_at)
   values (
     p_nudge_id,
@@ -228,7 +226,7 @@ begin
       acknowledged_at = now()
   where response_due_at > now()
   returning json_build_object('id', id, 'acknowledged_at', acknowledged_at) into v_result;
-  
+
   return coalesce(v_result, '{"error": "Failed to upsert acknowledgement"}'::jsonb);
 exception when others then
   return json_build_object('error', SQLERRM)::jsonb;
@@ -253,28 +251,25 @@ declare
   v_nudge_id uuid;
   v_result jsonb;
 begin
-  -- Validate inputs
   if length(btrim(p_message)) = 0 then
     return json_build_object('error', 'Message cannot be empty')::jsonb;
   end if;
   if p_target_type not in ('all', 'subgroup', 'participant') then
     return json_build_object('error', 'Invalid target type')::jsonb;
   end if;
-  
-  -- Upsert nudge
+
   insert into public.weekly_nudges (week_of, message, author, response_due_at)
   values (p_week_of, p_message, p_author, p_week_of::timestamptz + interval '48 hours')
   on conflict (week_of) do update
   set message = p_message, author = p_author
   returning id into v_nudge_id;
-  
+
   if v_nudge_id is null then
     return json_build_object('error', 'Failed to upsert nudge')::jsonb;
   end if;
-  
   -- Delete old targets for this nudge (republishing clears old recipients)
   delete from public.nudge_acknowledgement_targets where nudge_id = v_nudge_id;
-  
+
   -- Insert new target
   insert into public.nudge_acknowledgement_targets (nudge_id, target_type, target_label, participant_id)
   values (
@@ -283,7 +278,7 @@ begin
     coalesce(p_target_label, ''),
     p_participant_id
   );
-  
+
   return json_build_object('nudge_id', v_nudge_id)::jsonb;
 exception when others then
   return json_build_object('error', SQLERRM)::jsonb;
