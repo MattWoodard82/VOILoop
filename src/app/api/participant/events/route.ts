@@ -57,7 +57,7 @@ async function getTargetedNudge(
 ) {
   const { data, error } = await supabase
     .from('weekly_nudges')
-    .select('id, message, author, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
+    .select('id, message, author, week_of, nudge_acknowledgement_target!inner(target_type, target_label, participant_id)')
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
     .limit(10)
@@ -69,11 +69,11 @@ async function getTargetedNudge(
     message: string
     author: string
     week_of: string
-    nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
+    nudge_acknowledgement_target: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
   }>
 
   const nudge = rows.find((row) => {
-    const targets = Array.isArray(row.nudge_targets) ? row.nudge_targets : [row.nudge_targets]
+    const targets = Array.isArray(row.nudge_acknowledgement_target) ? row.nudge_acknowledgement_target : [row.nudge_acknowledgement_target]
     return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.target_label ?? null, target?.participant_id ?? null, participantId, cohort))
   }) ?? null
 

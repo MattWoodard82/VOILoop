@@ -267,9 +267,10 @@ begin
   if v_nudge_id is null then
     return json_build_object('error', 'Failed to upsert nudge')::jsonb;
   end if;
-
+  -- Delete old targets for this nudge (republishing clears old recipients)
   delete from public.nudge_acknowledgement_targets where nudge_id = v_nudge_id;
 
+  -- Insert new target
   insert into public.nudge_acknowledgement_targets (nudge_id, target_type, target_label, participant_id)
   values (
     v_nudge_id,
