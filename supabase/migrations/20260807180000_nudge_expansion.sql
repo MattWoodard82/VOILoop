@@ -1,3 +1,6 @@
+-- Nudge expansion: add nudge_targets and nudge_acknowledgements tables with encryption support
+-- and RLS policies for secure targeted messaging and response collection
+
 create table if not exists public.nudge_targets (
   id uuid primary key default gen_random_uuid(),
   nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
