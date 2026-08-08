@@ -5,7 +5,7 @@ import { getParticipants } from '@/lib/supabase/queries'
 import { WhoopImportClient } from './import/WhoopImportClient'
 import { AccountProvisioningClient } from './accounts/AccountProvisioningClient'
 import { ChallengesAdminClient } from './challenges/ChallengesAdminClient'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
+import { isRewardsRolloutEnabled } from '@/lib/feature-flags'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import type { Participant } from '@/types'
 import Link from 'next/link'
@@ -80,11 +80,11 @@ export default async function AdminPage() {
 
         <section id="challenges" className="card">
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
-            Challenges
+            Rewards rollout
           </div>
-          {!isPilotChallengesBasicEnabled() ? (
+          {!isRewardsRolloutEnabled() ? (
             <div style={{ fontSize: 12, color: '#A5ACAF' }}>
-              Set <code>PILOT_CHALLENGES_BASIC=true</code> to enable challenge management.
+              Set <code>PILOT_CHALLENGES_BASIC=true</code> to enable rewards redemption, rules visibility, and operator tools.
             </div>
           ) : (
             <ChallengesAdminClient />

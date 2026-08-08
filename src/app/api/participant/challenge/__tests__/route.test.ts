@@ -27,6 +27,14 @@ describe('GET /api/participant/challenge', () => {
     mockIsPilotChallengesBasicEnabled.mockReturnValue(true)
   })
 
+  test('returns 404 when the rollout flag is disabled', async () => {
+    mockIsPilotChallengesBasicEnabled.mockReturnValue(false)
+
+    const response = await GET()
+
+    expect(response.status).toBe(404)
+  })
+
   test('returns 403 for non-participant users', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'auth-user-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: false })
