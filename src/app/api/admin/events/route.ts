@@ -143,7 +143,7 @@ export async function PUT(request: Request) {
   
   // Delete old targets for this nudge (republishing clears old targeting)
   // Then persist new nudge + target atomically via RPC
-  const { data: result, error: rpcError } = await supabase.rpc('upsert_nudge_with_target', {
+  const { data: result, error: rpcError } = await supabase.rpc('upsert_nudge_with_acknowledgement_target', {
     p_week_of: weekOf,
     p_message: message,
     p_author: author,
