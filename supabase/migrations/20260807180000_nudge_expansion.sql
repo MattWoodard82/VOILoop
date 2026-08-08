@@ -26,12 +26,18 @@ create table if not exists public.nudge_acknowledgements (
 alter table if exists public.weekly_nudges
   add column if not exists response_due_at timestamptz;
 
-update public.weekly_nudges
-set response_due_at = coalesce(response_due_at, created_at + interval '48 hours')
-where response_due_at is null;
-
-alter table if exists public.weekly_nudges
-  alter column response_due_at set not null;
+-- Only update if table exists
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'weekly_nudges') then
+    update public.weekly_nudges
+    set response_due_at = coalesce(response_due_at, created_at + interval '48 hours')
+    where response_due_at is null;
+    
+    alter table public.weekly_nudges
+      alter column response_due_at set not null;
+  end if;
+end $$;
 
 create index if not exists idx_nudge_targets_nudge_id on public.nudge_targets(nudge_id);
 create index if not exists idx_nudge_acknowledgements_nudge_id on public.nudge_acknowledgements(nudge_id);
