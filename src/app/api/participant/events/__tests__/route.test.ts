@@ -96,7 +96,7 @@ describe('/api/participant/events', () => {
               })),
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20', nudge_targets: [{ target_type: 'all', participant_id: null }] },
+                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20', nudge_acknowledgement_target: [{ target_type: 'all', participant_id: null }] },
                   error: null,
                 })),
               })),

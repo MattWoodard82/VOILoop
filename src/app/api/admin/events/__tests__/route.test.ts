@@ -143,7 +143,7 @@ describe('admin events routes', () => {
     }))
 
     expect(response.status).toBe(200)
-    expect(rpcMock).toHaveBeenCalledWith('upsert_nudge_with_target', {
+    expect(rpcMock).toHaveBeenCalledWith('upsert_nudge_with_engagement_target', {
       p_week_of: '2026-07-20',
       p_message: 'Get outside today.',
       p_author: 'Coach',

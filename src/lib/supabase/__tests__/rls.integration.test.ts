@@ -196,7 +196,7 @@ describeRlsIntegration('Supabase RLS integration', () => {
       await serviceClient.from('upload_batches').delete().in('id', uploadBatchIds)
     }
     await serviceClient.from('nudge_acknowledgements').delete().in('participant_id', [participantAId, participantBId])
-    await serviceClient.from('nudge_targets').delete().in('participant_id', [participantAId, participantBId])
+    await serviceClient.from('nudge_acknowledgement_targets').delete().in('participant_id', [participantAId, participantBId])
     await serviceClient.from('weekly_nudges').delete().eq('message', `Stay hydrated ${testId}`)
     await serviceClient.from('event_rsvps').delete().eq('event_id', baseEventId)
     await serviceClient.from('events').delete().eq('id', baseEventId)
