@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ParticipantWithWellness } from '@/types'
 import { Card, Badge, BarRow } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
@@ -20,6 +20,22 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [personFilter, setPersonFilter] = useState('All')
   const [weights, setWeights] = useState({ recovery: 35, hrv: 15, sleep: 25, debt: 25 })
   const [overrides, setOverrides] = useState<Record<string, ParticipantWithWellness['override_state']>>({})
+  const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
+  const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
+  const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/admin/wellness-director-config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        const config = data?.config?.weights
+        if (config) setWeights(config)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   const departments = useMemo(() => ['All', ...Array.from(new Set(participants.map((e) => e.department))).sort()], [participants])
 
@@ -37,6 +53,39 @@ export function WellnessDirectorClient({ participants }: Props) {
       label: `${e.first_name} ${e.last_name}`,
       value: e.engagement_score as number,
     }))
+
+  const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
+    const response = await fetch('/api/admin/wellness-director-overrides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        participant_id: participantId,
+        action,
+        note: overrideNotes[participantId] ?? null,
+        snooze_until: action === 'snooze' ? new Date(Date.now() + (Number(snoozeDays[participantId] ?? 7) * 86400000)).toISOString() : null,
+      }),
+    })
+    if (!response.ok) throw new Error('Failed to persist override')
+    const data = await response.json()
+    const state = action === 'snooze' ? 'snoozed' : 'dismissed'
+    setOverrides((current) => ({ ...current, [participantId]: state }))
+    return data
+  }
+
+  const persistWeights = async (nextWeights: typeof weights) => {
+    setConfigStatus('saving')
+    const response = await fetch('/api/admin/wellness-director-config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weights: nextWeights }),
+    })
+    if (!response.ok) {
+      setConfigStatus('idle')
+      throw new Error('Failed to save config')
+    }
+    setConfigStatus('saved')
+    return response.json()
+  }
 
   return (
     <>
@@ -85,9 +134,23 @@ export function WellnessDirectorClient({ participants }: Props) {
             <>
               <div>{selected.baseline_state === 'building' ? `Baseline building (${selected.baseline_days_remaining} days remaining)` : 'Baseline ready'}</div>
               <div>Override: {overrideLabel(overrides[selected.id] ?? selected.override_state)}</div>
+              <input
+                aria-label="override note"
+                value={overrideNotes[selected.id] ?? ''}
+                onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
+                placeholder="Optional note"
+              />
+              <input
+                aria-label="snooze days"
+                type="number"
+                min={1}
+                max={30}
+                value={snoozeDays[selected.id] ?? 7}
+                onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
+              />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="button" onClick={() => setOverrides((current) => ({ ...current, [selected.id]: 'snoozed' }))}>Snooze</button>
-                <button type="button" onClick={() => setOverrides((current) => ({ ...current, [selected.id]: 'dismissed' }))}>Dismiss</button>
+                <button type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
+                <button type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
               </div>
             </>
           ) : (
@@ -98,9 +161,25 @@ export function WellnessDirectorClient({ participants }: Props) {
           {Object.entries(weights).map(([key, value]) => (
             <div key={key}>
               <label htmlFor={key}>{key}</label>
-              <input id={key} aria-label={key} type="range" min={0} max={100} value={value} onChange={(e) => setWeights((current) => ({ ...current, [key]: Number(e.target.value) }))} />
+              <input
+                id={key}
+                aria-label={key}
+                type="range"
+                min={0}
+                max={100}
+                value={value}
+                onChange={(e) => {
+                  const next = { ...weights, [key]: Number(e.target.value) }
+                  const total = Object.values(next).reduce((sum, item) => sum + item, 0)
+                  if (total === 100) {
+                    setWeights(next)
+                    persistWeights(next).catch(() => setConfigStatus('idle'))
+                  }
+                }}
+              />
             </div>
           ))}
+          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}</div>
         </Card>
       </div>
     </>
