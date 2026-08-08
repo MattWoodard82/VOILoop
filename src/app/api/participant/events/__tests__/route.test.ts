@@ -1,10 +1,15 @@
-import { GET, POST } from '../route'
+import { GET, PATCH, POST } from '../route'
 import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
+import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   getSession: jest.fn(),
   getUserAccess: jest.fn(),
+}))
+
+jest.mock('@/lib/supabase/encryption', () => ({
+  getDbEncryptionKey: jest.fn(() => 'staging-placeholder-key-only-for-demo'),
 }))
 
 function makePostRequest(body: unknown): Request {
@@ -54,10 +59,6 @@ describe('/api/participant/events', () => {
       data: [{ id: 'evt-1', title: 'Walk Club' }],
       error: null,
     }))
-    const nudgeMaybeSingle = jest.fn(async () => ({
-      data: { message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
-      error: null,
-    }))
     const rsvpsEq = jest.fn(async () => ({
       data: [{ event_id: 'evt-1' }],
       error: null,
@@ -90,9 +91,13 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               lte: jest.fn(() => ({
                 order: jest.fn(() => ({
-                  limit: jest.fn(() => ({
-                    maybeSingle: nudgeMaybeSingle,
-                  })),
+                  limit: eventsLimit,
+                })),
+              })),
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20', nudge_targets: [{ target_type: 'all', participant_id: null }] },
+                  error: null,
                 })),
               })),
             })),
@@ -105,7 +110,25 @@ describe('/api/participant/events', () => {
             })),
           }
         }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { acknowledged_at: '2026-07-20T12:00:00Z', response_text_encrypted: 'encrypted-response-data', response_due_at: '2026-07-22T12:00:00Z' },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
         throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string, params: unknown) => {
+        if (name === 'decrypt_nudge_response') {
+          return { data: 'Will do', error: null }
+        }
+        throw new Error(`Unexpected RPC ${name}`)
       }),
     } as never)
 
@@ -116,7 +139,8 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(200)
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Walk Club' }],
-      nudge: { message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      nudge: null,
+      acknowledgement: null,
       rsvpEventIds: ['evt-1'],
     })
   })
@@ -127,7 +151,6 @@ describe('/api/participant/events', () => {
 
     const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
     const upsert = jest.fn(async () => ({ error: null }))
-
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
         if (table === 'participants') {
@@ -211,5 +234,129 @@ describe('/api/participant/events', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining('boolean') })
+  })
+
+  test('PATCH records an acknowledgement response', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const rpcUpsert = jest.fn(async (params: unknown) => ({ data: { id: 'ack-1', acknowledged_at: '2026-08-07T12:00:00Z' }, error: null }))
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'events') {
+          return {
+            select: jest.fn(() => ({
+              gte: jest.fn(() => ({
+                order: jest.fn(() => ({
+                  limit: jest.fn(async () => ({
+                    data: [{ id: 'evt-1', title: 'Walk Club' }],
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        if (table === 'weekly_nudges') {
+          return {
+            select: jest.fn(() => ({
+              lte: jest.fn(() => ({
+                order: jest.fn(() => ({
+                  limit: jest.fn(async () => ({
+                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-08-07', nudge_targets: [{ target_type: 'all', participant_id: null }] }],
+                    error: null,
+                  })),
+                })),
+              })),
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { id: 'nudge-1', week_of: '2026-08-07', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string, params: unknown) => {
+        if (name === 'upsert_nudge_acknowledgement') {
+          rpcUpsert(params)
+          return { data: { id: 'ack-1', acknowledged_at: '2026-08-07T12:00:00Z' }, error: null }
+        }
+        throw new Error(`Unexpected RPC ${name}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(200)
+    expect(rpcUpsert).toHaveBeenCalledWith({
+      p_nudge_id: 'nudge-1',
+      p_participant_id: 'EMP123',
+      p_response_text: 'Will do',
+      p_encryption_key: 'staging-placeholder-key-only-for-demo',
+    })
+  })
+
+  test('PATCH rejects acknowledgements for untargeted nudges', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const rpcUpsert = jest.fn(async (params: unknown) => ({ data: { id: 'ack-1', acknowledged_at: '2026-07-01T12:00:00Z' }, error: null }))
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'weekly_nudges') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string, params: unknown) => {
+        if (name === 'upsert_nudge_acknowledgement') {
+          rpcUpsert(params)
+          return { data: { id: 'ack-1', acknowledged_at: '2026-07-01T12:00:00Z' }, error: null }
+        }
+        throw new Error(`Unexpected RPC ${name}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ error: 'Response window has closed.' })
+    expect(rpcUpsert).not.toHaveBeenCalled()
   })
 })

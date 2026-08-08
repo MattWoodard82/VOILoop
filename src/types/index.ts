@@ -126,6 +126,16 @@ export interface ParticipantWithWellness extends Participant {
   latest_pulse: PulseSurvey | null
   risk_level: RiskLevel
   recovery_status: RecoveryStatus
+  engagement_score?: number | null
+  engagement_score_components?: Record<string, number> | null
+  physiological_trend?: 'improving' | 'steady' | 'declining' | null
+  physiological_trend_metrics?: string[] | null
+  risk_tier_label?: string | null
+  risk_trigger_reasons?: string[] | null
+  baseline_state?: 'building' | 'ready' | null
+  baseline_days_remaining?: number | null
+  override_state?: 'none' | 'snoozed' | 'dismissed' | null
+  override_note?: string | null
 }
 
 export interface TeamStats {
@@ -135,6 +145,27 @@ export interface TeamStats {
   high_risk_count: number
   total_participants: number
   participation_rate: number
+}
+
+export type LeaderboardMetric = 'recovery' | 'workouts_logged' | 'points_earned' | 'consistency_streak'
+
+export interface ParticipantRankContext {
+  metric: LeaderboardMetric
+  participant_rank: number
+  participant_value: number
+  cohort_size: number
+  cohort_percentile: number
+  percentile_label: string
+  comparison_text: string
+  metric_label: string
+  metric_value_label: string
+  metric_description: string
+  rank_context: {
+    ahead: number
+    behind: number
+  }
+  cohort_band: 'top' | 'middle' | 'bottom'
+  safe_context_note: string
 }
 
 export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed'
@@ -214,4 +245,129 @@ export interface ChallengeParticipant {
   completion_idempotency_key: string | null
   created_at: string
   updated_at: string
+}
+
+// Scoring and engagement types
+export type RiskTier = 'green' | 'yellow' | 'red' | 'no_data'
+export type ColdStartStatus = 'cold_start' | 'active'
+
+export interface LoginActivity {
+  id: string
+  participant_id: string
+  logged_in_at: string
+  logged_out_at: string | null
+  session_duration_seconds: number | null
+  ip_address: string | null
+  user_agent: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface NudgeTarget {
+  id: string
+  participant_id: string
+  nudge_type: string
+  target_context: Record<string, unknown> | null
+  created_at: string
+  expires_at: string
+  updated_at: string
+}
+
+export interface NudgeResponse {
+  id: string
+  nudge_target_id: string
+  participant_id: string
+  response_type: string
+  responded_at: string
+  response_context: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface NudgeAcknowledgement {
+  id: string
+  nudge_id: string
+  participant_id: string
+  acknowledged_at: string
+  response_text: string
+  response_text_encrypted: string
+  response_due_at: string
+}
+
+export interface EngagementScoreWeights {
+  id: string
+  organization_id: string | null
+  weight_name: string
+  weight_value: number
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+export interface RiskFlag {
+  id: string
+  participant_id: string
+  flag_type: string
+  is_active: boolean
+  severity: 'low' | 'medium' | 'high' | null
+  override_state: 'dismissed' | 'snoozed' | null
+  override_reason: string | null
+  override_expires_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LeaderboardMetricSnapshot {
+  id: string
+  participant_id: string
+  week_start_date: string
+  week_end_date: string
+  engagement_score: number | null
+  recovery_score_avg: number | null
+  hrv_avg: number | null
+  sleep_perf_avg: number | null
+  strain_avg: number | null
+  login_count: number
+  pulse_survey_count: number
+  workout_count: number
+  data_completeness_pct: number | null
+  rank_in_department: number | null
+  created_at: string
+  updated_at: string
+}
+
+// Scoring result types
+export interface EngagementScoreResult {
+  score: number // 0-100
+  login_frequency_component: number
+  pulse_survey_component: number
+  data_submission_component: number
+  intervention_follow_up_component: number
+  trend_consistency_component: number
+}
+
+export interface PhysiologicalTrendResult {
+  is_declining: boolean
+  decline_metric_count: number
+  metrics_evaluated: Array<{
+    metric_name: string
+    is_declining: boolean
+    recent_avg: number | null
+    baseline_avg: number | null
+  }>
+}
+
+export interface RiskAssessmentResult {
+  risk_tier: RiskTier
+  cold_start_status: ColdStartStatus
+  days_enrolled: number
+  physiological_trend: PhysiologicalTrendResult | null
+  engagement_score: EngagementScoreResult | null
+  has_active_overrides: boolean
+  explanation: string
+}
+
+export interface WeekWindow {
+  start_date: Date
+  end_date: Date
+  monday_of_week: Date
 }

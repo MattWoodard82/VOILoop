@@ -1,9 +1,11 @@
 import { createClient } from './client'
+import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
 import type {
   Participant, DailyWellness, Workout, Habit,
-  PulseSurvey, Intervention, ParticipantWithWellness, TeamStats,
+  PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
   RiskLevel, RecoveryStatus, ImportBatch, ImportRowOutcome,
+  LoginActivity, RiskFlag, LeaderboardMetricSnapshot,
 } from '@/types'
 
 export function getRecoveryStatus(score: number | null): RecoveryStatus {
@@ -62,8 +64,21 @@ function getQueryClient() {
   }
 }
 
-export async function getParticipants(): Promise<Participant[]> {
-  const supabase = getQueryClient()
+function getPrivilegedQueryClient() {
+  return createAdminSupabaseClient()
+}
+
+export class ParticipantRankContextError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ParticipantRankContextError'
+    this.status = status
+  }
+}
+
+export async function getParticipants(supabase = getQueryClient()): Promise<Participant[]> {
   const { data, error } = await supabase
     .from('participants')
     .select('*')
@@ -73,10 +88,12 @@ export async function getParticipants(): Promise<Participant[]> {
   return data ?? []
 }
 
-export async function getLatestWellness(date?: string, participantIds?: string[]): Promise<DailyWellness[]> {
+export async function getLatestWellness(
+  date?: string,
+  participantIds?: string[],
+  supabase = getQueryClient(),
+): Promise<DailyWellness[]> {
   if (participantIds && participantIds.length === 0) return []
-
-  const supabase = getQueryClient()
   if (date) {
     let datedQuery = supabase
       .from('daily_wellness')
@@ -181,8 +198,7 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
   }))
 }
 
-export async function getLatestWorkouts(date?: string): Promise<Workout[]> {
-  const supabase = getQueryClient()
+export async function getLatestWorkouts(date?: string, supabase = getQueryClient()): Promise<Workout[]> {
   const buildQuery = (includeStartTimeSort: boolean) => {
     let q = supabase
       .from('workouts')
@@ -222,8 +238,7 @@ function isMissingStartTimeColumnError(error: { code?: string; message?: string 
   )
 }
 
-export async function getLatestHabits(date?: string): Promise<Habit[]> {
-  const supabase = getQueryClient()
+export async function getLatestHabits(date?: string, supabase = getQueryClient()): Promise<Habit[]> {
   let q = supabase.from('habits').select('*').order('date', { ascending: false })
   if (date) q = q.eq('date', date)
   const { data, error } = await q
@@ -231,8 +246,7 @@ export async function getLatestHabits(date?: string): Promise<Habit[]> {
   return data ?? []
 }
 
-export async function getLatestPulse(): Promise<PulseSurvey[]> {
-  const supabase = getQueryClient()
+export async function getLatestPulse(supabase = getQueryClient()): Promise<PulseSurvey[]> {
   const { data: latestDate } = await supabase
     .from('pulse_surveys')
     .select('date')
@@ -325,14 +339,75 @@ export async function getTeamDashboard(): Promise<{
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
+    const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
+    const recentWellness = wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21)
+    const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
+    const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)
+    const recentHabits = habits.filter((row) => row.participant_id === emp.id)
+    const submissionConsistency = recentWellness.length > 0
+      ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100)
+      : null
+    const deviceWearConsistency = recentWellness.length > 0
+      ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100)
+      : null
+    const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
+    const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
+    const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
+    const engagementComponents: Record<string, number> = {
+      submission_consistency: submissionConsistency ?? 0,
+      device_wear_consistency: deviceWearConsistency ?? 0,
+      pulse_completion: pulseCompletion ?? 0,
+      nudge_response: nudgeResponse ?? 0,
+      workout_volume: workoutVolume ?? 0,
+    }
+    const engagementScore: number = [
+      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
+      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
+      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
+      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
+      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
+    ].reduce((sum, part) => sum + part, 0)
+    const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
+    const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
+      const earlier = rows.slice(0, Math.max(1, rows.length - 7))
+      const later = rows.slice(-7)
+      return avg(later.map((row) => typeof row[field] === 'number' ? row[field] as number : null)) - avg(earlier.map((row) => typeof row[field] === 'number' ? row[field] as number : null))
+    }
+    const recoveryDelta = trendCompare(recentWellness, 'recovery_score')
+    const hrvDelta = trendCompare(recentWellness, 'hrv_ms')
+    const sleepDelta = trendCompare(recentWellness, 'sleep_perf')
+    const decliningCount = [recoveryDelta, hrvDelta, sleepDelta].filter((delta) => delta < 0).length
+    const physiologicalTrend: ParticipantWithWellness['physiological_trend'] = decliningCount >= 2 ? 'declining' : recoveryDelta > 0 && hrvDelta > 0 && sleepDelta > 0 ? 'improving' : 'steady'
+    const physiologicalMetrics = [
+      ...(recoveryDelta !== 0 ? [`Recovery ${recoveryDelta > 0 ? 'up' : 'down'}`] : []),
+      ...(hrvDelta !== 0 ? [`HRV ${hrvDelta > 0 ? 'up' : 'down'}`] : []),
+      ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
+    ]
+    const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
+    const riskTriggers = [
+      ...(engagementScore < 35 ? ['Low engagement score'] : []),
+      ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
+      ...(zeroDataFor14Days ? ['No wellness data for 14 days'] : []),
+    ]
+    const riskLevel = zeroDataFor14Days || (engagementScore < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
     return {
       ...emp,
       latest_wellness: w,
       latest_workout: workoutMap[emp.id] ?? null,
       latest_habits: habitsMap[emp.id] ?? null,
       latest_pulse: pulseMap[emp.id] ?? null,
-      risk_level: getRiskLevel(w?.recovery_score ?? null, w?.sleep_debt ?? null),
+      risk_level: riskLevel,
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
+      engagement_score: engagementScore,
+      engagement_score_components: engagementComponents,
+      physiological_trend: physiologicalTrend,
+      physiological_trend_metrics: physiologicalMetrics,
+      risk_tier_label: riskLevel === 'High' ? 'High concern' : riskLevel === 'Medium' ? 'Watch' : 'Stable',
+      risk_trigger_reasons: riskTriggers,
+      baseline_state: baselineState,
+      baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
+      override_state: null,
+      override_note: null,
     }
   })
 
@@ -353,6 +428,130 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { participants: enriched, stats, interventions }
+}
+
+function buildParticipantRankContext(
+  metric: LeaderboardMetric,
+  participantValue: number,
+  rank: number,
+  cohortSize: number,
+  rankContext: { ahead: number; behind: number },
+): ParticipantRankContext {
+  const cohortPercentile = cohortSize > 0 ? Math.round(((cohortSize - rank + 1) / cohortSize) * 100) : 0
+  const { ahead, behind } = rankContext
+  const percentileLabel = cohortPercentile >= 90 ? 'Top 10%'
+    : cohortPercentile >= 75 ? 'Top quartile'
+      : cohortPercentile >= 50 ? 'Upper half'
+        : cohortPercentile >= 25 ? 'Lower half'
+          : 'Bottom quartile'
+  const cohortBand = cohortPercentile >= 75 ? 'top' : cohortPercentile >= 40 ? 'middle' : 'bottom'
+
+  const config: Record<LeaderboardMetric, { metric_label: string; metric_value_label: string; metric_description: string }> = {
+    recovery: {
+      metric_label: 'Recovery',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher recovery scores rank better.',
+    },
+    workouts_logged: {
+      metric_label: 'Workouts logged',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'More logged workouts rank better.',
+    },
+    points_earned: {
+      metric_label: 'Points earned',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher point totals rank better.',
+    },
+    consistency_streak: {
+      metric_label: 'Sleep consistency',
+      metric_value_label: `${participantValue}`,
+      metric_description: 'Higher sleep consistency scores rank better.',
+    },
+  }
+
+  return {
+    metric,
+    participant_rank: rank,
+    participant_value: participantValue,
+    cohort_size: cohortSize,
+    cohort_percentile: cohortPercentile,
+    percentile_label: percentileLabel,
+    comparison_text: `Ahead of ${ahead} participant${ahead === 1 ? '' : 's'}, behind ${behind}.`,
+    metric_label: config[metric].metric_label,
+    metric_value_label: config[metric].metric_value_label,
+    metric_description: config[metric].metric_description,
+    rank_context: { ahead, behind },
+    cohort_band: cohortBand,
+    safe_context_note: 'Only participant-facing rank context is returned; no peer identities are exposed.',
+  }
+}
+
+export async function getParticipantRankContext(participantId: string, metric: LeaderboardMetric): Promise<ParticipantRankContext> {
+  const supabase = getPrivilegedQueryClient()
+  const participants = await getParticipants(supabase)
+  const participant = participants.find((row) => row.auth_user_id === participantId)
+  if (!participant) {
+    throw new ParticipantRankContextError('Participant not found.', 404)
+  }
+  const participantIds = participants.map((participant) => participant.id)
+  const cohortSize = participantIds.length
+  const [wellness, workouts, habits, pulse] = await Promise.all([
+    getLatestWellness(undefined, participantIds, supabase),
+    getLatestWorkouts(undefined, supabase),
+    getLatestHabits(undefined, supabase),
+    getLatestPulse(supabase),
+  ])
+
+  const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
+  const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
+    if (!map[workout.participant_id]) map[workout.participant_id] = workout
+    return map
+  }, {})
+  const workoutCounts = workouts.reduce<Record<string, number>>((map, workout) => {
+    map[workout.participant_id] = (map[workout.participant_id] ?? 0) + 1
+    return map
+  }, {})
+  const habitsMap = habits.reduce<Record<string, Habit>>((map, habit) => {
+    if (!map[habit.participant_id]) map[habit.participant_id] = habit
+    return map
+  }, {})
+  const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+
+  const rows = participantIds.map((id) => {
+    const wellnessRow = wellnessMap[id] ?? null
+    const workoutRow = workoutMap[id] ?? null
+    const habitRow = habitsMap[id] ?? null
+    const pulseRow = pulseMap[id] ?? null
+    const recovery = wellnessRow?.recovery_score ?? 0
+    const workoutsLogged = workoutCounts[id] ?? 0
+    const pointsEarned = Math.round(
+      recovery +
+      (workoutRow?.strain ?? 0) * 2 +
+      (habitRow?.hydrated ? 5 : 0) +
+      (pulseRow?.energy_level ?? 0) * 3,
+    )
+    const consistencyStreak = wellnessRow?.sleep_consistency ?? 0
+    return { id, recovery, workoutsLogged, pointsEarned, consistencyStreak }
+  })
+
+  const metricValue = {
+    recovery: (row: typeof rows[number]) => row.recovery,
+    workouts_logged: (row: typeof rows[number]) => row.workoutsLogged,
+    points_earned: (row: typeof rows[number]) => row.pointsEarned,
+    consistency_streak: (row: typeof rows[number]) => row.consistencyStreak,
+  }[metric]
+
+  const resolved = rows.find((row) => row.id === participant.id)
+  if (!resolved) {
+    throw new ParticipantRankContextError('Participant not found.', 404)
+  }
+
+  const participantValue = metricValue(resolved)
+  const ahead = rows.filter((row) => metricValue(row) < participantValue).length
+  const behind = rows.filter((row) => metricValue(row) > participantValue).length
+  const rank = behind + 1
+
+  return buildParticipantRankContext(metric, participantValue, rank, cohortSize, { ahead, behind })
 }
 
 export async function getRecentImportBatches(limit: number = 20): Promise<ImportBatch[]> {
@@ -387,4 +586,176 @@ export async function getImportRowOutcomes(batchId: string): Promise<ImportRowOu
     .order('created_at', { ascending: true })
   if (error) throw error
   return data ?? []
+}
+
+// Scoring and engagement tracking queries
+export async function getLoginActivityForWeek(
+  participantId: string,
+  weekStartDate: Date
+): Promise<LoginActivity[]> {
+  const supabase = getQueryClient()
+  const weekEndDate = new Date(weekStartDate)
+  weekEndDate.setDate(weekEndDate.getDate() + 7)
+
+  const { data, error } = await supabase
+    .from('login_activity')
+    .select('*')
+    .eq('participant_id', participantId)
+    .gte('logged_in_at', weekStartDate.toISOString())
+    .lt('logged_in_at', weekEndDate.toISOString())
+    .order('logged_in_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getWellnessDataForDateRange(
+  participantId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<DailyWellness[]> {
+  const supabase = getQueryClient()
+  const startDateStr = startDate.toISOString().split('T')[0]
+  const endDateStr = endDate.toISOString().split('T')[0]
+
+  const { data, error } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .eq('participant_id', participantId)
+    .gte('date', startDateStr)
+    .lte('date', endDateStr)
+    .or(WELLNESS_MEANINGFUL_FILTER)
+    .order('date', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getPulseSurveyCountForDateRange(
+  participantId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<number> {
+  const supabase = getQueryClient()
+  const startDateStr = startDate.toISOString().split('T')[0]
+  const endDateStr = endDate.toISOString().split('T')[0]
+
+  const { count, error } = await supabase
+    .from('pulse_surveys')
+    .select('*', { count: 'exact', head: true })
+    .eq('participant_id', participantId)
+    .gte('date', startDateStr)
+    .lte('date', endDateStr)
+
+  if (error) throw error
+  return count ?? 0
+}
+
+export async function getRiskFlagsForParticipant(
+  participantId: string,
+  activeOnly: boolean = false
+): Promise<RiskFlag[]> {
+  const supabase = getQueryClient()
+  let query = supabase
+    .from('risk_flags')
+    .select('*')
+    .eq('participant_id', participantId)
+
+  if (activeOnly) {
+    query = query.eq('is_active', true)
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function createRiskFlag(flag: Omit<RiskFlag, 'id' | 'created_at' | 'updated_at'>): Promise<RiskFlag> {
+  // Note: These mutations should be called from server context with service role or admin auth
+  // getQueryClient() provides anon user client for reads; writes require server-side auth
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('risk_flags')
+    .insert(flag)
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateRiskFlag(
+  flagId: string,
+  updates: Partial<RiskFlag>
+): Promise<void> {
+  const supabase = getQueryClient()
+  // Always update the updated_at timestamp when modifying a flag
+  const { error } = await supabase
+    .from('risk_flags')
+    .update({
+      ...updates,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', flagId)
+
+  if (error) throw error
+}
+
+export async function writeLoginActivity(
+  participantId: string,
+  loggedInAt: Date
+): Promise<LoginActivity> {
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('login_activity')
+    .insert({
+      participant_id: participantId,
+      logged_in_at: loggedInAt.toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getLeaderboardSnapshot(
+  participantId: string,
+  weekStartDate: Date
+): Promise<LeaderboardMetricSnapshot | null> {
+  const supabase = getQueryClient()
+  const weekStartStr = weekStartDate.toISOString().split('T')[0]
+
+  const { data, error } = await supabase
+    .from('leaderboard_metric_snapshots')
+    .select('*')
+    .eq('participant_id', participantId)
+    .eq('week_start_date', weekStartStr)
+    .single()
+
+  if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows found
+  return data ?? null
+}
+
+export async function saveLeaderboardSnapshot(
+  snapshot: Omit<LeaderboardMetricSnapshot, 'id' | 'created_at' | 'updated_at'>
+): Promise<LeaderboardMetricSnapshot> {
+  const supabase = getQueryClient()
+  // Include updated_at timestamp so consumers can tell when snapshot was computed
+  const { data, error } = await supabase
+    .from('leaderboard_metric_snapshots')
+    .upsert(
+      {
+        ...snapshot,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'participant_id,week_start_date' }
+    )
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
 }
