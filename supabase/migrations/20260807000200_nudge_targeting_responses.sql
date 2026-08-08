@@ -20,6 +20,15 @@ create table public.nudge_responses (
   created_at timestamp with time zone not null default now()
 );
 
+create unique index idx_nudge_targets_id_participant
+  on public.nudge_targets(id, participant_id);
+
+alter table public.nudge_responses
+  add constraint nudge_responses_target_participant_fk
+  foreign key (nudge_target_id, participant_id)
+  references public.nudge_targets(id, participant_id)
+  on delete cascade;
+
 create index idx_nudge_targets_participant_expires
   on public.nudge_targets(participant_id, expires_at desc);
 
@@ -36,6 +45,9 @@ create index idx_nudge_responses_target_id
 alter table public.nudge_targets enable row level security;
 alter table public.nudge_responses enable row level security;
 
+grant select on public.nudge_targets to authenticated;
+grant select on public.nudge_responses to authenticated;
+
 -- RLS policies for nudge_targets
 create policy nudge_targets_select_own
   on public.nudge_targets
@@ -48,17 +60,6 @@ create policy nudge_targets_select_own
     or public.current_app_role() in ('admin', 'wellness_director')
   );
 
-create policy nudge_targets_insert_service
-  on public.nudge_targets
-  for insert
-  with check (true);
-
-create policy nudge_targets_update_service
-  on public.nudge_targets
-  for update
-  using (true)
-  with check (true);
-
 -- RLS policies for nudge_responses
 create policy nudge_responses_select_own
   on public.nudge_responses
@@ -70,14 +71,3 @@ create policy nudge_responses_select_own
     )
     or public.current_app_role() in ('admin', 'wellness_director')
   );
-
-create policy nudge_responses_insert_service
-  on public.nudge_responses
-  for insert
-  with check (true);
-
-create policy nudge_responses_update_service
-  on public.nudge_responses
-  for update
-  using (true)
-  with check (true);

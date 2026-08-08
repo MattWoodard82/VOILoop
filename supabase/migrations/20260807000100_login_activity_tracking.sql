@@ -21,6 +21,8 @@ create index idx_login_activity_date_range
 -- Enable RLS
 alter table public.login_activity enable row level security;
 
+grant select on public.login_activity to authenticated;
+
 -- RLS policy: participants can view their own login activity
 create policy login_activity_select_own
   on public.login_activity
@@ -32,15 +34,3 @@ create policy login_activity_select_own
     )
     or public.current_app_role() in ('admin', 'wellness_director')
   );
-
--- RLS policy: service role can insert/update
-create policy login_activity_insert_service
-  on public.login_activity
-  for insert
-  with check (true);
-
-create policy login_activity_update_service
-  on public.login_activity
-  for update
-  using (true)
-  with check (true);

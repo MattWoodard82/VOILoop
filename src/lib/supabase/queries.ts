@@ -426,6 +426,7 @@ export async function getWellnessDataForDateRange(
     .eq('participant_id', participantId)
     .gte('date', startDateStr)
     .lte('date', endDateStr)
+    .or(WELLNESS_MEANINGFUL_FILTER)
     .order('date', { ascending: true })
 
   if (error) throw error

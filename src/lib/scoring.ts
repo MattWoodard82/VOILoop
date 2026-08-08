@@ -13,15 +13,16 @@ import type {
  */
 export function getCurrentWeekWindow(referenceDate: Date = new Date()): WeekWindow {
   const date = new Date(referenceDate)
-  const day = date.getDay()
-  const diff = date.getDate() - day + (day === 0 ? -6 : 1) // Adjust to Monday
+  const day = date.getUTCDay()
+  const diff = date.getUTCDate() - day + (day === 0 ? -6 : 1) // Adjust to Monday
 
-  const start_date = new Date(date.setDate(diff))
-  start_date.setHours(0, 0, 0, 0)
+  const start_date = new Date(date)
+  start_date.setUTCDate(diff)
+  start_date.setUTCHours(0, 0, 0, 0)
 
   const end_date = new Date(start_date)
-  end_date.setDate(end_date.getDate() + 6)
-  end_date.setHours(23, 59, 59, 999)
+  end_date.setUTCDate(end_date.getUTCDate() + 6)
+  end_date.setUTCHours(23, 59, 59, 999)
 
   return { start_date, end_date, monday_of_week: new Date(start_date) }
 }
@@ -31,15 +32,16 @@ export function getCurrentWeekWindow(referenceDate: Date = new Date()): WeekWind
  */
 export function getWeekWindowForDate(date: Date): WeekWindow {
   const d = new Date(date)
-  const day = d.getDay()
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  const day = d.getUTCDay()
+  const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1)
 
-  const start_date = new Date(d.setDate(diff))
-  start_date.setHours(0, 0, 0, 0)
+  const start_date = new Date(d)
+  start_date.setUTCDate(diff)
+  start_date.setUTCHours(0, 0, 0, 0)
 
   const end_date = new Date(start_date)
-  end_date.setDate(end_date.getDate() + 6)
-  end_date.setHours(23, 59, 59, 999)
+  end_date.setUTCDate(end_date.getUTCDate() + 6)
+  end_date.setUTCHours(23, 59, 59, 999)
 
   return { start_date, end_date, monday_of_week: new Date(start_date) }
 }

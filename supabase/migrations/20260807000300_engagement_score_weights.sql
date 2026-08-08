@@ -7,7 +7,7 @@ create table public.engagement_score_weights (
   created_at timestamp with time zone not null default now(),
   updated_at timestamp with time zone not null default now(),
   created_by text,
-  unique(organization_id, weight_name)
+  unique nulls not distinct (organization_id, weight_name)
 );
 
 create index idx_engagement_score_weights_org
@@ -25,6 +25,8 @@ on conflict (organization_id, weight_name) do nothing;
 
 -- Enable RLS
 alter table public.engagement_score_weights enable row level security;
+
+grant select, insert, update on public.engagement_score_weights to authenticated;
 
 -- RLS policies
 create policy engagement_score_weights_select_all

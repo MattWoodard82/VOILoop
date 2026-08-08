@@ -493,16 +493,16 @@ describe('scoring service', () => {
 
   describe('recency-weighted scoring', () => {
     it('should weight recent events higher', () => {
+      const referenceDate = new Date('2026-08-08T00:00:00Z')
       const events = [
-        { date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), value: 50 }, // 1 day ago
-        { date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), value: 50 }, // 7 days ago
+        { date: new Date('2026-08-07T00:00:00Z'), value: 90 }, // 1 day ago
+        { date: new Date('2026-08-01T00:00:00Z'), value: 10 }, // 7 days ago
       ]
 
-      const score = calculateRecencyWeightedScore(events)
+      const score = calculateRecencyWeightedScore(events, referenceDate)
 
-      // Recent event should have higher weight, so score should be closer to 50 but slightly lower
-      expect(score).toBeGreaterThan(0)
-      expect(score).toBeLessThanOrEqual(50)
+      expect(score).toBeGreaterThan(50)
+      expect(score).toBeLessThan(90)
     })
 
     it('should return 0 for empty events', () => {

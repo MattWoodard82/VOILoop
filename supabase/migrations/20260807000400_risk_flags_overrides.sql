@@ -22,6 +22,8 @@ create index idx_risk_flags_expires
 -- Enable RLS
 alter table public.risk_flags enable row level security;
 
+grant select on public.risk_flags to authenticated;
+
 -- RLS policies
 create policy risk_flags_select_own
   on public.risk_flags
@@ -33,19 +35,3 @@ create policy risk_flags_select_own
     )
     or public.current_app_role() in ('admin', 'wellness_director')
   );
-
-create policy risk_flags_insert_service
-  on public.risk_flags
-  for insert
-  with check (true);
-
-create policy risk_flags_update_service
-  on public.risk_flags
-  for update
-  using (true)
-  with check (true);
-
-create policy risk_flags_delete_service
-  on public.risk_flags
-  for delete
-  using (true);

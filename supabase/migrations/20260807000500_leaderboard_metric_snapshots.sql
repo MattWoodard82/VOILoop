@@ -31,6 +31,8 @@ create index idx_leaderboard_week_recovery
 -- Enable RLS
 alter table public.leaderboard_metric_snapshots enable row level security;
 
+grant select on public.leaderboard_metric_snapshots to authenticated;
+
 -- RLS policies: allow viewing leaderboards with privacy filters
 create policy leaderboard_select_own
   on public.leaderboard_metric_snapshots
@@ -42,14 +44,3 @@ create policy leaderboard_select_own
     )
     or public.current_app_role() in ('admin', 'wellness_director')
   );
-
-create policy leaderboard_insert_service
-  on public.leaderboard_metric_snapshots
-  for insert
-  with check (true);
-
-create policy leaderboard_update_service
-  on public.leaderboard_metric_snapshots
-  for update
-  using (true)
-  with check (true);
