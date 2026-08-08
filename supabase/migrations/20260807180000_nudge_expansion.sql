@@ -25,6 +25,10 @@ create table if not exists public.nudge_acknowledgements (
 
 grant select, insert, update on public.nudge_acknowledgements to authenticated;
 
+-- Add cohort column to participants table for subgroup targeting
+alter table if exists public.participants
+  add column if not exists cohort text;
+
 alter table if exists public.weekly_nudges
   add column if not exists response_due_at timestamptz;
 
