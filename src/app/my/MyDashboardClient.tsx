@@ -39,6 +39,7 @@ interface Props {
     } | null
   } | null
   importBatches: ImportBatch[]
+  rewardsEnabled: boolean
 }
 
 function getRecoverySummary(score: number | null) {
@@ -126,7 +127,7 @@ function trendBadgeVariant(state: PersonalTrend['state']) {
   return 'wolf'
 }
 
-export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, insights }: Props) {
+export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, rewardsEnabled, insights }: Props) {
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
@@ -269,6 +270,13 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           deltaDir="neutral"
         />
       </div>
+      {rewardsEnabled ? (
+        <Card title="Rewards" badge={<Badge variant="green">Pilot</Badge>}>
+          <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
+            Rewards redemption is available during the rollout. Points convert into PTO requests, and final approval stays with the admin team.
+          </div>
+        </Card>
+      ) : null}
 
       <Card
         title="Your baseline vs recent 21 days"

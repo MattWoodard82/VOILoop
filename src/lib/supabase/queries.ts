@@ -353,20 +353,20 @@ export async function getTeamDashboard(): Promise<{
     const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
     const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
     const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
-    const engagementComponents: Record<string, number> = {
-      submission_consistency: submissionConsistency ?? 0,
-      device_wear_consistency: deviceWearConsistency ?? 0,
-      pulse_completion: pulseCompletion ?? 0,
-      nudge_response: nudgeResponse ?? 0,
-      workout_volume: workoutVolume ?? 0,
+    const engagementComponents = {
+      submission_consistency: submissionConsistency,
+      device_wear_consistency: deviceWearConsistency,
+      pulse_completion: pulseCompletion,
+      nudge_response: nudgeResponse,
+      workout_volume: workoutVolume,
     }
-    const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
-    ].reduce((sum, part) => sum + part, 0)
+    const engagementScore = [
+      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : null,
+      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : null,
+      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : null,
+      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : null,
+      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : null,
+    ].reduce((sum, part) => sum + (part ?? 0), 0)
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const earlier = rows.slice(0, Math.max(1, rows.length - 7))
