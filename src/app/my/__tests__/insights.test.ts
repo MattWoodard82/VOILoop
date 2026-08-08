@@ -1,5 +1,5 @@
 import type { DailyWellness, Workout } from '@/types'
-import { buildParticipantInsights } from '../insights'
+import { buildParticipantInsights, computeRecoveryStreak, computeWorkoutStreak } from '../insights'
 
 function wellness(date: string, recovery: number | null, hrv: number | null, restingHr: number | null): DailyWellness {
   return {
@@ -108,5 +108,63 @@ describe('buildParticipantInsights', () => {
     expect(result.baselineComparisons.find((row) => row.metric === 'Workouts logged')?.deltaLabel).toBe('Need more data')
     expect(result.trends.every((row) => row.state === 'insufficient')).toBe(true)
     expect(result.bests.find((row) => row.label === 'Longest workout')?.value).toBe('No data')
+  })
+
+  test('does not mark low-valued averages as insufficient when both windows have data', () => {
+    const result = buildParticipantInsights(
+      [
+        wellness('2024-06-21', 2, 2, 62),
+        wellness('2024-05-31', 1, 1, 64),
+      ],
+      [
+        workout('2024-06-21', 1.8),
+        workout('2024-06-20', 1.6),
+        workout('2024-05-31', 1.4),
+        workout('2024-05-30', 1.2),
+      ],
+    )
+
+    expect(result.baselineComparisons.find((row) => row.metric === 'Exercise duration')?.state).toBe('improved')
+  })
+
+  test('computes workout streak across dates outside the recent 21-day window', () => {
+    const streak = computeWorkoutStreak([
+      workout('2024-06-21', 30),
+      workout('2024-06-20', 30),
+      workout('2024-06-19', 30),
+      workout('2024-06-18', 30),
+      workout('2024-06-17', 30),
+      workout('2024-06-16', 30),
+      workout('2024-06-15', 30),
+      workout('2024-06-14', 30),
+      workout('2024-06-13', 30),
+      workout('2024-06-12', 30),
+      workout('2024-06-11', 30),
+      workout('2024-06-10', 30),
+      workout('2024-06-09', 30),
+      workout('2024-06-08', 30),
+      workout('2024-06-07', 30),
+      workout('2024-06-06', 30),
+      workout('2024-06-05', 30),
+      workout('2024-06-04', 30),
+      workout('2024-06-03', 30),
+      workout('2024-06-02', 30),
+      workout('2024-06-01', 30),
+      workout('2024-05-31', 30),
+      workout('2024-05-30', 30),
+    ])
+
+    expect(streak).toBe(23)
+  })
+
+  test('computes recovery streak until first below-threshold day', () => {
+    const streak = computeRecoveryStreak([
+      wellness('2024-06-21', 80, 70, 55),
+      wellness('2024-06-20', 77, 69, 56),
+      wellness('2024-06-19', 65, 68, 57),
+      wellness('2024-06-18', 90, 71, 54),
+    ], 67)
+
+    expect(streak).toBe(2)
   })
 })

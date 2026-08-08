@@ -12,7 +12,6 @@ interface Props {
   wellness: DailyWellness[]
   habits: Habit | null
   workout: Workout | null
-  workouts: Workout[]
   pulse: PulseSurvey[]
   insights: {
     baselineComparisons: BaselineComparison[]
@@ -111,6 +110,20 @@ function HabitBadge({ label, value }: { label: string; value: boolean | null }) 
       {label}
     </span>
   )
+}
+
+function baselineBadgeVariant(state: BaselineComparison['state']) {
+  if (state === 'improved') return 'green'
+  if (state === 'declined') return 'red'
+  if (state === 'flat') return 'amber'
+  return 'wolf'
+}
+
+function trendBadgeVariant(state: PersonalTrend['state']) {
+  if (state === 'up') return 'green'
+  if (state === 'down') return 'red'
+  if (state === 'flat') return 'amber'
+  return 'wolf'
 }
 
 export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, insights }: Props) {
@@ -259,29 +272,16 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
 
       <Card
         title="Your baseline vs recent 21 days"
-        badge={
-          insights.window
-            ? <Badge variant="wolf">{insights.window.baselineStart}–{insights.window.baselineEnd} vs {insights.window.recentStart}–{insights.window.recentEnd}</Badge>
-            : undefined
-        }
+        badge={insights.window ? <Badge variant="wolf">{insights.window.baselineStart}–{insights.window.baselineEnd} vs {insights.window.recentStart}–{insights.window.recentEnd}</Badge> : undefined}
       >
         {insights.baselineComparisons.length > 0 ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
             {insights.baselineComparisons.map((comparison) => (
-              <div key={comparison.metric} style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{comparison.metric}</div>
-                <div style={{ fontSize: 12, color: '#fff', marginBottom: 2 }}>Recent: {comparison.currentLabel}</div>
-                <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>Baseline: {comparison.baselineLabel}</div>
-                <Badge
-                  variant={
-                    comparison.state === 'improved' ? 'green'
-                      : comparison.state === 'declined' ? 'red'
-                        : comparison.state === 'flat' ? 'amber'
-                          : 'wolf'
-                  }
-                >
-                  {comparison.deltaLabel}
-                </Badge>
+              <div key={comparison.metric} className="rounded-lg border border-[#0a3560] bg-[#001a33] p-3">
+                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#A5ACAF]">{comparison.metric}</div>
+                <div className="mb-0.5 text-xs text-white">Recent: {comparison.currentLabel}</div>
+                <div className="mb-2 text-[11px] text-[#A5ACAF]">Baseline: {comparison.baselineLabel}</div>
+                <Badge variant={baselineBadgeVariant(comparison.state)}>{comparison.deltaLabel}</Badge>
               </div>
             ))}
           </div>
@@ -292,7 +292,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
         )}
       </Card>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 14, marginBottom: 14 }}>
+      <div className="my-3 grid gap-4 xl:grid-cols-3">
         <Card title="Personal streaks">
           {insights.streaks.map((streak) => (
             <MetricRow key={streak.label} label={streak.label} value={streak.value} />
@@ -305,18 +305,9 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
         </Card>
         <Card title="Personal trends">
           {insights.trends.map((trend) => (
-            <div key={trend.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid #0a3560', fontSize: 12 }}>
-              <span style={{ color: '#A5ACAF' }}>{trend.label}</span>
-              <Badge
-                variant={
-                  trend.state === 'up' ? 'green'
-                    : trend.state === 'down' ? 'red'
-                      : trend.state === 'flat' ? 'amber'
-                        : 'wolf'
-                }
-              >
-                {trend.value}
-              </Badge>
+            <div key={trend.label} className="flex gap-3 border-b border-[#0a3560] py-2 text-xs">
+              <span className="flex-1 text-[#A5ACAF]">{trend.label}</span>
+              <Badge variant={trendBadgeVariant(trend.state)}>{trend.value}</Badge>
             </div>
           ))}
         </Card>
@@ -495,6 +486,5 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
-
 
 

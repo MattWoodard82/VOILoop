@@ -1,6 +1,7 @@
 import type { DailyWellness, Workout } from '@/types'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
+const MIN_WORKOUT_DAY_COUNT = 2
 
 export interface BaselineComparison {
   metric: string
@@ -27,6 +28,11 @@ export interface PersonalTrend {
   state: 'up' | 'down' | 'flat' | 'insufficient'
 }
 
+interface NumericMetricWindow {
+  average: number | null
+  sampleCount: number
+}
+
 function toDate(date: string) {
   return new Date(`${date}T00:00:00Z`)
 }
@@ -35,9 +41,14 @@ function round(value: number) {
   return Math.round(value * 10) / 10
 }
 
-function average(values: number[]) {
-  if (values.length === 0) return null
-  return round(values.reduce((sum, value) => sum + value, 0) / values.length)
+function getAverageMetric(values: Array<number | null | undefined>): NumericMetricWindow {
+  const presentValues = values.filter((value): value is number => value != null)
+  return {
+    average: presentValues.length > 0
+      ? round(presentValues.reduce((sum, value) => sum + value, 0) / presentValues.length)
+      : null,
+    sampleCount: presentValues.length,
+  }
 }
 
 function countDistinctDates(dates: string[]) {
@@ -46,12 +57,9 @@ function countDistinctDates(dates: string[]) {
 
 function formatSigned(value: number, unit: string) {
   if (value === 0) return `0 ${unit}`
+  // Use the Unicode minus so metric deltas align visually with existing KPI formatting.
   const sign = value > 0 ? '+' : '−'
   return `${sign}${Math.abs(value)} ${unit}`
-}
-
-function formatDateLabel(date: string) {
-  return date
 }
 
 function getWindowBounds(latestDate: string) {
@@ -86,91 +94,113 @@ export function buildParticipantInsights(wellness: DailyWellness[], workouts: Wo
 
   const recentWellness = sortedWellness.filter((entry) => entry.date >= window.recentStart && entry.date <= window.recentEnd)
   const baselineWellness = sortedWellness.filter((entry) => entry.date >= window.baselineStart && entry.date <= window.baselineEnd)
+  const recentWorkouts = workouts.filter((workout) => workout.date >= window.recentStart && workout.date <= window.recentEnd)
+  const baselineWorkouts = workouts.filter((workout) => workout.date >= window.baselineStart && workout.date <= window.baselineEnd)
 
-  const recentWorkouts = workouts.filter((w) => w.date >= window.recentStart && w.date <= window.recentEnd)
-  const baselineWorkouts = workouts.filter((w) => w.date >= window.baselineStart && w.date <= window.baselineEnd)
-
-  const avgRecentDuration = average(recentWorkouts.map((w) => w.duration_min).filter((v): v is number => v != null))
-  const avgBaselineDuration = average(baselineWorkouts.map((w) => w.duration_min).filter((v): v is number => v != null))
-  const recentWorkoutDays = countDistinctDates(recentWorkouts.map((w) => w.date))
-  const baselineWorkoutDays = countDistinctDates(baselineWorkouts.map((w) => w.date))
-  const avgRecentRecovery = average(recentWellness.map((w) => w.recovery_score).filter((v): v is number => v != null))
-  const avgBaselineRecovery = average(baselineWellness.map((w) => w.recovery_score).filter((v): v is number => v != null))
-  const avgRecentHrv = average(recentWellness.map((w) => w.hrv_ms).filter((v): v is number => v != null))
-  const avgBaselineHrv = average(baselineWellness.map((w) => w.hrv_ms).filter((v): v is number => v != null))
-  const avgRecentRestingHr = average(recentWellness.map((w) => w.resting_hr).filter((v): v is number => v != null))
-  const avgBaselineRestingHr = average(baselineWellness.map((w) => w.resting_hr).filter((v): v is number => v != null))
+  const recentDuration = getAverageMetric(recentWorkouts.map((workout) => workout.duration_min))
+  const baselineDuration = getAverageMetric(baselineWorkouts.map((workout) => workout.duration_min))
+  const recentRecovery = getAverageMetric(recentWellness.map((entry) => entry.recovery_score))
+  const baselineRecovery = getAverageMetric(baselineWellness.map((entry) => entry.recovery_score))
+  const recentHrv = getAverageMetric(recentWellness.map((entry) => entry.hrv_ms))
+  const baselineHrv = getAverageMetric(baselineWellness.map((entry) => entry.hrv_ms))
+  const recentRestingHr = getAverageMetric(recentWellness.map((entry) => entry.resting_hr))
+  const baselineRestingHr = getAverageMetric(baselineWellness.map((entry) => entry.resting_hr))
+  const recentWorkoutDays = countDistinctDates(recentWorkouts.map((workout) => workout.date))
+  const baselineWorkoutDays = countDistinctDates(baselineWorkouts.map((workout) => workout.date))
 
   const baselineComparisons: BaselineComparison[] = [
-    compareMetric('Exercise duration', avgRecentDuration, avgBaselineDuration, 'min', true),
-    compareMetric('Workouts logged', recentWorkoutDays, baselineWorkoutDays, 'sessions', true, 1),
-    compareMetric('Recovery score', avgRecentRecovery, avgBaselineRecovery, 'pts', true),
-    compareMetric('HRV', avgRecentHrv, avgBaselineHrv, 'ms', true),
-    compareMetric('Resting HR', avgRecentRestingHr, avgBaselineRestingHr, 'bpm', false),
+    compareAverageMetric('Exercise duration', recentDuration, baselineDuration, 'min', true),
+    compareCountMetric('Workouts logged', recentWorkoutDays, baselineWorkoutDays, 'sessions', true, MIN_WORKOUT_DAY_COUNT),
+    compareAverageMetric('Recovery score', recentRecovery, baselineRecovery, 'pts', true),
+    compareAverageMetric('HRV', recentHrv, baselineHrv, 'ms', true),
+    compareAverageMetric('Resting HR', recentRestingHr, baselineRestingHr, 'bpm', false),
   ]
 
-  const workoutStreak = computeWorkoutStreak(recentWorkouts)
-  const recoveryStreak = computeRecoveryStreak(sortedWellness, 67)
-
   const streaks: PersonalStreak[] = [
-    { label: 'Workout days streak', value: `${workoutStreak} day${workoutStreak === 1 ? '' : 's'}` },
-    { label: 'Green recovery streak', value: `${recoveryStreak} day${recoveryStreak === 1 ? '' : 's'}` },
+    { label: 'Workout days streak', value: `${computeWorkoutStreak(workouts)} day${computeWorkoutStreak(workouts) === 1 ? '' : 's'}` },
+    { label: 'Green recovery streak', value: `${computeRecoveryStreak(sortedWellness, 67)} day${computeRecoveryStreak(sortedWellness, 67) === 1 ? '' : 's'}` },
   ]
 
   const bestWorkout = [...workouts]
-    .filter((w) => w.duration_min != null)
+    .filter((workout) => workout.duration_min != null)
     .sort((a, b) => (b.duration_min ?? 0) - (a.duration_min ?? 0))[0]
   const bestRecovery = [...wellness]
-    .filter((w) => w.recovery_score != null)
+    .filter((entry) => entry.recovery_score != null)
     .sort((a, b) => (b.recovery_score ?? 0) - (a.recovery_score ?? 0))[0]
   const bestHrv = [...wellness]
-    .filter((w) => w.hrv_ms != null)
+    .filter((entry) => entry.hrv_ms != null)
     .sort((a, b) => (b.hrv_ms ?? 0) - (a.hrv_ms ?? 0))[0]
 
   const bests: PersonalBest[] = [
     bestWorkout
-      ? { label: 'Longest workout', value: `${bestWorkout.duration_min} min`, date: formatDateLabel(bestWorkout.date) }
+      ? { label: 'Longest workout', value: `${bestWorkout.duration_min} min`, date: bestWorkout.date }
       : { label: 'Longest workout', value: 'No data', date: '—' },
     bestRecovery
-      ? { label: 'Top recovery', value: `${bestRecovery.recovery_score}`, date: formatDateLabel(bestRecovery.date) }
+      ? { label: 'Top recovery', value: `${bestRecovery.recovery_score}`, date: bestRecovery.date }
       : { label: 'Top recovery', value: 'No data', date: '—' },
     bestHrv
-      ? { label: 'Top HRV', value: `${bestHrv.hrv_ms} ms`, date: formatDateLabel(bestHrv.date) }
+      ? { label: 'Top HRV', value: `${bestHrv.hrv_ms} ms`, date: bestHrv.date }
       : { label: 'Top HRV', value: 'No data', date: '—' },
   ]
 
   const trends: PersonalTrend[] = [
-    trendMetric('Workout duration', avgRecentDuration, avgBaselineDuration, 'min', true),
-    trendMetric('Recovery score', avgRecentRecovery, avgBaselineRecovery, 'pts', true),
-    trendMetric('HRV', avgRecentHrv, avgBaselineHrv, 'ms', true),
-    trendMetric('Resting HR', avgRecentRestingHr, avgBaselineRestingHr, 'bpm', false),
+    trendMetric('Workout duration', recentDuration.average, baselineDuration.average, 'min', true),
+    trendMetric('Recovery score', recentRecovery.average, baselineRecovery.average, 'pts', true),
+    trendMetric('HRV', recentHrv.average, baselineHrv.average, 'ms', true),
+    trendMetric('Resting HR', recentRestingHr.average, baselineRestingHr.average, 'bpm', false),
   ]
 
   return { baselineComparisons, streaks, bests, trends, window }
 }
 
-function compareMetric(label: string, recent: number | null, baseline: number | null, unit: string, higherIsBetter: boolean, minimumDataPoints: number = 2): BaselineComparison {
-  if ((recent ?? 0) < minimumDataPoints || (baseline ?? 0) < minimumDataPoints) {
+function compareAverageMetric(
+  label: string,
+  recent: NumericMetricWindow,
+  baseline: NumericMetricWindow,
+  unit: string,
+  higherIsBetter: boolean,
+): BaselineComparison {
+  if (recent.average == null || baseline.average == null) {
     return {
       metric: label,
-      currentLabel: recent == null ? 'No recent data' : `${recent} ${unit}`,
-      baselineLabel: baseline == null ? 'No baseline data' : `${baseline} ${unit}`,
+      currentLabel: recent.average == null ? 'No recent data' : `${recent.average} ${unit}`,
+      baselineLabel: baseline.average == null ? 'No baseline data' : `${baseline.average} ${unit}`,
       deltaLabel: 'Need more data',
       state: 'insufficient',
     }
   }
 
-  if (recent == null || baseline == null) {
+  const deltaRaw = round(recent.average - baseline.average)
+  const state = deltaRaw === 0 ? 'flat' : (higherIsBetter ? deltaRaw > 0 : deltaRaw < 0) ? 'improved' : 'declined'
+
+  return {
+    metric: label,
+    currentLabel: `${recent.average} ${unit}`,
+    baselineLabel: `${baseline.average} ${unit}`,
+    deltaLabel: formatSigned(deltaRaw, unit),
+    state,
+  }
+}
+
+function compareCountMetric(
+  label: string,
+  recent: number,
+  baseline: number,
+  unit: string,
+  higherIsBetter: boolean,
+  minimumCount: number,
+): BaselineComparison {
+  if (recent < minimumCount || baseline < minimumCount) {
     return {
       metric: label,
-      currentLabel: recent == null ? 'No recent data' : `${recent} ${unit}`,
-      baselineLabel: baseline == null ? 'No baseline data' : `${baseline} ${unit}`,
+      currentLabel: `${recent} ${unit}`,
+      baselineLabel: `${baseline} ${unit}`,
       deltaLabel: 'Need more data',
       state: 'insufficient',
     }
   }
 
-  const deltaRaw = round(recent - baseline)
+  const deltaRaw = recent - baseline
   const state = deltaRaw === 0 ? 'flat' : (higherIsBetter ? deltaRaw > 0 : deltaRaw < 0) ? 'improved' : 'declined'
 
   return {
@@ -189,6 +219,7 @@ function trendMetric(label: string, recent: number | null, baseline: number | nu
 
   const delta = round(recent - baseline)
   if (delta === 0) return { label, value: `Flat (${recent} ${unit})`, state: 'flat' }
+
   const up = higherIsBetter ? delta > 0 : delta < 0
   return {
     label,
@@ -197,26 +228,35 @@ function trendMetric(label: string, recent: number | null, baseline: number | nu
   }
 }
 
-function computeWorkoutStreak(workouts: Workout[]) {
-  const dates = new Set(workouts.map((w) => w.date))
-  if (dates.size === 0) return 0
-  const sorted = Array.from(dates).sort((a, b) => b.localeCompare(a))
+export function computeWorkoutStreak(workouts: Workout[]) {
+  const dates = Array.from(new Set(workouts.map((workout) => workout.date))).sort((a, b) => b.localeCompare(a))
+  if (dates.length === 0) return 0
+
   let streak = 1
-  for (let i = 1; i < sorted.length; i += 1) {
-    const prev = toDate(sorted[i - 1]).getTime()
-    const cur = toDate(sorted[i]).getTime()
-    if (prev - cur === MS_PER_DAY) streak += 1
-    else break
+  for (let index = 1; index < dates.length; index += 1) {
+    const previous = toDate(dates[index - 1]).getTime()
+    const current = toDate(dates[index]).getTime()
+    if (previous - current === MS_PER_DAY) {
+      streak += 1
+      continue
+    }
+    break
   }
+
   return streak
 }
 
-function computeRecoveryStreak(wellness: DailyWellness[], threshold: number) {
+export function computeRecoveryStreak(wellness: DailyWellness[], threshold: number) {
   if (wellness.length === 0) return 0
+
   let streak = 0
   for (const day of wellness) {
-    if ((day.recovery_score ?? -1) >= threshold) streak += 1
-    else break
+    if ((day.recovery_score ?? -1) >= threshold) {
+      streak += 1
+      continue
+    }
+    break
   }
+
   return streak
 }
