@@ -5,7 +5,6 @@ import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
-import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } from './insights'
 
 interface Props {
   participant: Participant
@@ -13,18 +12,6 @@ interface Props {
   habits: Habit | null
   workout: Workout | null
   pulse: PulseSurvey[]
-  insights: {
-    baselineComparisons: BaselineComparison[]
-    streaks: PersonalStreak[]
-    bests: PersonalBest[]
-    trends: PersonalTrend[]
-    window: {
-      recentStart: string
-      recentEnd: string
-      baselineStart: string
-      baselineEnd: string
-    } | null
-  }
   challenge: {
     visibility_state: 'none' | 'ineligible' | 'eligible'
     data: {
@@ -112,21 +99,7 @@ function HabitBadge({ label, value }: { label: string; value: boolean | null }) 
   )
 }
 
-function baselineBadgeVariant(state: BaselineComparison['state']) {
-  if (state === 'improved') return 'green'
-  if (state === 'declined') return 'red'
-  if (state === 'flat') return 'amber'
-  return 'wolf'
-}
-
-function trendBadgeVariant(state: PersonalTrend['state']) {
-  if (state === 'up') return 'green'
-  if (state === 'down') return 'red'
-  if (state === 'flat') return 'amber'
-  return 'wolf'
-}
-
-export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, insights }: Props) {
+export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches }: Props) {
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
@@ -268,55 +241,6 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           delta={workout?.activity ? `Latest workout: ${workout.activity}` : 'No workout logged'}
           deltaDir="neutral"
         />
-      </div>
-
-      <Card
-        title="Your baseline vs recent 21 days"
-        badge={insights.window ? <Badge variant="wolf">{insights.window.baselineStart}–{insights.window.baselineEnd} vs {insights.window.recentStart}–{insights.window.recentEnd}</Badge> : undefined}
-      >
-        {insights.baselineComparisons.length > 0 ? (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
-            {insights.baselineComparisons.map((comparison) => (
-              <div key={comparison.metric} className="rounded-lg border border-[#0a3560] bg-[#001a33] p-3">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.05em] text-[#A5ACAF]">{comparison.metric}</div>
-                <div className="mb-0.5 text-xs text-white">Recent: {comparison.currentLabel}</div>
-                <div className="mb-2 text-[11px] text-[#A5ACAF]">Baseline: {comparison.baselineLabel}</div>
-                <Badge variant={baselineBadgeVariant(comparison.state)}>{comparison.deltaLabel}</Badge>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
-            Need more recent wellness and workout data before baseline comparisons can be shown.
-          </div>
-        )}
-      </Card>
-
-      <div className="my-3 grid gap-4 xl:grid-cols-3">
-        <Card title="Personal streaks">
-          {insights.streaks.map((streak) => (
-            <MetricRow key={streak.label} label={streak.label} value={streak.value} />
-          ))}
-        </Card>
-        <Card title="Personal bests">
-          {insights.bests.map((best) => (
-            <MetricRow key={best.label} label={best.label} value={`${best.value} (${best.date})`} />
-          ))}
-        </Card>
-        <Card title="Personal trends">
-          {insights.trends.length > 0 ? (
-            insights.trends.map((trend) => (
-              <div key={trend.label} className="flex gap-3 border-b border-[#0a3560] py-2 text-xs">
-                <span className="flex-1 text-[#A5ACAF]">{trend.label}</span>
-                <Badge variant={trendBadgeVariant(trend.state)}>{trend.value}</Badge>
-              </div>
-            ))
-          ) : (
-            <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
-              Need more recent wellness data before personal trends can be shown.
-            </div>
-          )}
-        </Card>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 14, marginBottom: 14 }}>
         <Card title="Recovery and sleep trend">
@@ -492,4 +416,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
+
+
+
 

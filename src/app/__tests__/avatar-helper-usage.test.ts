@@ -6,9 +6,12 @@ function readSource(...segments: string[]) {
 }
 
 describe('avatar helper usage', () => {
-  test('pulse consumes the shared initials helper', () => {
+  test('team roster and pulse both consume the shared initials helper', () => {
+    const teamRosterSource = readSource('app', 'team', 'TeamRosterClient.tsx')
     const pulseSource = readSource('app', 'pulse', 'page.tsx')
 
+    expect(teamRosterSource).toMatch(/import\s+\{[^}]*initials[^}]*\}\s+from\s+'@\/lib\/utils'/)
+    expect(teamRosterSource).toContain('initials(')
     expect(pulseSource).toMatch(/import\s+\{[^}]*initials[^}]*\}\s+from\s+'@\/lib\/utils'/)
     expect(pulseSource).toContain('initials(')
   })

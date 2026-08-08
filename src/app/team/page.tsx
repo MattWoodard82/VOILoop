@@ -1,35 +1,20 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getParticipantRankContext } from '@/lib/supabase/queries'
-import { getSession } from '@/lib/supabase/server'
+import { getTeamDashboard } from '@/lib/supabase/queries'
 import { TeamRosterClient } from './TeamRosterClient'
-import { Card } from '@/components/ui'
+import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
 export default async function TeamPage() {
-  const session = await getSession()
-  if (!session) redirect('/login')
+  const access = await requireAuth()
+  if ('redirect' in access && access.redirect) redirect(access.redirect)
+  if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
 
-  let participantContext
-  try {
-    participantContext = await getParticipantRankContext(session.user.id, 'recovery')
-  } catch (error) {
-    if (typeof error === 'object' && error !== null && 'status' in error && Number((error as { status: number }).status) === 404) {
-      return (
-        <DashboardShell title="Team Roster">
-          <Card title="Participant ranking context">
-            <div style={{ color: '#A5ACAF' }}>Your participant record is being prepared. Check back shortly.</div>
-          </Card>
-        </DashboardShell>
-      )
-    }
-    throw error
-  }
-
+  const { participants } = await getTeamDashboard()
   return (
     <DashboardShell title="Team Roster">
-      <TeamRosterClient participantContext={participantContext} />
+      <TeamRosterClient participants={participants} />
     </DashboardShell>
   )
 }

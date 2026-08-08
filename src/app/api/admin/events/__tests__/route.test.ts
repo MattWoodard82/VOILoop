@@ -121,12 +121,12 @@ describe('admin events routes', () => {
   test('PUT upserts weekly nudge for admins', async () => {
     mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
-    const rpcMock = jest.fn(async () => ({ 
-      data: { nudge_id: 'nudge-1' }, 
-      error: null 
-    }))
+    const upsert = jest.fn(async () => ({ error: null }))
     mockCreateServerSupabaseClient.mockReturnValue({
-      rpc: rpcMock,
+      from: jest.fn((table: string) => {
+        if (table === 'weekly_nudges') return { upsert }
+        throw new Error(`Unexpected table ${table}`)
+      }),
     } as never)
 
     const response = await PUT(new Request('http://localhost/api/admin/events', {
@@ -136,38 +136,14 @@ describe('admin events routes', () => {
         message: 'Get outside today.',
         author: 'Coach',
         week_of: '2026-07-20',
-        target_type: 'participant',
-        target_label: 'Night Shift',
-        participant_id: 'EMP-1',
       }),
     }))
 
     expect(response.status).toBe(200)
-    expect(rpcMock).toHaveBeenCalledWith('upsert_nudge_with_target', {
-      p_week_of: '2026-07-20',
-      p_message: 'Get outside today.',
-      p_author: 'Coach',
-      p_target_type: 'participant',
-      p_target_label: 'Night Shift',
-      p_participant_id: 'EMP-1',
-    })
-  })
-
-  test('PUT rejects missing target fields', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
-
-    const response = await PUT(new Request('http://localhost/api/admin/events', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Get outside today.',
-        target_type: 'participant',
-      }),
-    }))
-
-    expect(response.status).toBe(400)
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Participant id is required for individual nudges.',
-    })
+    expect(upsert).toHaveBeenCalledWith({
+      week_of: '2026-07-20',
+      message: 'Get outside today.',
+      author: 'Coach',
+    }, { onConflict: 'week_of' })
   })
 })

@@ -18,8 +18,6 @@ interface Nudge {
   week_of: string
   message: string
   author: string
-  target_type?: string
-  target_label?: string
 }
 
 const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
@@ -53,9 +51,6 @@ export function AdminEventsClient() {
 
   const [nudgeMsg, setNudgeMsg] = useState('')
   const [nudgeAuthor, setNudgeAuthor] = useState('Heather Simpson')
-  const [nudgeTargetType, setNudgeTargetType] = useState<'all' | 'subgroup' | 'participant'>('all')
-  const [nudgeTargetLabel, setNudgeTargetLabel] = useState('')
-  const [nudgeParticipantId, setNudgeParticipantId] = useState('')
   const savedResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -136,9 +131,6 @@ export function AdminEventsClient() {
       body: JSON.stringify({
         message: nudgeMsg,
         author: nudgeAuthor,
-        target_type: nudgeTargetType,
-        target_label: nudgeTargetLabel,
-        participant_id: nudgeParticipantId,
       }),
     })
     if (!response.ok) {
@@ -148,9 +140,6 @@ export function AdminEventsClient() {
       return
     }
     setNudgeMsg('')
-    setNudgeTargetLabel('')
-    setNudgeParticipantId('')
-    setNudgeTargetType('all')
     await loadData()
     setSaving(false)
     triggerSavedState()
@@ -292,21 +281,6 @@ export function AdminEventsClient() {
               <label style={s.label}>From</label>
               <input style={s.input} value={nudgeAuthor}
                 onChange={e => setNudgeAuthor(e.target.value)} />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-              <div>
-                <label style={s.label}>Target</label>
-                <select style={s.input} value={nudgeTargetType} onChange={e => setNudgeTargetType(e.target.value as 'all' | 'subgroup' | 'participant')}>
-                  <option value="all">All participants</option>
-                  <option value="subgroup">Subgroup</option>
-                  <option value="participant">Individual participant</option>
-                </select>
-              </div>
-              <div>
-                <label style={s.label}>Label / participant id</label>
-                <input style={s.input} value={nudgeTargetType === 'participant' ? nudgeParticipantId : nudgeTargetLabel}
-                  onChange={e => nudgeTargetType === 'participant' ? setNudgeParticipantId(e.target.value) : setNudgeTargetLabel(e.target.value)} />
-              </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button onClick={saveNudge} disabled={saving || !nudgeMsg} style={s.btn}>
