@@ -95,6 +95,46 @@ Do **not** use direct `db.<project-ref>.supabase.co` for GitHub-hosted runner de
 2. For data issues, use Supabase backup/PITR restore process.
 3. Log the incident and add prevention notes to this runbook.
 
+## Encryption & Key Management (Issue #66)
+
+### Overview
+Participant nudge responses and related health data are encrypted at rest using AES-256-GCM (application-layer encryption via `src/lib/crypto.ts`).
+
+### Key Configuration
+
+#### Local Development
+1. Copy `.env.example` to `.env.local`
+2. Set `NUDGE_RESPONSE_ENCRYPTION_KEY` to a test value (e.g., `local-dev-key-not-production`)
+3. Set `NUDGE_RESPONSE_KMS_KEY_ID=local-dev`
+4. Encrypted data round-trips correctly during local testing
+
+#### Pilot Environment (Vercel)
+1. Set Vercel environment variable `NUDGE_RESPONSE_ENCRYPTION_KEY` to pilot key
+2. Set `NUDGE_RESPONSE_KMS_KEY_ID=pilot`
+3. Database migrations apply automatically via GitHub Actions
+4. New nudge responses are encrypted on write; decrypted on read
+
+#### Production (Future)
+- Pilot currently uses inline key; no external KMS required
+- For future hardening: external KMS (Azure Key Vault, AWS Secrets Manager) can be integrated by updating `src/lib/crypto.ts` and providing `NUDGE_RESPONSE_WRAPPED_KEY` 
+- Schema and code remain unchanged; only environment variables change
+
+### Data Model
+- Table: `public.nudge_acknowledgements`
+- Encrypted column: `response_text_encrypted` (bytea)
+- Migration: PR1 creates table + column; backfill uses pgcrypto with staging key
+- New API calls use `encryptNudgeResponseText()` / `decryptNudgeResponseText()` from crypto lib
+
+### Monitoring
+- Log decrypt failures (crypto.ts returns error if key mismatch)
+- Monitor API response times for encrypt/decrypt operations (should be <10ms per operation)
+- No plaintext responses should appear in Supabase logs or API responses
+
+### Rollback
+- If decryption fails: check that `NUDGE_RESPONSE_ENCRYPTION_KEY` matches what was used to encrypt
+- Old encrypted data remains valid if key is accessible
+- Staging key (`staging-placeholder-key-rotate-before-prod`) used in migration; new data uses pilot key
+
 ## Change management rule (required)
 
 If a commit changes how the platform is operated (deploy steps, secrets, migrations, monitoring, rollback, access, or reliability), the same PR must update this `RUNBOOK.md`.

@@ -126,6 +126,16 @@ export interface ParticipantWithWellness extends Participant {
   latest_pulse: PulseSurvey | null
   risk_level: RiskLevel
   recovery_status: RecoveryStatus
+  engagement_score?: number | null
+  engagement_score_components?: Record<string, number> | null
+  physiological_trend?: 'improving' | 'steady' | 'declining' | null
+  physiological_trend_metrics?: string[] | null
+  risk_tier_label?: string | null
+  risk_trigger_reasons?: string[] | null
+  baseline_state?: 'building' | 'ready' | null
+  baseline_days_remaining?: number | null
+  override_state?: 'none' | 'snoozed' | 'dismissed' | null
+  override_note?: string | null
 }
 
 export interface TeamStats {
@@ -135,6 +145,27 @@ export interface TeamStats {
   high_risk_count: number
   total_participants: number
   participation_rate: number
+}
+
+export type LeaderboardMetric = 'recovery' | 'workouts_logged' | 'points_earned' | 'consistency_streak'
+
+export interface ParticipantRankContext {
+  metric: LeaderboardMetric
+  participant_rank: number
+  participant_value: number
+  cohort_size: number
+  cohort_percentile: number
+  percentile_label: string
+  comparison_text: string
+  metric_label: string
+  metric_value_label: string
+  metric_description: string
+  rank_context: {
+    ahead: number
+    behind: number
+  }
+  cohort_band: 'top' | 'middle' | 'bottom'
+  safe_context_note: string
 }
 
 export type ImportBatchStatus = 'pending' | 'processing' | 'completed' | 'partial' | 'failed'
