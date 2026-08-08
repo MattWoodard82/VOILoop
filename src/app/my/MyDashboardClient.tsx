@@ -304,12 +304,18 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           ))}
         </Card>
         <Card title="Personal trends">
-          {insights.trends.map((trend) => (
-            <div key={trend.label} className="flex gap-3 border-b border-[#0a3560] py-2 text-xs">
-              <span className="flex-1 text-[#A5ACAF]">{trend.label}</span>
-              <Badge variant={trendBadgeVariant(trend.state)}>{trend.value}</Badge>
+          {insights.trends.length > 0 ? (
+            insights.trends.map((trend) => (
+              <div key={trend.label} className="flex gap-3 border-b border-[#0a3560] py-2 text-xs">
+                <span className="flex-1 text-[#A5ACAF]">{trend.label}</span>
+                <Badge variant={trendBadgeVariant(trend.state)}>{trend.value}</Badge>
+              </div>
+            ))
+          ) : (
+            <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
+              Need more recent wellness data before personal trends can be shown.
             </div>
-          ))}
+          )}
         </Card>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -486,5 +492,4 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
-
 

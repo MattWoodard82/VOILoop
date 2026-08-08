@@ -30,7 +30,6 @@ export interface PersonalTrend {
 
 interface NumericMetricWindow {
   average: number | null
-  sampleCount: number
 }
 
 function toDate(date: string) {
@@ -47,7 +46,6 @@ function getAverageMetric(values: Array<number | null | undefined>): NumericMetr
     average: presentValues.length > 0
       ? round(presentValues.reduce((sum, value) => sum + value, 0) / presentValues.length)
       : null,
-    sampleCount: presentValues.length,
   }
 }
 
@@ -116,9 +114,11 @@ export function buildParticipantInsights(wellness: DailyWellness[], workouts: Wo
     compareAverageMetric('Resting HR', recentRestingHr, baselineRestingHr, 'bpm', false),
   ]
 
+  const workoutStreak = computeWorkoutStreak(workouts)
+  const recoveryStreak = computeRecoveryStreak(sortedWellness, 67)
   const streaks: PersonalStreak[] = [
-    { label: 'Workout days streak', value: `${computeWorkoutStreak(workouts)} day${computeWorkoutStreak(workouts) === 1 ? '' : 's'}` },
-    { label: 'Green recovery streak', value: `${computeRecoveryStreak(sortedWellness, 67)} day${computeRecoveryStreak(sortedWellness, 67) === 1 ? '' : 's'}` },
+    { label: 'Workout days streak', value: `${workoutStreak} day${workoutStreak === 1 ? '' : 's'}` },
+    { label: 'Green recovery streak', value: `${recoveryStreak} day${recoveryStreak === 1 ? '' : 's'}` },
   ]
 
   const bestWorkout = [...workouts]
