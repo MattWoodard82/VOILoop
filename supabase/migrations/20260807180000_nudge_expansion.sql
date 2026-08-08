@@ -1,55 +1,68 @@
+-- Create nudge_targets table if it doesn't exist
+-- Use separate CREATE TABLE without FK, then add FK after weekly_nudges is guaranteed
+create table if not exists public.nudge_targets (
+  id uuid primary key default gen_random_uuid(),
+  nudge_id uuid,
+  target_type text not null check (target_type in ('all', 'subgroup', 'participant')),
+  target_label text not null default '',
+  participant_id text,
+  created_at timestamptz not null default now()
+);
+
+grant select, insert on public.nudge_targets to authenticated;
+grant update, delete on public.nudge_targets to authenticated;
+
+-- Create nudge_acknowledgements table if it doesn't exist
+create table if not exists public.nudge_acknowledgements (
+  id uuid primary key default gen_random_uuid(),
+  nudge_id uuid,
+  participant_id text,
+  acknowledged_at timestamptz not null default now(),
+  response_text text not null default '',
+  response_due_at timestamptz not null default (now() + interval '48 hours'),
+  check (length(btrim(response_text)) > 0)
+);
+
+grant select, insert, update on public.nudge_acknowledgements to authenticated;
+
+-- Add missing columns if they don't exist (for idempotency)
+alter table if exists public.nudge_targets
+  add column if not exists nudge_id uuid references public.weekly_nudges(id) on delete cascade;
+alter table if exists public.nudge_targets
+  add column if not exists participant_id text references public.participants(id) on delete cascade;
+
+alter table if exists public.nudge_acknowledgements
+  add column if not exists nudge_id uuid references public.weekly_nudges(id) on delete cascade;
+alter table if exists public.nudge_acknowledgements
+  add column if not exists participant_id text not null references public.participants(id) on delete cascade;
+
+-- Add unique constraints if they don't exist
 do $$
 begin
-  -- Ensure weekly_nudges table exists (should be created in earlier migration, but defensive)
   if not exists (
-    select 1 from information_schema.tables 
-    where table_schema = 'public' and table_name = 'weekly_nudges'
-  ) then
-    create table public.weekly_nudges (
-      id uuid primary key default gen_random_uuid(),
-      week_of date not null unique,
-      message text not null check (length(btrim(message)) > 0),
-      author text not null default 'VOILoop',
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
-    );
-  end if;
-  
-  -- Now create nudge_targets with foreign key to weekly_nudges
-  if not exists (
-    select 1 from information_schema.tables 
+    select 1 from information_schema.table_constraints
     where table_schema = 'public' and table_name = 'nudge_targets'
+    and constraint_name = 'nudge_targets_unique'
   ) then
-    create table public.nudge_targets (
-      id uuid primary key default gen_random_uuid(),
-      nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
-      target_type text not null check (target_type in ('all', 'subgroup', 'participant')),
-      target_label text not null default '',
-      participant_id text references public.participants(id) on delete cascade,
-      unique (nudge_id, target_type, target_label, participant_id),
-      created_at timestamptz not null default now()
-    );
-    grant select, insert on public.nudge_targets to authenticated;
-    grant update, delete on public.nudge_targets to authenticated;
+    alter table public.nudge_targets
+      add constraint nudge_targets_unique unique (nudge_id, target_type, target_label, participant_id);
   end if;
-  
-  -- Create nudge_acknowledgements similarly
+exception when others then
+  null;
+end $$;
+
+do $$
+begin
   if not exists (
-    select 1 from information_schema.tables 
+    select 1 from information_schema.table_constraints
     where table_schema = 'public' and table_name = 'nudge_acknowledgements'
+    and constraint_name = 'nudge_acknowledgements_unique'
   ) then
-    create table public.nudge_acknowledgements (
-      id uuid primary key default gen_random_uuid(),
-      nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,
-      participant_id text not null references public.participants(id) on delete cascade,
-      acknowledged_at timestamptz not null default now(),
-      response_text text not null default '',
-      response_due_at timestamptz not null default (now() + interval '48 hours'),
-      unique (nudge_id, participant_id),
-      check (length(btrim(response_text)) > 0)
-    );
-    grant select, insert, update on public.nudge_acknowledgements to authenticated;
+    alter table public.nudge_acknowledgements
+      add constraint nudge_acknowledgements_unique unique (nudge_id, participant_id);
   end if;
+exception when others then
+  null;
 end $$;
 
 alter table if exists public.weekly_nudges
