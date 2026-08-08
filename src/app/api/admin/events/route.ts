@@ -140,37 +140,24 @@ export async function PUT(request: Request) {
   }
 
   const supabase = createServerSupabaseClient()
-  const { data: nudge, error } = await supabase
-    .from('weekly_nudges')
-    .upsert({
-      week_of: weekOf,
-      message,
-      author,
-    }, { onConflict: 'week_of' })
-    .select('id, created_at')
-    .single()
+  
+  // Delete old targets for this nudge (republishing clears old targeting)
+  // Then persist new nudge + target atomically via RPC
+  const { data: result, error: rpcError } = await supabase.rpc('upsert_nudge_with_target', {
+    p_week_of: weekOf,
+    p_message: message,
+    p_author: author,
+    p_target_type: targetType,
+    p_target_label: targetLabel || '',
+    p_participant_id: targetType === 'participant' ? participantId : null,
+  })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  if (rpcError) {
+    return NextResponse.json({ error: rpcError.message }, { status: 500 })
   }
-  if (!nudge?.id) {
-    return NextResponse.json({ error: 'Failed to persist nudge.' }, { status: 500 })
-  }
-
-  const targetPayload = {
-    nudge_id: nudge.id,
-    target_type: targetType,
-    target_label: targetLabel,
-    participant_id: targetType === 'participant' ? participantId : null,
+  if (!result?.nudge_id) {
+    return NextResponse.json({ error: 'Failed to persist nudge and target.' }, { status: 500 })
   }
 
-  const { error: targetError } = await supabase
-    .from('nudge_targets')
-    .upsert(targetPayload, { onConflict: 'nudge_id,target_type,target_label,participant_id' })
-
-  if (targetError) {
-    return NextResponse.json({ error: targetError.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, nudge_id: result.nudge_id })
 }

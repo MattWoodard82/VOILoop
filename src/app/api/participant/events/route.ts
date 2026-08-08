@@ -36,8 +36,11 @@ async function requireParticipantSession() {
   return { supabase, participantId: participant.id }
 }
 
-function isParticipantTarget(targetType: string, participantId: string | null, currentParticipantId: string) {
-  return targetType === 'all' || (targetType === 'participant' && participantId === currentParticipantId)
+function isParticipantTarget(targetType: string, targetLabel: string | null, participantId: string | null, currentParticipantId: string, cohort: string | null) {
+  if (targetType === 'all') return true
+  if (targetType === 'participant' && participantId === currentParticipantId) return true
+  if (targetType === 'subgroup' && targetLabel === (cohort ?? '')) return true
+  return false
 }
 
 function getResponseDueAt(weekOf: string) {
@@ -49,11 +52,12 @@ function getResponseDueAt(weekOf: string) {
 async function getTargetedNudge(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   participantId: string,
+  cohort: string | null,
   weekOf: string,
 ) {
   const { data, error } = await supabase
     .from('weekly_nudges')
-    .select('id, message, author, week_of, nudge_targets!inner(target_type, participant_id)')
+    .select('id, message, author, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
     .limit(10)
@@ -65,12 +69,12 @@ async function getTargetedNudge(
     message: string
     author: string
     week_of: string
-    nudge_targets: Array<{ target_type?: string; participant_id?: string | null }> | { target_type?: string; participant_id?: string | null }
+    nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
   }>
 
   const nudge = rows.find((row) => {
     const targets = Array.isArray(row.nudge_targets) ? row.nudge_targets : [row.nudge_targets]
-    return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.participant_id ?? null, participantId))
+    return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.target_label ?? null, target?.participant_id ?? null, participantId, cohort))
   }) ?? null
 
   return { nudge }
@@ -81,6 +85,16 @@ export async function GET() {
   if ('error' in participantAccess) return participantAccess.error
 
   const { supabase, participantId } = participantAccess
+  
+  // Fetch participant cohort for subgroup targeting
+  const { data: participant, error: participantError } = await supabase
+    .from('participants')
+    .select('cohort')
+    .eq('id', participantId)
+    .maybeSingle()
+  
+  if (participantError) return NextResponse.json({ error: participantError.message }, { status: 500 })
+  
   const today = new Date().toISOString().split('T')[0]
   const weekOf = mondayOfCurrentWeekIso()
 
@@ -91,7 +105,7 @@ export async function GET() {
       .gte('event_date', today)
       .order('event_date', { ascending: true })
       .limit(5),
-    getTargetedNudge(supabase, participantId, weekOf),
+    getTargetedNudge(supabase, participantId, participant?.cohort ?? null, weekOf),
     supabase
       .from('event_rsvps')
       .select('event_id')
@@ -182,25 +196,40 @@ export async function PATCH(request: Request) {
 
   const { supabase, participantId } = participantAccess
 
-  let payload: { nudgeId?: string; responseText?: string }
+  let payload: unknown
   try {
     payload = await request.json()
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const nudgeId = (payload.nudgeId ?? '').trim()
-  const responseText = (payload.responseText ?? '').trim()
+  // Validate JSON shape - must be an object with string fields
+  if (typeof payload !== 'object' || payload === null) {
+    return NextResponse.json({ error: 'Request body must be a JSON object.' }, { status: 400 })
+  }
+
+  const nudgeId = typeof (payload as Record<string, unknown>).nudgeId === 'string' ? ((payload as Record<string, unknown>).nudgeId as string).trim() : ''
+  const responseText = typeof (payload as Record<string, unknown>).responseText === 'string' ? ((payload as Record<string, unknown>).responseText as string).trim() : ''
+  
   if (!nudgeId) {
-    return NextResponse.json({ error: 'nudgeId is required.' }, { status: 400 })
+    return NextResponse.json({ error: 'nudgeId is required and must be a string.' }, { status: 400 })
   }
   if (!responseText) {
-    return NextResponse.json({ error: 'Response text is required.' }, { status: 400 })
+    return NextResponse.json({ error: 'Response text is required and must be a non-empty string.' }, { status: 400 })
   }
+
+  // Fetch participant cohort for subgroup targeting
+  const { data: participant, error: participantError } = await supabase
+    .from('participants')
+    .select('cohort')
+    .eq('id', participantId)
+    .maybeSingle()
+  
+  if (participantError) return NextResponse.json({ error: participantError.message }, { status: 500 })
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of, nudge_targets!inner(target_type, participant_id)')
+    .select('id, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
     .eq('id', nudgeId)
     .maybeSingle()
 
@@ -208,10 +237,10 @@ export async function PATCH(request: Request) {
   if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
 
   const targetRows = Array.isArray((nudge as { nudge_targets?: unknown }).nudge_targets)
-    ? (nudge as { nudge_targets: Array<{ target_type?: string; participant_id?: string | null }> }).nudge_targets
-    : [((nudge as { nudge_targets?: { target_type?: string; participant_id?: string | null } }).nudge_targets ?? { target_type: 'all', participant_id: null })]
+    ? (nudge as { nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_targets
+    : [((nudge as { nudge_targets?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_targets ?? { target_type: 'all', target_label: null, participant_id: null })]
 
-  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.participant_id ?? null, participantId))) {
+  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, participant?.cohort ?? null))) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 

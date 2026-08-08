@@ -1,19 +1,21 @@
 /**
  * Encryption utilities for nudge responses.
  * Uses pgcrypto in PostgreSQL for AES256-compatible encryption.
- * Keys are fetched from KMS (or staging key for demo).
+ * Keys are fetched from environment or KMS.
  */
 
 /**
  * Get the encryption key for nudge responses.
  * In production, this would fetch from Azure Key Vault or AWS Secrets Manager.
- * For staging/demo, uses a placeholder key.
+ * The key should NOT be committed to source; use environment variables only.
  */
 function getEncryptionKey(): string {
-  // In production, replace with:
-  // return await kms.getKey('nudge-response-encryption-key');
-  // For now, use staging key matching the migration backfill
-  return 'staging-placeholder-key-only-for-demo'
+  // Fetch from environment variable (must be set in deployment)
+  const key = process.env.NUDGE_RESPONSE_ENCRYPTION_KEY
+  if (!key) {
+    throw new Error('NUDGE_RESPONSE_ENCRYPTION_KEY environment variable is not set. Set this to a strong encryption key from your KMS.')
+  }
+  return key
 }
 
 /**
@@ -51,6 +53,7 @@ export function decryptNudgeResponse(encryptedData: string | null): string | nul
 /**
  * Get the encryption key for database operations.
  * Exported so routes can pass it to database RPCs.
+ * IMPORTANT: This key should come from environment/KMS, never hardcoded.
  */
 export function getDbEncryptionKey(): string {
   return getEncryptionKey()

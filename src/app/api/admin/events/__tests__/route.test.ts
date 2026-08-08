@@ -121,22 +121,12 @@ describe('admin events routes', () => {
   test('PUT upserts weekly nudge for admins', async () => {
     mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
-    const nudgeSelectSingle = jest.fn(async () => ({ data: { id: 'nudge-1' }, error: null }))
-    const nudgeTargetUpsert = jest.fn(async () => ({ error: null }))
+    const rpcMock = jest.fn(async () => ({ 
+      data: { nudge_id: 'nudge-1' }, 
+      error: null 
+    }))
     mockCreateServerSupabaseClient.mockReturnValue({
-      from: jest.fn((table: string) => {
-        if (table === 'weekly_nudges') {
-          return {
-            upsert: jest.fn(() => ({
-              select: jest.fn(() => ({
-                single: nudgeSelectSingle,
-              })),
-            })),
-          }
-        }
-        if (table === 'nudge_targets') return { upsert: nudgeTargetUpsert }
-        throw new Error(`Unexpected table ${table}`)
-      }),
+      rpc: rpcMock,
     } as never)
 
     const response = await PUT(new Request('http://localhost/api/admin/events', {
@@ -153,13 +143,14 @@ describe('admin events routes', () => {
     }))
 
     expect(response.status).toBe(200)
-    expect(nudgeTargetUpsert).toHaveBeenCalledWith({
-      nudge_id: 'nudge-1',
-      target_type: 'participant',
-      target_label: 'Night Shift',
-      participant_id: 'EMP-1',
-    }, { onConflict: 'nudge_id,target_type,target_label,participant_id' })
-    expect(nudgeSelectSingle).toHaveBeenCalled()
+    expect(rpcMock).toHaveBeenCalledWith('upsert_nudge_with_target', {
+      p_week_of: '2026-07-20',
+      p_message: 'Get outside today.',
+      p_author: 'Coach',
+      p_target_type: 'participant',
+      p_target_label: 'Night Shift',
+      p_participant_id: 'EMP-1',
+    })
   })
 
   test('PUT rejects missing target fields', async () => {

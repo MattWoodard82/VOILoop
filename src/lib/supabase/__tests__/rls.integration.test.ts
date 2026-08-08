@@ -195,6 +195,9 @@ describeRlsIntegration('Supabase RLS integration', () => {
     if (uploadBatchIds.length > 0) {
       await serviceClient.from('upload_batches').delete().in('id', uploadBatchIds)
     }
+    await serviceClient.from('nudge_acknowledgements').delete().in('participant_id', [participantAId, participantBId])
+    await serviceClient.from('nudge_targets').delete().in('participant_id', [participantAId, participantBId])
+    await serviceClient.from('weekly_nudges').delete().eq('message', `Stay hydrated ${testId}`)
     await serviceClient.from('event_rsvps').delete().eq('event_id', baseEventId)
     await serviceClient.from('events').delete().eq('id', baseEventId)
     await serviceClient.from('daily_wellness').delete().in('participant_id', [participantAId, participantBId])
@@ -296,6 +299,16 @@ describeRlsIntegration('Supabase RLS integration', () => {
       .single()
     expect(nudge?.id).toBeTruthy()
 
+    // Seed acknowledgement for participant B (to test isolation)
+    const { error: seedError } = await adminClient
+      .from('nudge_acknowledgements')
+      .insert({
+        nudge_id: nudge!.id,
+        participant_id: participantBId,
+        response_text: 'B acknowledged',
+      })
+    expect(seedError).toBeNull()
+
     const participantClient = await signIn(participantA)
     const { error: insertError } = await participantClient
       .from('nudge_acknowledgements')
@@ -318,8 +331,8 @@ describeRlsIntegration('Supabase RLS integration', () => {
       .from('nudge_acknowledgements')
       .select('participant_id,response_text')
       .eq('participant_id', participantBId)
-    expect(otherAckError).not.toBeNull()
-    expect(otherAck).toBeNull()
+    expect(otherAckError).toBeNull()
+    expect(otherAck).toEqual([])
   })
 
   test('admin can read all participant-linked upload batches', async () => {
