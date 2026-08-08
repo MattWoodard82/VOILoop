@@ -15,9 +15,16 @@ interface Event {
 }
 
 interface Nudge {
+  id: string
   message: string
   author: string
   week_of: string
+}
+
+interface Acknowledgement {
+  acknowledged_at: string
+  response_text: string
+  response_due_at: string
 }
 
 function getErrorMessage(error: unknown): string {
@@ -64,6 +71,7 @@ function daysUntil(d: string) {
 export function EventsNudgeCard() {
   const [events, setEvents] = useState<Event[]>([])
   const [nudge, setNudge] = useState<Nudge | null>(null)
+  const [acknowledgement, setAcknowledgement] = useState<Acknowledgement | null>(null)
   const [rsvps, setRsvps] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -79,11 +87,13 @@ export function EventsNudgeCard() {
         const payload = await response.json() as {
           events?: Event[]
           nudge?: Nudge | null
+          acknowledgement?: Acknowledgement | null
           rsvpEventIds?: string[]
         }
 
         setEvents(payload.events ?? [])
         setNudge(payload.nudge ?? null)
+        setAcknowledgement(payload.acknowledgement ?? null)
         setRsvps(payload.rsvpEventIds ?? [])
         setError('')
       } catch (fetchError) {
@@ -115,6 +125,27 @@ export function EventsNudgeCard() {
     }
   }
 
+  const acknowledgeNudge = async () => {
+    if (!nudge) return
+    const responseText = window.prompt('Add a short acknowledgement for this nudge:')?.trim()
+    if (!responseText) return
+    const response = await fetch('/api/participant/events', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nudgeId: nudge.id, responseText }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null
+      setError(`Nudge acknowledgement failed. Detail: ${payload?.error ?? 'Request failed.'}`)
+      return
+    }
+    setAcknowledgement({
+      acknowledged_at: new Date().toISOString(),
+      response_text: responseText,
+      response_due_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    })
+  }
+
   if (loading) return null
 
   return (
@@ -129,7 +160,7 @@ export function EventsNudgeCard() {
         <div style={{
           background: '#002244',
           border: '1px solid #0a3560',
-          borderLeft: '3px solid #69BE28',
+          boxShadow: 'inset 0 0 0 1px rgba(105,190,40,0.18)',
           borderRadius: 10,
           padding: '14px 18px',
           marginBottom: 10,
@@ -140,6 +171,14 @@ export function EventsNudgeCard() {
           <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.6 }}>
             {nudge.message}
           </div>
+          <div style={{ marginTop: 10, fontSize: 11, color: '#A5ACAF' }}>
+            {acknowledgement ? `Acknowledged: ${acknowledgement.response_text}` : 'Open-text response required within 48 hours.'}
+          </div>
+          {!acknowledgement && (
+            <button onClick={acknowledgeNudge} style={{ marginTop: 10, fontSize: 11, padding: '5px 10px', borderRadius: 18, border: '1px solid #69BE28', background: 'transparent', color: '#69BE28', cursor: 'pointer' }}>
+              Acknowledge
+            </button>
+          )}
         </div>
       )}
 
