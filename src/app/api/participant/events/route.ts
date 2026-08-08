@@ -98,7 +98,7 @@ export async function GET() {
   ])
 
   if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 })
-  if ('error' in nudgeResult) return NextResponse.json({ error: nudgeResult.error.message }, { status: 500 })
+  if ('error' in nudgeResult && nudgeResult.error) return NextResponse.json({ error: nudgeResult.error.message }, { status: 500 })
   if (rsvpError) return NextResponse.json({ error: rsvpError.message }, { status: 500 })
 
   const nudge = 'nudge' in nudgeResult ? nudgeResult.nudge : null
