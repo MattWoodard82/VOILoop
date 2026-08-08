@@ -176,7 +176,7 @@ describe('admin events routes', () => {
 
     expect(response.status).toBe(400)
     await expect(response.json()).resolves.toMatchObject({
-      error: 'Target label is required for targeted nudges.',
+      error: 'Participant id is required for individual nudges.',
     })
   })
 })

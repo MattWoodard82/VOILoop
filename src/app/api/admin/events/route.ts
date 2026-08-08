@@ -132,8 +132,8 @@ export async function PUT(request: Request) {
   if (!['all', 'subgroup', 'participant'].includes(targetType)) {
     return NextResponse.json({ error: 'Invalid target type.' }, { status: 400 })
   }
-  if (targetType !== 'all' && !targetLabel) {
-    return NextResponse.json({ error: 'Target label is required for targeted nudges.' }, { status: 400 })
+  if (targetType === 'subgroup' && !targetLabel) {
+    return NextResponse.json({ error: 'Target label is required for subgroup nudges.' }, { status: 400 })
   }
   if (targetType === 'participant' && !participantId) {
     return NextResponse.json({ error: 'Participant id is required for individual nudges.' }, { status: 400 })

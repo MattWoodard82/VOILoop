@@ -15,7 +15,8 @@ create table if not exists public.nudge_acknowledgements (
   acknowledged_at timestamptz not null default now(),
   response_text text not null default '',
   response_due_at timestamptz not null,
-  unique (nudge_id, participant_id)
+  unique (nudge_id, participant_id),
+  check (length(btrim(response_text)) > 0)
 );
 
 alter table if exists public.weekly_nudges
@@ -35,6 +36,26 @@ create index if not exists idx_nudge_acknowledgements_participant_id on public.n
 alter table if exists public.nudge_targets enable row level security;
 alter table if exists public.nudge_acknowledgements enable row level security;
 
+-- Add RLS policy to weekly_nudges to enforce targeting at the database boundary
+alter table if exists public.weekly_nudges enable row level security;
+drop policy if exists weekly_nudges_select_participant_targeted on public.weekly_nudges;
+create policy weekly_nudges_select_participant_targeted
+on public.weekly_nudges
+for select
+using (
+  public.current_app_role() in ('admin', 'wellness_director')
+  or id in (
+    select nt.nudge_id
+    from public.nudge_targets nt
+    where (
+      nt.target_type = 'all'
+      or (nt.target_type = 'participant' and nt.participant_id in (
+        select p.id from public.participants p where p.auth_user_id = auth.uid()
+      ))
+    )
+  )
+);
+
 drop policy if exists nudge_targets_select_admin on public.nudge_targets;
 drop policy if exists nudge_targets_admin_mutate on public.nudge_targets;
 create policy nudge_targets_select_admin
@@ -53,7 +74,7 @@ create policy nudge_acknowledgements_select_scoped
 on public.nudge_acknowledgements
 for select
 using (
-  public.current_app_role() = 'admin'
+  public.current_app_role() in ('admin', 'wellness_director')
   or participant_id in (
     select p.id from public.participants p where p.auth_user_id = auth.uid()
   )
