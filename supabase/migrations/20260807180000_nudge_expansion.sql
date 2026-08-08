@@ -10,7 +10,6 @@ create table if not exists public.nudge_targets (
 
 grant select, insert on public.nudge_targets to authenticated;
 grant update, delete on public.nudge_targets to authenticated;
-grant select, insert, update on public.nudge_acknowledgements to authenticated;
 
 create table if not exists public.nudge_acknowledgements (
   id uuid primary key default gen_random_uuid(),
@@ -22,6 +21,8 @@ create table if not exists public.nudge_acknowledgements (
   unique (nudge_id, participant_id),
   check (length(btrim(response_text)) > 0)
 );
+
+grant select, insert, update on public.nudge_acknowledgements to authenticated;
 
 alter table if exists public.weekly_nudges
   add column if not exists response_due_at timestamptz;
