@@ -58,6 +58,8 @@ describe('WellnessDirectorClient', () => {
     const markup = selectedMarkup([participant])
     expect(markup).toContain('Snooze')
     expect(markup).toContain('Dismiss')
+    expect(markup).toContain('Snooze days')
+    expect(markup).toContain('Note')
   })
 
   test('scope changes still leave selected participant within the filtered set', () => {
@@ -69,5 +71,14 @@ describe('WellnessDirectorClient', () => {
   test('omits missing engagement scores from the chart', () => {
     const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
     expect(markup).not.toContain('"value":0')
+  })
+
+  test('renders all four weight sliders and labels', () => {
+    const markup = selectedMarkup([participant])
+    expect(markup).toContain('recovery')
+    expect(markup).toContain('hrv')
+    expect(markup).toContain('sleep')
+    expect(markup).toContain('debt')
+    expect(markup.match(/type="range"/g)?.length ?? 0).toBe(4)
   })
 })

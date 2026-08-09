@@ -229,18 +229,20 @@ export async function PATCH(request: Request) {
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
+    .select('id, week_of, nudge_acknowledgement_target!inner(target_type, target_label, participant_id)')
     .eq('id', nudgeId)
     .maybeSingle()
 
   if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
   if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
 
-  const targetRows = Array.isArray((nudge as { nudge_targets?: unknown }).nudge_targets)
-    ? (nudge as { nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_targets
-    : [((nudge as { nudge_targets?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_targets ?? { target_type: 'all', target_label: null, participant_id: null })]
+  const targetRows = Array.isArray((nudge as { nudge_acknowledgement_target?: unknown }).nudge_acknowledgement_target)
+    ? (nudge as { nudge_acknowledgement_target: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_acknowledgement_target
+    : [((nudge as { nudge_acknowledgement_target?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_acknowledgement_target ?? { target_type: 'all', target_label: null, participant_id: null })]
 
-  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, participant?.cohort ?? null))) {
+  const participantCohort = participant && 'cohort' in participant ? participant.cohort ?? null : null
+
+  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, participantCohort))) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 

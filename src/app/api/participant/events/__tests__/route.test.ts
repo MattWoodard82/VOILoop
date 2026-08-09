@@ -24,9 +24,14 @@ describe('/api/participant/events', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockGetUserAccess = getUserAccess as jest.MockedFunction<typeof getUserAccess>
+  const realDateNow = Date.now
 
   beforeEach(() => {
     jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    Date.now = realDateNow
   })
 
   test('GET returns 401 when unauthenticated', async () => {
@@ -239,6 +244,7 @@ describe('/api/participant/events', () => {
   test('PATCH records an acknowledgement response', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+    Date.now = jest.fn(() => new Date('2026-08-08T12:00:00Z').getTime())
 
     const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
     const rpcUpsert = jest.fn(async (params: unknown) => ({ data: { id: 'ack-1', acknowledged_at: '2026-08-07T12:00:00Z' }, error: null }))
@@ -274,14 +280,14 @@ describe('/api/participant/events', () => {
               lte: jest.fn(() => ({
                 order: jest.fn(() => ({
                   limit: jest.fn(async () => ({
-                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-08-07', nudge_targets: [{ target_type: 'all', participant_id: null }] }],
+                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-08-07', nudge_acknowledgement_target: [{ target_type: 'all', participant_id: null }] }],
                     error: null,
                   })),
                 })),
               })),
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-08-07', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2026-08-07', nudge_acknowledgement_target: [{ target_type: 'participant', participant_id: 'EMP123' }] },
                   error: null,
                 })),
               })),
@@ -334,7 +340,7 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_acknowledgement_target: [{ target_type: 'participant', participant_id: 'EMP123' }] },
                   error: null,
                 })),
               })),

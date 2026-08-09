@@ -15,6 +15,7 @@ jest.mock('@/lib/supabase/provision-account', () => ({
   provisionSupabaseAccount: jest.fn(),
 }))
 
+
 function makeJsonLoginRequest(email: string, password: string): Request {
   return new Request('http://localhost/api/auth/login', {
     method: 'POST',
@@ -45,6 +46,23 @@ describe('POST /api/auth/login', () => {
       },
     } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP001' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'login_activity') {
+          return { insert: jest.fn(async () => ({ error: null })) }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
 
     const response = await POST(makeJsonLoginRequest('participant@example.com', 'Password123'))
     const body = await response.json()
@@ -68,7 +86,22 @@ describe('POST /api/auth/login', () => {
 
     const upsert = jest.fn(async () => ({ error: null }))
     mockCreateAdminSupabaseClient.mockReturnValue({
-      from: jest.fn(() => ({ upsert })),
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') return { upsert }
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP002' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'login_activity') {
+          return { insert: jest.fn(async () => ({ error: null })) }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
     } as never)
 
     const response = await POST(makeJsonLoginRequest('new-user@example.com', 'Password123'))
@@ -81,5 +114,40 @@ describe('POST /api/auth/login', () => {
       must_change_password: true,
     }, { onConflict: 'user_id' })
     expect(body).toMatchObject({ success: true, redirectTo: '/change-password' })
+  })
+
+  test('does not write login activity for non-participant auth users', async () => {
+    mockCreateServerSupabaseClient.mockReturnValue({
+      auth: {
+        signInWithPassword: jest.fn(async () => ({
+          data: { user: { id: 'admin-user' } },
+          error: null,
+        })),
+      },
+    } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: null, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'login_activity') {
+          return { insert: jest.fn(async () => ({ error: null })) }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
+
+    const response = await POST(makeJsonLoginRequest('admin@voiloop.local', 'Admin1234'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toMatchObject({ success: true, redirectTo: '/wellness-director' })
   })
 })

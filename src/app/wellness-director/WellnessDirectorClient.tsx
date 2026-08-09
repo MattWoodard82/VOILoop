@@ -23,6 +23,9 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
   const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [overrideStatus, setOverrideStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [overrideError, setOverrideError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -55,6 +58,8 @@ export function WellnessDirectorClient({ participants }: Props) {
     }))
 
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
+    setOverrideStatus('saving')
+    setOverrideError(null)
     const response = await fetch('/api/admin/wellness-director-overrides', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,15 +70,21 @@ export function WellnessDirectorClient({ participants }: Props) {
         snooze_until: action === 'snooze' ? new Date(Date.now() + (Number(snoozeDays[participantId] ?? 7) * 86400000)).toISOString() : null,
       }),
     })
-    if (!response.ok) throw new Error('Failed to persist override')
+    if (!response.ok) {
+      setOverrideStatus('error')
+      setOverrideError('Failed to save override.')
+      throw new Error('Failed to persist override')
+    }
     const data = await response.json()
     const state = action === 'snooze' ? 'snoozed' : 'dismissed'
     setOverrides((current) => ({ ...current, [participantId]: state }))
+    setOverrideStatus('saved')
     return data
   }
 
   const persistWeights = async (nextWeights: typeof weights) => {
     setConfigStatus('saving')
+    setConfigError(null)
     const response = await fetch('/api/admin/wellness-director-config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -81,6 +92,7 @@ export function WellnessDirectorClient({ participants }: Props) {
     })
     if (!response.ok) {
       setConfigStatus('idle')
+      setConfigError('Failed to save weights. Keep total at 100.')
       throw new Error('Failed to save config')
     }
     setConfigStatus('saved')
@@ -90,10 +102,20 @@ export function WellnessDirectorClient({ participants }: Props) {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select value={deptFilter} onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}>
+        <select
+          className="form-select"
+          style={{ color: '#fff' }}
+          value={deptFilter}
+          onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}
+        >
           {departments.map((d) => <option key={d}>{d}</option>)}
         </select>
-        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
+        <select
+          className="form-select"
+          style={{ color: '#fff' }}
+          value={personFilter}
+          onChange={(e) => setPersonFilter(e.target.value)}
+        >
           <option value="All">All participants</option>
           {participants.filter((e) => deptFilter === 'All' || e.department === deptFilter).map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
         </select>
@@ -131,55 +153,134 @@ export function WellnessDirectorClient({ participants }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card title="Baseline / overrides">
           {selected ? (
-            <>
-              <div>{selected.baseline_state === 'building' ? `Baseline building (${selected.baseline_days_remaining} days remaining)` : 'Baseline ready'}</div>
-              <div>Override: {overrideLabel(overrides[selected.id] ?? selected.override_state)}</div>
-              <input
-                aria-label="override note"
-                value={overrideNotes[selected.id] ?? ''}
-                onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
-                placeholder="Optional note"
-              />
-              <input
-                aria-label="snooze days"
-                type="number"
-                min={1}
-                max={30}
-                value={snoozeDays[selected.id] ?? 7}
-                onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
-                <button type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div style={{ fontSize: 12, color: '#A5ACAF' }}>
+                {selected.baseline_state === 'building'
+                  ? `Baseline building (${selected.baseline_days_remaining} days remaining)`
+                  : 'Baseline ready'}
               </div>
-            </>
+              <div style={{ fontSize: 12, color: '#A5ACAF' }}>
+                Override: <span style={{ color: '#fff' }}>{overrideLabel(overrides[selected.id] ?? selected.override_state)}</span>
+              </div>
+              <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
+                Note
+                <input
+                  aria-label="override note"
+                  value={overrideNotes[selected.id] ?? ''}
+                  onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
+                  placeholder="Optional note"
+                  style={{
+                    width: '100%',
+                    background: '#001a33',
+                    border: '1px solid #0a3560',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                    fontSize: 12,
+                    color: '#fff',
+                    fontFamily: 'Inter, sans-serif',
+                  }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
+                Snooze days
+                <input
+                  aria-label="snooze days"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={snoozeDays[selected.id] ?? 7}
+                  onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
+                  style={{
+                    width: 120,
+                    background: '#001a33',
+                    border: '1px solid #0a3560',
+                    borderRadius: 6,
+                    padding: '8px 10px',
+                    fontSize: 12,
+                    color: '#fff',
+                    fontFamily: 'Inter, sans-serif',
+                  }}
+                />
+              </label>
+              <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => persistOverride(selected.id, 'snooze').catch(() => {})}
+                >
+                  {overrideStatus === 'saving' ? 'Saving…' : 'Snooze'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => persistOverride(selected.id, 'dismiss').catch(() => {})}
+                  style={{
+                    background: '#001a33',
+                    color: '#fff',
+                    border: '1px solid #0a3560',
+                    borderRadius: 6,
+                    padding: '6px 14px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    fontFamily: 'Inter, sans-serif',
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+              {overrideStatus === 'saved' && <div style={{ fontSize: 11, color: '#69BE28' }}>Override saved.</div>}
+              {overrideStatus === 'error' && <div style={{ fontSize: 11, color: '#ff6b6b' }}>{overrideError}</div>}
+            </div>
           ) : (
-            <div>Choose a participant to review baseline status and overrides.</div>
+            <div style={{ fontSize: 12, color: '#A5ACAF' }}>Choose a participant to review baseline status and overrides.</div>
           )}
         </Card>
         <Card title="Engagement-score weights">
-          {Object.entries(weights).map(([key, value]) => (
-            <div key={key}>
-              <label htmlFor={key}>{key}</label>
-              <input
-                id={key}
-                aria-label={key}
-                type="range"
-                min={0}
-                max={100}
-                value={value}
-                onChange={(e) => {
-                  const next = { ...weights, [key]: Number(e.target.value) }
-                  const total = Object.values(next).reduce((sum, item) => sum + item, 0)
-                  if (total === 100) {
+          <div style={{ display: 'grid', gap: 10 }}>
+            {Object.entries(weights).map(([key, value]) => (
+              <div key={key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4, fontSize: 11, color: '#A5ACAF' }}>
+                  <label htmlFor={key}>{key.replace(/_/g, ' ')}</label>
+                  <span style={{ color: '#fff' }}>{value}%</span>
+                </div>
+                <input
+                  id={key}
+                  aria-label={key}
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={value}
+                  onChange={(e) => {
+                    const next = { ...weights, [key]: Number(e.target.value) }
                     setWeights(next)
-                    persistWeights(next).catch(() => setConfigStatus('idle'))
-                  }
-                }}
-              />
+                    setConfigStatus('idle')
+                    setConfigError(null)
+                  }}
+                  onMouseUp={() => {
+                    const total = Object.values(weights).reduce((sum, item) => sum + item, 0)
+                    if (total === 100) {
+                      persistWeights(weights).catch(() => {})
+                      return
+                    }
+                    setConfigError(`Total must be 100 (currently ${total}).`)
+                  }}
+                  onTouchEnd={() => {
+                    const total = Object.values(weights).reduce((sum, item) => sum + item, 0)
+                    if (total === 100) {
+                      persistWeights(weights).catch(() => {})
+                      return
+                    }
+                    setConfigError(`Total must be 100 (currently ${total}).`)
+                  }}
+                  style={{ width: '100%', accentColor: '#69BE28' }}
+                />
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: configStatus === 'saved' ? '#69BE28' : '#A5ACAF' }}>
+              {configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}
             </div>
-          ))}
-          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}</div>
+            {configError ? <div style={{ fontSize: 11, color: '#ff6b6b' }}>{configError}</div> : null}
+          </div>
         </Card>
       </div>
     </>
