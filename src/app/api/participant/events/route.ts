@@ -57,7 +57,7 @@ async function getTargetedNudge(
 ) {
   const { data, error } = await supabase
     .from('weekly_nudges')
-    .select('id, message, author, week_of, nudge_acknowledgement_target!inner(target_type, target_label, participant_id)')
+    .select('id, message, author, week_of, nudge_acknowledgement_targets!inner(target_type, target_label, participant_id)')
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
     .limit(10)
@@ -69,11 +69,11 @@ async function getTargetedNudge(
     message: string
     author: string
     week_of: string
-    nudge_acknowledgement_target: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
+    nudge_acknowledgement_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
   }>
 
   const nudge = rows.find((row) => {
-    const targets = Array.isArray(row.nudge_acknowledgement_target) ? row.nudge_acknowledgement_target : [row.nudge_acknowledgement_target]
+    const targets = Array.isArray(row.nudge_acknowledgement_targets) ? row.nudge_acknowledgement_targets : [row.nudge_acknowledgement_targets]
     return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.target_label ?? null, target?.participant_id ?? null, participantId, cohort))
   }) ?? null
 
@@ -229,16 +229,16 @@ export async function PATCH(request: Request) {
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of, nudge_acknowledgement_target!inner(target_type, target_label, participant_id)')
+    .select('id, week_of, nudge_acknowledgement_targets!inner(target_type, target_label, participant_id)')
     .eq('id', nudgeId)
     .maybeSingle()
 
   if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
   if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
 
-  const targetRows = Array.isArray((nudge as { nudge_acknowledgement_target?: unknown }).nudge_acknowledgement_target)
-    ? (nudge as { nudge_acknowledgement_target: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_acknowledgement_target
-    : [((nudge as { nudge_acknowledgement_target?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_acknowledgement_target ?? { target_type: 'all', target_label: null, participant_id: null })]
+  const targetRows = Array.isArray((nudge as { nudge_acknowledgement_targets?: unknown }).nudge_acknowledgement_targets)
+    ? (nudge as { nudge_acknowledgement_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_acknowledgement_targets
+    : [((nudge as { nudge_acknowledgement_targets?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_acknowledgement_targets ?? { target_type: 'all', target_label: null, participant_id: null })]
 
   const participantCohort = participant && 'cohort' in participant ? participant.cohort ?? null : null
 
