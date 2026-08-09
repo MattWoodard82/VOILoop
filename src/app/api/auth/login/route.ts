@@ -53,6 +53,31 @@ async function ensureUserAccessRow(userId: string): Promise<void> {
   if (error) {
     throw new Error(`Failed to initialize user_access for authenticated user: ${error.message}`)
   }
+
+}
+
+async function writeLoginActivityIfParticipant(userId: string): Promise<void> {
+  const adminClient = createAdminSupabaseClient()
+  const { data: participantRow, error } = await adminClient
+    .from('participants')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to look up participant login mapping: ${error.message}`)
+  }
+  if (!participantRow?.id) return
+  const { error: insertError } = await adminClient
+    .from('login_activity')
+    .insert({
+      participant_id: participantRow.id,
+      logged_in_at: new Date().toISOString(),
+    })
+
+  if (insertError) {
+    throw new Error(`Failed to write login activity: ${insertError.message}`)
+  }
 }
 
 function wantsJson(request: Request): boolean {
@@ -159,6 +184,7 @@ export async function POST(request: Request) {
       await ensureUserAccessRow(data.user.id)
       access = await getUserAccess(data.user.id)
     }
+    await writeLoginActivityIfParticipant(data.user.id)
     const redirectTo = access.mustChangePassword
       ? '/change-password'
       : !access.role || access.role === 'participant'

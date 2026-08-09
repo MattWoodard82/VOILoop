@@ -23,6 +23,9 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
   const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [overrideStatus, setOverrideStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [overrideError, setOverrideError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -55,6 +58,8 @@ export function WellnessDirectorClient({ participants }: Props) {
     }))
 
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
+    setOverrideStatus('saving')
+    setOverrideError(null)
     const response = await fetch('/api/admin/wellness-director-overrides', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -65,15 +70,21 @@ export function WellnessDirectorClient({ participants }: Props) {
         snooze_until: action === 'snooze' ? new Date(Date.now() + (Number(snoozeDays[participantId] ?? 7) * 86400000)).toISOString() : null,
       }),
     })
-    if (!response.ok) throw new Error('Failed to persist override')
+    if (!response.ok) {
+      setOverrideStatus('error')
+      setOverrideError('Failed to save override.')
+      throw new Error('Failed to persist override')
+    }
     const data = await response.json()
     const state = action === 'snooze' ? 'snoozed' : 'dismissed'
     setOverrides((current) => ({ ...current, [participantId]: state }))
+    setOverrideStatus('saved')
     return data
   }
 
   const persistWeights = async (nextWeights: typeof weights) => {
     setConfigStatus('saving')
+    setConfigError(null)
     const response = await fetch('/api/admin/wellness-director-config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -81,6 +92,7 @@ export function WellnessDirectorClient({ participants }: Props) {
     })
     if (!response.ok) {
       setConfigStatus('idle')
+      setConfigError('Failed to save weights. Keep total at 100.')
       throw new Error('Failed to save config')
     }
     setConfigStatus('saved')
@@ -196,7 +208,7 @@ export function WellnessDirectorClient({ participants }: Props) {
                   className="btn-primary"
                   onClick={() => persistOverride(selected.id, 'snooze').catch(() => {})}
                 >
-                  Snooze
+                  {overrideStatus === 'saving' ? 'Saving…' : 'Snooze'}
                 </button>
                 <button
                   type="button"
@@ -216,6 +228,8 @@ export function WellnessDirectorClient({ participants }: Props) {
                   Dismiss
                 </button>
               </div>
+              {overrideStatus === 'saved' && <div style={{ fontSize: 11, color: '#69BE28' }}>Override saved.</div>}
+              {overrideStatus === 'error' && <div style={{ fontSize: 11, color: '#ff6b6b' }}>{overrideError}</div>}
             </div>
           ) : (
             <div style={{ fontSize: 12, color: '#A5ACAF' }}>Choose a participant to review baseline status and overrides.</div>
@@ -238,11 +252,25 @@ export function WellnessDirectorClient({ participants }: Props) {
                   value={value}
                   onChange={(e) => {
                     const next = { ...weights, [key]: Number(e.target.value) }
-                    const total = Object.values(next).reduce((sum, item) => sum + item, 0)
+                    setWeights(next)
+                    setConfigStatus('idle')
+                    setConfigError(null)
+                  }}
+                  onMouseUp={() => {
+                    const total = Object.values(weights).reduce((sum, item) => sum + item, 0)
                     if (total === 100) {
-                      setWeights(next)
-                      persistWeights(next).catch(() => setConfigStatus('idle'))
+                      persistWeights(weights).catch(() => {})
+                      return
                     }
+                    setConfigError(`Total must be 100 (currently ${total}).`)
+                  }}
+                  onTouchEnd={() => {
+                    const total = Object.values(weights).reduce((sum, item) => sum + item, 0)
+                    if (total === 100) {
+                      persistWeights(weights).catch(() => {})
+                      return
+                    }
+                    setConfigError(`Total must be 100 (currently ${total}).`)
                   }}
                   style={{ width: '100%', accentColor: '#69BE28' }}
                 />
@@ -251,6 +279,7 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div style={{ fontSize: 11, color: configStatus === 'saved' ? '#69BE28' : '#A5ACAF' }}>
               {configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}
             </div>
+            {configError ? <div style={{ fontSize: 11, color: '#ff6b6b' }}>{configError}</div> : null}
           </div>
         </Card>
       </div>

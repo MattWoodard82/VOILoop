@@ -28,8 +28,8 @@
 ## Wellness Director Risk Scoring (FR-13 to FR-19)
 - [x] **18. Risk dashboard loads** — Log in as admin/wellness director -> `/wellness-director` renders KPI cards + participant grid.
 - [x] **19. Engagement score shown** — Select participant -> score breakdown card populates.
-- [ ] **20. Physiological trend flag** — Same participant -> trend badge shows declining/improving/steady.
-- [ ] **21. Risk tier color** — Same participant -> Green/Yellow/Red badge + reason text shown.
+- [x] **20. Physiological trend flag** — Same participant -> trend badge shows declining/improving/steady.
+- [x] **21. Risk tier color** — Same participant -> Green/Yellow/Red badge + reason text shown.
 - [ ] **22. Cold-start "Building baseline"** — Participant enrolled <21 days -> "Building baseline" badge instead of risk color.
 - [ ] **23. Admin override - snooze** — Enter note + days -> Snooze -> UI shows Snoozed and override API succeeds.
 - [ ] **24. Admin override - dismiss** — Dismiss flow -> UI shows Dismissed.
