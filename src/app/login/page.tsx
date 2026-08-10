@@ -1,10 +1,18 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { parseFrontendError } from '@/lib/frontend-error'
+import { createClient } from '@/lib/supabase/client'
+
+type AccessBootstrapResponse = {
+  role?: 'admin' | 'wellness_director' | 'participant'
+  mustChangePassword?: boolean
+  redirectTo?: string
+}
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -28,25 +36,53 @@ export default function LoginPage() {
     }
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const supabase = createClient()
+      const { error: signInError, data } = await supabase.auth.signInWithPassword({
+        email: emailValue,
+        password: passwordValue,
+      })
+
+      if (signInError || !data.user) {
+        setError(signInError?.message ?? 'Sign-in failed.')
+        setErrorDetail('')
+        setLoading(false)
+        return
+      }
+
+      const bootstrapResponse = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: emailValue,
-          password: passwordValue,
         }),
       })
 
-      if (!response.ok) {
-        const parsed = await parseFrontendError(response, 'Sign-in failed.')
+      if (!bootstrapResponse.ok) {
+        await supabase.auth.signOut()
+        const parsed = await parseFrontendError(bootstrapResponse, 'Sign-in setup failed.')
         setError(parsed.message)
         setErrorDetail(parsed.detail)
         setLoading(false)
         return
       }
 
-      const body = await response.json().catch(() => ({ redirectTo: '/wellness-director' })) as { redirectTo?: string }
-      router.replace(body.redirectTo ?? '/wellness-director')
+      let redirectTo = searchParams.get('redirectTo') ?? ''
+      const accessResponse = await fetch('/api/auth/access', { cache: 'no-store' })
+      if (!accessResponse.ok) {
+        await supabase.auth.signOut()
+        const parsed = await parseFrontendError(accessResponse, 'Sign-in setup failed.')
+        setError(parsed.message)
+        setErrorDetail(parsed.detail)
+        setLoading(false)
+        return
+      }
+
+      const accessBody = await accessResponse.json().catch(() => ({})) as AccessBootstrapResponse
+      if (!redirectTo) {
+        redirectTo = accessBody.redirectTo ?? ''
+      }
+
+      router.replace(redirectTo || '/wellness-director')
       router.refresh()
     } catch (requestError) {
       const detail = requestError instanceof Error ? requestError.message : String(requestError)
