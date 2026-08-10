@@ -73,12 +73,13 @@ describe('WellnessDirectorClient', () => {
     expect(markup).not.toContain('"value":0')
   })
 
-  test('renders all four weight sliders and labels', () => {
+  test('renders all five engagement weight sliders and labels', () => {
     const markup = selectedMarkup([participant])
-    expect(markup).toContain('recovery')
-    expect(markup).toContain('hrv')
-    expect(markup).toContain('sleep')
-    expect(markup).toContain('debt')
-    expect(markup.match(/type="range"/g)?.length ?? 0).toBe(4)
+    expect(markup).toContain('login frequency')
+    expect(markup).toContain('pulse survey completion')
+    expect(markup).toContain('data submission')
+    expect(markup).toContain('intervention follow up')
+    expect(markup).toContain('trend consistency')
+    expect(markup.match(/type="range"/g)?.length ?? 0).toBe(5)
   })
 })

@@ -1,6 +1,7 @@
 import { createClient } from './client'
 import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
+import { calculateEngagementScore } from '@/lib/scoring'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -66,6 +67,42 @@ function getQueryClient() {
 
 function getPrivilegedQueryClient() {
   return createAdminSupabaseClient()
+}
+
+const DEFAULT_ENGAGEMENT_SCORE_WEIGHTS = {
+  login_frequency_weight: 25,
+  pulse_survey_completion_weight: 20,
+  data_submission_weight: 25,
+  intervention_follow_up_weight: 15,
+  trend_consistency_weight: 15,
+}
+
+type EngagementScoreWeights = typeof DEFAULT_ENGAGEMENT_SCORE_WEIGHTS
+
+async function getEngagementScoreWeights(supabase = getQueryClient()): Promise<EngagementScoreWeights> {
+  const { data, error } = await supabase
+    .from('engagement_score_weights')
+    .select('weight_name, weight_value')
+    .is('organization_id', null)
+
+  if (error) {
+    const message = (error.message ?? '').toLowerCase()
+    if (error.code === 'PGRST205' || message.includes('engagement_score_weights')) {
+      return DEFAULT_ENGAGEMENT_SCORE_WEIGHTS
+    }
+    throw error
+  }
+
+  const weights: EngagementScoreWeights = { ...DEFAULT_ENGAGEMENT_SCORE_WEIGHTS }
+  for (const row of data ?? []) {
+    if (!(row.weight_name in weights)) continue
+    const value = Number(row.weight_value)
+    if (Number.isFinite(value)) {
+      weights[row.weight_name as keyof EngagementScoreWeights] = value
+    }
+  }
+
+  return weights
 }
 
 export class ParticipantRankContextError extends Error {
@@ -319,6 +356,7 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
+  const scoreWeights = await getEngagementScoreWeights()
   const participants = await getParticipants()
   const participantIds = participants.map((participant) => participant.id)
   const [wellness, workouts, habits, pulse, interventions] = await Promise.all([
@@ -347,26 +385,24 @@ export async function getTeamDashboard(): Promise<{
     const submissionConsistency = recentWellness.length > 0
       ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100)
       : null
-    const deviceWearConsistency = recentWellness.length > 0
-      ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100)
-      : null
-    const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
+    const pulseCompletion = recentPulse.length > 0 ? 100 : 0
     const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
     const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
     const engagementComponents: Record<string, number> = {
-      submission_consistency: submissionConsistency ?? 0,
-      device_wear_consistency: deviceWearConsistency ?? 0,
-      pulse_completion: pulseCompletion ?? 0,
-      nudge_response: nudgeResponse ?? 0,
-      workout_volume: workoutVolume ?? 0,
+      login_frequency: Math.min(100, Math.round((recentWellness.length / 5) * 100)),
+      pulse_survey_completion: pulseCompletion,
+      data_submission: submissionConsistency ?? 0,
+      intervention_follow_up: nudgeResponse ?? 0,
+      trend_consistency: workoutVolume ?? 0,
     }
-    const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
-    ].reduce((sum, part) => sum + part, 0)
+    const engagementScore = calculateEngagementScore(
+      recentWellness.length,
+      recentPulse.length,
+      recentWellness.filter((row) => row.recovery_score != null).length,
+      recentHabits.filter((row) => row.notes != null).length,
+      workoutVolume ?? 0,
+      scoreWeights,
+    )
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const earlier = rows.slice(0, Math.max(1, rows.length - 7))
@@ -385,11 +421,11 @@ export async function getTeamDashboard(): Promise<{
     ]
     const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
     const riskTriggers = [
-      ...(engagementScore < 35 ? ['Low engagement score'] : []),
+      ...(engagementScore.score < 35 ? ['Low engagement score'] : []),
       ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
       ...(zeroDataFor14Days ? ['No wellness data for 14 days'] : []),
     ]
-    const riskLevel = zeroDataFor14Days || (engagementScore < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
+    const riskLevel = zeroDataFor14Days || (engagementScore.score < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore.score < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
     return {
       ...emp,
       latest_wellness: w,
@@ -398,7 +434,7 @@ export async function getTeamDashboard(): Promise<{
       latest_pulse: pulseMap[emp.id] ?? null,
       risk_level: riskLevel,
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
-      engagement_score: engagementScore,
+      engagement_score: engagementScore.score,
       engagement_score_components: engagementComponents,
       physiological_trend: physiologicalTrend,
       physiological_trend_metrics: physiologicalMetrics,

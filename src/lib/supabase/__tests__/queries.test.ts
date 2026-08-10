@@ -53,6 +53,10 @@ function makeTableClient(tables: Record<string, any[]>) {
         filters.push({ kind: 'eq', column, value })
         return builder
       }),
+      is: jest.fn((column: string, value: any) => {
+        filters.push({ kind: 'eq', column, value })
+        return builder
+      }),
       in: jest.fn((column: string, value: any[]) => {
         filters.push({ kind: 'in', column, value })
         return builder
@@ -357,6 +361,13 @@ describe('getTeamDashboard', () => {
     mockCreateClient.mockReturnValue(
       makeTableClient({
         participants,
+        engagement_score_weights: [
+          { weight_name: 'login_frequency_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'pulse_survey_completion_weight', weight_value: 20, organization_id: null },
+          { weight_name: 'data_submission_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'intervention_follow_up_weight', weight_value: 15, organization_id: null },
+          { weight_name: 'trend_consistency_weight', weight_value: 15, organization_id: null },
+        ],
         daily_wellness: dailyWellness,
         workouts: [],
         habits: [],
@@ -403,6 +414,13 @@ describe('getTeamDashboard', () => {
     mockCreateClient.mockReturnValue(
       makeTableClient({
         participants,
+        engagement_score_weights: [
+          { weight_name: 'login_frequency_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'pulse_survey_completion_weight', weight_value: 20, organization_id: null },
+          { weight_name: 'data_submission_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'intervention_follow_up_weight', weight_value: 15, organization_id: null },
+          { weight_name: 'trend_consistency_weight', weight_value: 15, organization_id: null },
+        ],
         daily_wellness: dailyWellness,
         workouts: [],
         habits: [],
@@ -442,6 +460,13 @@ describe('getTeamDashboard', () => {
     mockCreateClient.mockReturnValue(
       makeTableClient({
         participants,
+        engagement_score_weights: [
+          { weight_name: 'login_frequency_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'pulse_survey_completion_weight', weight_value: 20, organization_id: null },
+          { weight_name: 'data_submission_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'intervention_follow_up_weight', weight_value: 15, organization_id: null },
+          { weight_name: 'trend_consistency_weight', weight_value: 15, organization_id: null },
+        ],
         daily_wellness: dailyWellness,
         workouts: [],
         habits: [],

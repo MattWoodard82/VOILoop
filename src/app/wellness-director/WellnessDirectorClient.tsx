@@ -18,7 +18,13 @@ function overrideLabel(state?: ParticipantWithWellness['override_state']) {
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
-  const [weights, setWeights] = useState({ recovery: 35, hrv: 15, sleep: 25, debt: 25 })
+  const [weights, setWeights] = useState({
+    login_frequency_weight: 25,
+    pulse_survey_completion_weight: 20,
+    data_submission_weight: 25,
+    intervention_follow_up_weight: 15,
+    trend_consistency_weight: 15,
+  })
   const [overrides, setOverrides] = useState<Record<string, ParticipantWithWellness['override_state']>>({})
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
@@ -240,7 +246,7 @@ export function WellnessDirectorClient({ participants }: Props) {
             {Object.entries(weights).map(([key, value]) => (
               <div key={key}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 4, fontSize: 11, color: '#A5ACAF' }}>
-                  <label htmlFor={key}>{key.replace(/_/g, ' ')}</label>
+                  <label htmlFor={key}>{key.replace(/_weight$/,'').replace(/_/g, ' ')}</label>
                   <span style={{ color: '#fff' }}>{value}%</span>
                 </div>
                 <input
