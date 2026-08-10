@@ -22,7 +22,13 @@ interface Nudge {
   target_label?: string
 }
 
-const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
+interface Participant {
+  id: string
+  first_name: string
+  last_name: string
+}
+
+
 const TYPE_LABELS: Record<string, string> = {
   outdoor: '🥾 Outdoor',
   fitness: '🧘 Fitness',
@@ -56,6 +62,7 @@ export function AdminEventsClient() {
   const [nudgeTargetType, setNudgeTargetType] = useState<'all' | 'subgroup' | 'participant'>('all')
   const [nudgeTargetLabel, setNudgeTargetLabel] = useState('')
   const [nudgeParticipantId, setNudgeParticipantId] = useState('')
+  const [participants, setParticipants] = useState<Participant[]>([])
   const savedResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -86,9 +93,10 @@ export function AdminEventsClient() {
       setError(`Unable to load events: ${message}`)
       return
     }
-    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[] }
+    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; participants?: Participant[] }
     setEvents(payload.events ?? [])
     setNudges(payload.nudges ?? [])
+    setParticipants(payload.participants ?? [])
     setError('')
   }
 
@@ -303,9 +311,20 @@ export function AdminEventsClient() {
                 </select>
               </div>
               <div>
-                <label style={s.label}>Label / participant id</label>
-                <input style={s.input} value={nudgeTargetType === 'participant' ? nudgeParticipantId : nudgeTargetLabel}
-                  onChange={e => nudgeTargetType === 'participant' ? setNudgeParticipantId(e.target.value) : setNudgeTargetLabel(e.target.value)} />
+                <label style={s.label}>Label / participant</label>
+                {nudgeTargetType === 'participant' ? (
+                  <select style={{ ...s.input, cursor: 'pointer' }} value={nudgeParticipantId}
+                    onChange={e => setNudgeParticipantId(e.target.value)}>
+                    <option value="">— select participant —</option>
+                    {participants.map(p => (
+                      <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input style={s.input} value={nudgeTargetLabel}
+                    onChange={e => setNudgeTargetLabel(e.target.value)}
+                    placeholder={nudgeTargetType === 'subgroup' ? 'e.g. Team A' : ''} />
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

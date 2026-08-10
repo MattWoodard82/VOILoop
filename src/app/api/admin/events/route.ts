@@ -40,7 +40,7 @@ export async function GET() {
   const supabase = createServerSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
-  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }, { data: participants, error: participantsError }] = await Promise.all([
     supabase
       .from('events')
       .select('*')
@@ -51,6 +51,11 @@ export async function GET() {
       .select('*')
       .order('week_of', { ascending: false })
       .limit(8),
+    supabase
+      .from('participants')
+      .select('id, first_name, last_name')
+      .eq('status', 'Active')
+      .order('last_name', { ascending: true }),
   ])
 
   if (eventsError) {
@@ -60,7 +65,7 @@ export async function GET() {
     return NextResponse.json({ error: nudgesError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [] })
+  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [], participants: participants ?? [] })
 }
 
 export async function POST(request: Request) {

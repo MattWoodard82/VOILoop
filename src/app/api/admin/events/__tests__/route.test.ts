@@ -54,6 +54,15 @@ describe('admin events routes', () => {
             })),
           }
         }
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                order: jest.fn(async () => ({ data: [], error: null })),
+              })),
+            })),
+          }
+        }
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)
@@ -65,6 +74,7 @@ describe('admin events routes', () => {
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Morning Run' }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
+      participants: [],
     })
   })
 
