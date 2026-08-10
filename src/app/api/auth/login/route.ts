@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { createServerSupabaseClient, getUserAccess } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { provisionSupabaseAccount } from '@/lib/supabase/provision-account'
 
@@ -11,6 +12,12 @@ type LoginErrorBody = {
   source: 'backend'
   requestId: string
 }
+function isInvalidCredentialsError(error: { message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return message.includes('invalid login credentials') || message.includes('invalid credentials')
+}
+
 async function attemptAdminCredentialRepair(email: string): Promise<void> {
   const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
   const configuredAdminPassword = process.env.PILOT_ADMIN_PASSWORD
@@ -31,6 +38,46 @@ async function attemptAdminCredentialRepair(email: string): Promise<void> {
     role: 'admin',
     mustChangePassword: false,
   })
+}
+
+async function ensureUserAccessRow(userId: string): Promise<void> {
+  const adminClient = createAdminSupabaseClient()
+  const { error } = await adminClient
+    .from('user_access')
+    .upsert({
+      user_id: userId,
+      role: 'participant',
+      must_change_password: true,
+    }, { onConflict: 'user_id' })
+
+  if (error) {
+    throw new Error(`Failed to initialize user_access for authenticated user: ${error.message}`)
+  }
+}
+
+async function writeLoginActivityIfParticipant(userId: string): Promise<void> {
+  const adminClient = createAdminSupabaseClient()
+  const { data: participantRow, error } = await adminClient
+    .from('participants')
+    .select('id')
+    .eq('auth_user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to look up participant login mapping: ${error.message}`)
+  }
+  if (!participantRow?.id) return
+
+  const { error: insertError } = await adminClient
+    .from('login_activity')
+    .insert({
+      participant_id: participantRow.id,
+      logged_in_at: new Date().toISOString(),
+    })
+
+  if (insertError) {
+    throw new Error(`Failed to write login activity: ${insertError.message}`)
+  }
 }
 
 function wantsJson(request: Request): boolean {
@@ -62,18 +109,22 @@ function jsonOrRedirect(request: Request, body: Record<string, unknown>, status:
 export async function POST(request: Request) {
   try {
     let email = ''
+    let password = ''
+    let requestedRedirectTo = ''
 
     if (wantsJson(request)) {
-      let body: { email?: string }
+      let body: { email?: string; password?: string; redirectTo?: string }
       try {
         body = await request.json()
       } catch {
         return NextResponse.json(
-          buildErrorBody(request, 'INVALID_REQUEST_BODY', 'Invalid request body', 'Request body must be valid JSON with an email field.'),
+          buildErrorBody(request, 'INVALID_REQUEST_BODY', 'Invalid request body', 'Request body must be valid JSON with email and password.'),
           { status: 400 }
         )
       }
       email = String(body.email ?? '').trim()
+      password = String(body.password ?? '')
+      requestedRedirectTo = String(body.redirectTo ?? '').trim()
     } else {
       let formData: FormData
       try {
@@ -85,23 +136,68 @@ export async function POST(request: Request) {
         )
       }
       email = String(formData.get('email') ?? '').trim()
+      password = String(formData.get('password') ?? '')
+      requestedRedirectTo = String(formData.get('redirectTo') ?? '').trim()
     }
 
-    if (!email) {
+    if (!email || !password) {
       return jsonOrRedirect(
         request,
-        buildErrorBody(request, 'MISSING_EMAIL', 'Email is required.'),
+        buildErrorBody(request, 'MISSING_CREDENTIALS', 'Email and password are required.'),
         400,
         '/login'
       )
     }
 
-    const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
-    if (configuredAdminEmail && email.toLowerCase() === configuredAdminEmail.toLowerCase()) {
-      await attemptAdminCredentialRepair(email)
+    const supabase = createServerSupabaseClient()
+    let { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
+    if ((error || !data.user) && isInvalidCredentialsError(error)) {
+      const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
+      const configuredAdminPassword = process.env.PILOT_ADMIN_PASSWORD
+      if (
+        configuredAdminEmail &&
+        configuredAdminPassword &&
+        email.toLowerCase() === configuredAdminEmail.toLowerCase() &&
+        password === configuredAdminPassword
+      ) {
+        await attemptAdminCredentialRepair(email)
+        const retried = await supabase.auth.signInWithPassword({ email, password })
+        data = retried.data
+        error = retried.error
+      }
     }
 
-    return jsonOrRedirect(request, { success: true }, 200)
+    if (error || !data.user) {
+      const configuredAdminEmail = process.env.PILOT_ADMIN_EMAIL
+      const isConfiguredAdminEmail = configuredAdminEmail && email.toLowerCase() === configuredAdminEmail.toLowerCase()
+      const detail = isConfiguredAdminEmail
+        ? 'Configured admin account was used but credentials did not match Supabase auth.'
+        : undefined
+      return jsonOrRedirect(
+        request,
+        buildErrorBody(request, 'INVALID_LOGIN_CREDENTIALS', error?.message ?? 'Sign-in failed.', detail),
+        401,
+        '/login'
+      )
+    }
+
+    let access = await getUserAccess(data.user.id)
+    if (!access.role) {
+      await ensureUserAccessRow(data.user.id)
+      access = await getUserAccess(data.user.id)
+    }
+
+    await writeLoginActivityIfParticipant(data.user.id)
+
+    const defaultRedirectTo = access.mustChangePassword
+      ? '/change-password'
+      : !access.role || access.role === 'participant'
+        ? '/my'
+        : '/wellness-director'
+    const redirectTo = requestedRedirectTo || defaultRedirectTo
+
+    return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     return NextResponse.json(
