@@ -29,6 +29,8 @@ interface Participant {
 }
 
 
+const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
+
 const TYPE_LABELS: Record<string, string> = {
   outdoor: '🥾 Outdoor',
   fitness: '🧘 Fitness',
