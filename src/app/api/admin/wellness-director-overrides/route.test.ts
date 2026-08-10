@@ -43,4 +43,32 @@ describe('admin wellness director overrides route', () => {
       updated_by: 'admin-1',
     }), { onConflict: 'participant_id' })
   })
+
+  test('POST persists a dismiss override', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    const upsert = jest.fn(async () => ({ data: { participant_id: 'P1', action: 'dismiss' }, error: null }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        upsert,
+      })),
+    } as never)
+
+    const response = await POST(new Request('http://localhost/api/admin/wellness-director-overrides', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        participant_id: 'P1',
+        action: 'dismiss',
+        note: 'Not actionable',
+      }),
+    }))
+
+    expect(response.status).toBe(200)
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      participant_id: 'P1',
+      action: 'dismiss',
+      note: 'Not actionable',
+      updated_by: 'admin-1',
+    }), { onConflict: 'participant_id' })
+  })
 })
