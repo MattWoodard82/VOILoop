@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 
@@ -38,6 +39,7 @@ export async function GET() {
   }
 
   const supabase = createServerSupabaseClient()
+  const adminClient = createAdminSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
   const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }, { data: participants, error: participantsError }] = await Promise.all([
@@ -51,7 +53,7 @@ export async function GET() {
       .select('*')
       .order('week_of', { ascending: false })
       .limit(8),
-    supabase
+    adminClient
       .from('participants')
       .select('id, first_name, last_name')
       .eq('status', 'Active')

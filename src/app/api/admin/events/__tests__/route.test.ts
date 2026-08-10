@@ -1,13 +1,19 @@
 import { GET, POST, PUT } from '../route'
 import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   requireAdmin: jest.fn(),
 }))
 
+jest.mock('@/lib/supabase/admin', () => ({
+  createAdminSupabaseClient: jest.fn(),
+}))
+
 describe('admin events routes', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
   const mockRequireAdmin = requireAdmin as jest.MockedFunction<typeof requireAdmin>
 
   beforeEach(() => {
@@ -54,16 +60,24 @@ describe('admin events routes', () => {
             })),
           }
         }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
         if (table === 'participants') {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
-                order: jest.fn(async () => ({ data: [], error: null })),
+                order: jest.fn(async () => ({
+                  data: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
+                  error: null,
+                })),
               })),
             })),
           }
         }
-        throw new Error(`Unexpected table ${table}`)
+        throw new Error(`Unexpected admin table ${table}`)
       }),
     } as never)
 
@@ -74,7 +88,7 @@ describe('admin events routes', () => {
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Morning Run' }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
-      participants: [],
+      participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
     })
   })
 
