@@ -10,6 +10,12 @@ const DEFAULT_WEIGHTS = {
   debt: 25,
 }
 
+function isMissingConfigTable(error: { code?: string | null; message?: string | null } | null) {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return error.code === 'PGRST205' || message.includes('wellness_director_config')
+}
+
 export async function GET() {
   const admin = await requireAdmin()
   if ('redirect' in admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -21,7 +27,10 @@ export async function GET() {
     .eq('id', 'current')
     .maybeSingle()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error && !isMissingConfigTable(error)) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error && isMissingConfigTable(error)) {
+    return NextResponse.json({ config: { id: 'current', weights: DEFAULT_WEIGHTS } })
+  }
 
   return NextResponse.json({ config: data ?? { id: 'current', weights: DEFAULT_WEIGHTS } })
 }
@@ -56,6 +65,9 @@ export async function PUT(request: Request) {
     .select('*')
     .single()
 
+  if (error && isMissingConfigTable(error)) {
+    return NextResponse.json({ error: 'Wellness Director config storage is not provisioned yet.' }, { status: 503 })
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ config: data })
 }
