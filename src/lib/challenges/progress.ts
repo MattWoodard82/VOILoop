@@ -8,6 +8,7 @@ interface SupabaseLike {
 interface ChallengeParticipantRow {
   id: string
   participant_id: string
+  progress_value: number
   completed: boolean
   updated_at: string | null
 }
@@ -36,7 +37,7 @@ export async function recomputeActiveChallengeProgress(
 
   const { data: participants, error: participantsError } = await supabase
     .from('challenge_participants')
-    .select('id, participant_id, completed, updated_at')
+    .select('id, participant_id, progress_value, completed, updated_at')
     .eq('challenge_id', activeChallenge.id)
     .eq('is_eligible', true)
 
@@ -63,7 +64,9 @@ export async function recomputeActiveChallengeProgress(
 
   const participantRows = (participants ?? []) as ChallengeParticipantRow[]
   const updateRequests = participantRows.map((participant) => {
-    const progressValue = counts.get(participant.participant_id) ?? 0
+    const recomputedCount = counts.get(participant.participant_id) ?? 0
+    // Never decrement: take the higher of the recomputed count and the stored value
+    const progressValue = Math.max(recomputedCount, participant.progress_value ?? 0)
     const isCompleteNow = progressValue >= activeChallenge.threshold_value
 
     const updatePayload: Record<string, unknown> = {
