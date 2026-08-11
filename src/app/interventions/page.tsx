@@ -1,10 +1,10 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getInterventions, getParticipants } from '@/lib/supabase/queries'
-import { KpiCard, Card, Badge, TimelineItem } from '@/components/ui'
-import { formatDate } from '@/lib/utils'
+import { KpiCard, Card, TimelineItem } from '@/components/ui'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { InterventionCreateClient } from './InterventionCreateClient'
+import { InterventionsTableClient } from './InterventionsTableClient'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,13 +19,22 @@ export default async function InterventionsPage() {
   ])
 
   const empMap = Object.fromEntries(participants.map((e) => [e.id, e]))
+  const interventionsForTable = interventions.map((int) => ({
+    id: int.id,
+    participant_id: int.participant_id,
+    trigger_metric: int.trigger_metric,
+    trigger_value: int.trigger_value,
+    intervention_type: int.intervention_type,
+    assigned_to: int.assigned_to ?? null,
+    date_triggered: int.date_triggered ?? null,
+    outcome: int.outcome,
+    department: int.department ?? null,
+    notes: int.notes ?? null,
+  }))
   const pending = interventions.filter((i) => i.outcome === 'Pending')
   const inProgress = interventions.filter((i) => i.outcome === 'In Progress')
   const monitoring = interventions.filter((i) => i.outcome === 'Monitoring')
   const resolved = interventions.filter((i) => i.outcome === 'Resolved')
-
-  const statusVariant = (s: string) =>
-    s === 'Pending' ? 'red' : s === 'In Progress' ? 'amber' : s === 'Monitoring' ? 'wolf' : 'green'
 
   return (
     <DashboardShell title="Intervention Tracking">
@@ -49,40 +58,7 @@ export default async function InterventionsPage() {
           />
         )}
       >
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th style={{ width: 140 }}>Participant</th>
-              <th>Trigger metric</th>
-              <th>Value</th>
-              <th>Intervention</th>
-              <th>Assigned</th>
-              <th>Triggered</th>
-              <th style={{ textAlign: 'right' }}>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {interventions.map((int) => {
-              const emp = empMap[int.participant_id]
-              return (
-               <tr key={int.id} onClick={() => window.location.href = `/interventions/${int.id}`} style={{ cursor: 'pointer' }} onMouseEnter={e => (e.currentTarget.style.background = 'rgba(105,190,40,0.04)')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <td>
-                    <div style={{ fontWeight: 600 }}>{emp ? `${emp.first_name} ${emp.last_name}` : int.participant_id}</div>
-                    <div style={{ fontSize: 10, color: '#A5ACAF' }}>{int.department}</div>
-                  </td>
-                  <td>{int.trigger_metric}</td>
-                  <td style={{ fontWeight: 700, color: '#ff6b6b' }}>{int.trigger_value}</td>
-                  <td>{int.intervention_type}</td>
-                  <td style={{ color: '#A5ACAF' }}>{int.assigned_to}</td>
-                  <td style={{ color: '#A5ACAF' }}>{int.date_triggered ? formatDate(int.date_triggered) : '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <Badge variant={statusVariant(int.outcome) as any}>{int.outcome}</Badge>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <InterventionsTableClient interventions={interventionsForTable} empMap={empMap} />
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>

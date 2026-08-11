@@ -248,10 +248,12 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 
-  const responseDueAt = getResponseDueAt(nudge.week_of)
-  if (responseDueAt.getTime() < Date.now()) {
-    return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
-  }
+  // TODO: review after 2026-09-01 — response window check removed with 48-hour feature
+  // const responseDueAt = getResponseDueAt(nudge.week_of)
+  // if (responseDueAt.getTime() < Date.now()) {
+  //   return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
+  // }
+  void getResponseDueAt // suppress unused warning until TODO resolved
 
   // Use RPC to upsert encrypted acknowledgement
   const { data, error } = await supabase
