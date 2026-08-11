@@ -122,7 +122,7 @@ Expected: participant rows with `progress_value`, `completed`.
 
 Via admin UI → click **Cancel** → enter reason → **Confirm cancel**.
 
-Expected: `200`, `status: "cancelled"`. Employee dashboard shows cancelled state.
+Expected: `200`, `status: "cancelled"`. Participant dashboard shows cancelled state.
 
 ### 11. Complete a challenge (manual force-close)
 
@@ -132,7 +132,7 @@ Expected: `200`, `status: "completed"`.
 
 ---
 
-## Employee smoke-test flow
+## Participant smoke-test flow
 
 ### 1. Log in as a participant
 
@@ -232,7 +232,7 @@ Review structured logs for these events:
 
 1. Set `PILOT_CHALLENGES_BASIC=false` in environment and redeploy.
    - All challenge API routes return `404`.
-   - Challenge card is hidden from employee dashboard.
+   - Challenge card is hidden from participant dashboard.
    - Admin sidebar entry is hidden.
 
 2. Data is preserved read-only in `challenges`, `challenge_participants`, `challenge_audit_log`.
