@@ -113,7 +113,7 @@ async function seed() {
     { id: 'EMP007', first_name: 'David',    last_name: 'Rosamond',     department: 'Admin',          title: 'HR Coordinator',  device_id: 'WHP-007', cohort: 'management',  enrolled_date: '2026-03-01', is_exact_data: false },
     { id: 'EMP008', first_name: 'Dzenan',   last_name: 'Blambic',      department: 'ICU',            title: 'ICU Nurse',       device_id: 'WHP-008', cohort: 'night-shift', enrolled_date: '2026-03-15', is_exact_data: false },
     { id: 'EMP009', first_name: 'Eddie',    last_name: 'Rediske',      department: 'Emergency Dept', title: 'ER Tech',         device_id: 'WHP-009', cohort: 'day-shift',   enrolled_date: '2026-04-01', is_exact_data: false },
-    { id: 'EMP010', first_name: 'Caleb',    last_name: 'Stone',        department: 'Surgery',        title: 'Surgical RN',     device_id: 'WHP-010', cohort: 'day-shift',   enrolled_date: '2026-04-01', is_exact_data: false },
+    { id: 'EMP010', first_name: 'Caleb',    last_name: 'Stone',        department: 'Surgery',        title: 'Surgical RN',     device_id: 'WHP-010', cohort: 'day-shift',   enrolled_date: '2026-08-01', is_exact_data: false },
   ]
 
   const authUserIds: Record<string, string> = {}
