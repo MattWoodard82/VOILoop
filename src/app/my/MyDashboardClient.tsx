@@ -222,6 +222,22 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
               Rules
             </Link>
           ) : null}
+          <Link
+            href="/my/healthcheck"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '6px 12px',
+              borderRadius: 999,
+              border: '1px solid #0a3560',
+              color: '#A5ACAF',
+              textDecoration: 'none',
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            Healthcheck
+          </Link>
         </div>
       </div>
 <EventsNudgeCard />
