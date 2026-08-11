@@ -4,14 +4,31 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Alert, Badge, Card } from '@/components/ui'
 import { parseFrontendError } from '@/lib/frontend-error'
 
+// Maps API error codes to human-readable messages
+function formatApiError(code: string | undefined, fallback: string): string {
+  const messages: Record<string, string> = {
+    CHALLENGE_ACTIVE_EXISTS: 'Another challenge is already active. Cancel or complete it before activating this one.',
+    INVALID_WINDOW: 'The time window is invalid. Make sure the end date is after the start date.',
+    INVALID_THRESHOLD: 'Threshold must be a positive whole number.',
+    INVALID_ELIGIBILITY: 'Eligibility definition is invalid or missing required fields.',
+    INVALID_NAME: 'Name must be between 3 and 120 characters.',
+    INVALID_DESCRIPTION: 'Description must be 1000 characters or fewer.',
+    INVALID_METRIC_TYPE: 'Unsupported metric type.',
+    VERSION_CONFLICT: 'This challenge was changed by someone else. Refresh and try again.',
+  }
+  return messages[code ?? ''] ?? fallback
+}
+
 type Challenge = {
   id: string
   name: string
   description: string | null
   status: 'draft' | 'active' | 'completed' | 'cancelled'
+  metric_type: string
   threshold_value: number
   window_start_at: string
   window_end_at: string
+  eligibility_mode: string
   version: number
 }
 
@@ -47,12 +64,17 @@ export function ChallengesAdminClient() {
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
 
+  // Confirmation modal state
+  const [activateModal, setActivateModal] = useState<Challenge | null>(null)
+  const [cancelModal, setCancelModal] = useState<Challenge | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+
   const activeChallenge = useMemo(() => challenges.find((challenge) => challenge.status === 'active') ?? null, [challenges])
 
   const setErrorFromResponse = async (response: Response, fallbackMessage: string) => {
     const parsed = await parseFrontendError(response, fallbackMessage)
-    const detail = parsed.detail ? ` (${parsed.detail})` : ''
-    setError(`${parsed.message}${detail}`)
+    const errorCode = parsed.detail ?? undefined
+    setError(formatApiError(errorCode, `${parsed.message}${parsed.detail ? ` (${parsed.detail})` : ''}`))
   }
 
   const loadChallenges = async () => {
@@ -159,20 +181,23 @@ export function ChallengesAdminClient() {
       await setErrorFromResponse(response, 'Failed to activate challenge')
       return
     }
+    setActivateModal(null)
     await loadChallenges()
   }
 
-  const cancelChallenge = async (challenge: Challenge) => {
+  const cancelChallenge = async (challenge: Challenge, reason: string) => {
     setError(null)
     const response = await fetch(`/api/admin/challenges/${challenge.id}/cancel`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ version: challenge.version, reason: 'cancelled during pilot validation' }),
+      body: JSON.stringify({ version: challenge.version, reason: reason.trim() || null }),
     })
     if (!response.ok) {
       await setErrorFromResponse(response, 'Failed to cancel challenge')
       return
     }
+    setCancelModal(null)
+    setCancelReason('')
     await loadChallenges()
   }
 
@@ -203,6 +228,56 @@ export function ChallengesAdminClient() {
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       {error && <Alert variant="warn">{error}</Alert>}
+
+      {/* Activate confirmation modal */}
+      {activateModal && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Activate challenge?</h3>
+            <p style={{ margin: '0 0 12px', color: '#A5ACAF', fontSize: 13 }}>
+              <strong style={{ color: '#fff' }}>{activateModal.name}</strong> will become the active challenge.
+              Once activated, the following fields are <strong style={{ color: '#ffd966' }}>locked and cannot be changed</strong>:
+            </p>
+            <ul style={{ margin: '0 0 16px', paddingLeft: 20, fontSize: 13, color: '#A5ACAF', lineHeight: 1.8 }}>
+              <li>Metric type: <strong style={{ color: '#fff' }}>{activateModal.metric_type}</strong></li>
+              <li>Threshold: <strong style={{ color: '#fff' }}>{activateModal.threshold_value}</strong></li>
+              <li>Window: <strong style={{ color: '#fff' }}>{new Date(activateModal.window_start_at).toLocaleDateString()} – {new Date(activateModal.window_end_at).toLocaleDateString()}</strong></li>
+              <li>Eligibility mode: <strong style={{ color: '#fff' }}>{activateModal.eligibility_mode}</strong></li>
+            </ul>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setActivateModal(null)} style={{ ...buttonStyle, background: '#1a2a3a' }}>Cancel</button>
+              <button type="button" onClick={() => activateChallenge(activateModal)} style={{ ...buttonStyle, background: '#1f5f2f' }}>Confirm activate</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel confirmation modal */}
+      {cancelModal && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Cancel challenge?</h3>
+            <p style={{ margin: '0 0 12px', color: '#A5ACAF', fontSize: 13 }}>
+              This will cancel <strong style={{ color: '#fff' }}>{cancelModal.name}</strong>.
+              {cancelModal.status === 'active' && ' No further progress or completion events will be recorded after cancellation.'}
+              {' '}This action cannot be undone.
+            </p>
+            <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF', marginBottom: 16 }}>
+              Reason (optional)
+              <input
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                placeholder="e.g. Criteria need adjustment"
+                style={inputStyle}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => { setCancelModal(null); setCancelReason('') }} style={{ ...buttonStyle, background: '#1a2a3a' }}>Go back</button>
+              <button type="button" onClick={() => cancelChallenge(cancelModal, cancelReason)} style={{ ...buttonStyle, background: '#5d2231' }}>Confirm cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <Card title="Create draft challenge" badge={<Badge variant="amber">Pilot</Badge>}>
         <div style={{ display: 'grid', gridTemplateColumns: '1.8fr .7fr .8fr .8fr auto', gap: 8, alignItems: 'end' }}>
@@ -263,10 +338,10 @@ export function ChallengesAdminClient() {
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     {challenge.status === 'draft' && (
-                      <button type="button" onClick={() => activateChallenge(challenge)} style={buttonStyle}>Activate</button>
+                      <button type="button" onClick={() => setActivateModal(challenge)} style={buttonStyle}>Activate</button>
                     )}
                     {(challenge.status === 'draft' || challenge.status === 'active') && (
-                      <button type="button" onClick={() => cancelChallenge(challenge)} style={{ ...buttonStyle, marginLeft: 8, background: '#5d2231' }}>
+                      <button type="button" onClick={() => { setCancelModal(challenge); setCancelReason('') }} style={{ ...buttonStyle, marginLeft: 8, background: '#5d2231' }}>
                         Cancel
                       </button>
                     )}
@@ -366,4 +441,24 @@ const buttonStyle: CSSProperties = {
   fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'Inter, sans-serif',
+}
+
+const overlayStyle: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.65)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
+}
+
+const modalStyle: CSSProperties = {
+  background: '#002244',
+  border: '1px solid #0a3560',
+  borderRadius: 12,
+  padding: 24,
+  maxWidth: 480,
+  width: '100%',
+  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
 }
