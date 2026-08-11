@@ -41,7 +41,14 @@ describe('admin events routes', () => {
       error: null,
     }))
     const nudgesLimit = jest.fn(async () => ({
-      data: [{ id: 'nud-1', message: 'Hydrate today' }],
+      data: [{
+        id: 'nud-1',
+        message: 'Hydrate today',
+        author: 'Coach',
+        created_at: '2026-08-10T12:00:00Z',
+        response_due_at: '2026-08-12T12:00:00Z',
+        nudge_acknowledgement_targets: [{ target_type: 'participant', participant_id: 'p-1', target_label: '' }],
+      }],
       error: null,
     }))
     mockCreateServerSupabaseClient.mockReturnValue({
@@ -84,7 +91,7 @@ describe('admin events routes', () => {
         if (table === 'nudge_acknowledgements') {
           return {
             select: jest.fn(() => ({
-              eq: jest.fn(() => ({
+              in: jest.fn(() => ({
                 order: jest.fn(async () => ({ data: [], error: null })),
               })),
             })),
@@ -104,6 +111,10 @@ describe('admin events routes', () => {
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
       participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
       acknowledgements: [],
+    })
+    expect(body.nudges[0]).toMatchObject({
+      target_type: 'participant',
+      participant_id: 'p-1',
     })
   })
 

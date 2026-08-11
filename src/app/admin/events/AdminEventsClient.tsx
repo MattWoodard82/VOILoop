@@ -18,8 +18,12 @@ interface Nudge {
   week_of: string
   message: string
   author: string
+  created_at?: string
+  updated_at?: string
+  response_due_at?: string
   target_type?: string
   target_label?: string
+  participant_id?: string | null
 }
 
 interface Participant {
@@ -47,6 +51,7 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
 }
 
 interface Acknowledgement {
+  nudge_id?: string
   participant_id: string
   first_name: string
   last_name: string
@@ -142,6 +147,18 @@ export function AdminEventsClient() {
     if (!response.ok) {
       const message = await parseErrorMessage(response, 'Unable to delete event.')
       setError(`Unable to delete event: ${message}`)
+      return
+    }
+    await loadData()
+  }
+
+  const deleteNudge = async (id: string) => {
+    const response = await fetch(`/api/admin/events/${encodeURIComponent(id)}?kind=nudge`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) {
+      const message = await parseErrorMessage(response, 'Unable to delete nudge.')
+      setError(`Unable to delete nudge: ${message}`)
       return
     }
     await loadData()
@@ -349,13 +366,38 @@ export function AdminEventsClient() {
 
           <div style={s.card}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 12 }}>Previous nudges</div>
+            {nudges.length === 0 && (
+              <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No weekly nudges have been published yet.</div>
+            )}
             {nudges.map(n => (
               <div key={n.id} style={{ padding: '10px 0', borderBottom: '1px solid #0a3560' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600 }}>Week of {n.week_of}</div>
-                  <div style={{ fontSize: 10, color: '#A5ACAF' }}>— {n.author}</div>
+                  <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600 }}>
+                    Published {n.created_at ? new Date(n.created_at).toLocaleString() : `week of ${n.week_of}`}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ fontSize: 10, color: '#A5ACAF' }}>— {n.author}</div>
+                    <button
+                      onClick={() => deleteNudge(n.id)}
+                      style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 5, padding: '3px 8px', fontSize: 10, color: '#ff6b6b', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.5 }}>{n.message}</div>
+                <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>
+                  Target: {n.target_type === 'participant'
+                    ? `Individual participant${n.participant_id ? ` (${n.participant_id})` : ''}`
+                    : n.target_type === 'subgroup'
+                      ? `Subgroup (${n.target_label || 'unnamed'})`
+                      : 'All participants'}
+                </div>
+                {n.response_due_at && (
+                  <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>
+                    Response window closes {new Date(n.response_due_at).toLocaleString()}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -364,12 +406,12 @@ export function AdminEventsClient() {
 
       {tab === 'responses' && (
         <div style={s.card}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Nudge responses · most recent nudge</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Nudge responses · recent nudges</div>
           <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 14 }}>
-            Participant reflections submitted for this week&apos;s nudge. Responses are decrypted for wellness director review only.
+            Participant reflections submitted for the recent weekly nudges. Responses are decrypted for wellness director review only.
           </div>
           {acknowledgements.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No responses yet for the most recent nudge.</div>
+            <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No responses found for the recent nudges.</div>
           ) : acknowledgements.map((ack, i) => (
             <div key={ack.participant_id} style={{ padding: '12px 0', borderBottom: i < acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>

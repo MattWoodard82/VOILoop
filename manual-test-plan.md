@@ -171,12 +171,12 @@
 - [x] **20. Physiological trend flag** — Same participant -> trend badge shows declining/improving/steady.
 - [x] **21. Risk tier color** — Same participant -> Green/Yellow/Red badge + reason text shown.
 - [x] **22. Cold-start "Building baseline"** — Admin/wellness director loads `http://localhost:3000/wellness-director` and selects a participant enrolled <21 days -> "Building baseline" badge instead of risk color.
-- [ ] **23. Admin override - snooze** — Load `http://localhost:3000/wellness-director` -> enter note + days -> Snooze -> UI shows Snoozed and, in browser Network, `POST /api/admin/wellness-director-overrides` succeeds.
-- [ ] **24. Admin override - dismiss** — Load `http://localhost:3000/wellness-director` -> Dismiss flow -> UI shows Dismissed.
-- [ ] **25. Weight editor saves** — Load `http://localhost:3000/wellness-director` -> adjust to valid 100 total -> "Saving..." then "Saved" and, in browser Network, `/api/admin/wellness-director-config` returns 200.
-- [ ] **26. Participant blocked from WD dashboard** — Participant loads `http://localhost:3000/wellness-director` -> redirected to `http://localhost:3000/my`.
-- [ ] **27. Engagement score weights table** — Studio `engagement_score_weights` -> 5 default weight rows present.
-- [ ] **28. Login tracking fires** — Log in -> Studio `login_activity` has new row with correct `auth_user_id` + timestamp.
+- [x] **23. Admin override - snooze** — Load `http://localhost:3000/wellness-director` -> enter note + days -> Snooze -> UI shows Snoozed and, in browser Network, `POST /api/admin/wellness-director-overrides` succeeds.
+- [x] **24. Admin override - dismiss** — Load `http://localhost:3000/wellness-director` -> Dismiss flow -> UI shows Dismissed.
+- [x] **25. Weight editor saves** — Load `http://localhost:3000/wellness-director` -> adjust to valid 100 total -> "Saving..." then "Saved" and, in browser Network, `/api/admin/wellness-director-config` returns 200.
+- [x] **26. Participant blocked from WD dashboard** — Participant loads `http://localhost:3000/wellness-director` -> redirected to `http://localhost:3000/my`.
+- [x] **27. Engagement score weights table** — Studio `engagement_score_weights` -> 5 default weight rows present.
+- [x] **28. Login tracking fires** — Log in -> Studio `login_activity` has new row with correct `auth_user_id` + timestamp.
 
 ### Detailed manual flow: verify cold-start "Building baseline"
 1. **Use the seeded cold-start participant**
@@ -208,18 +208,25 @@
    - Confirm they show their normal risk color badge or risk label instead.
 
 ## Cross-cutting Privacy Checks
-- [ ] **29. Admin can't see ranking names** — As admin, in browser devtools Network, trigger an authenticated request to `GET /api/participant/ranking?metric=recovery` -> 403 Forbidden.
-- [ ] **30. Participant can't see WD data** — As participant, in browser devtools Network, trigger an authenticated request to `GET /api/admin/wellness-director-config` -> 401 or 403.
-- [ ] **31. RLS on new tables** — As anon, query `engagement_score_weights` -> only allowed rows (or empty), no cross-participant exposure.
+- [x] **29. Admin can't see ranking names** — As admin, in browser devtools Network, trigger an authenticated request to `GET /api/participant/ranking?metric=recovery` -> 403 Forbidden.
+- [x] **30. Participant can't see WD data** — As participant, in browser devtools Network, trigger an authenticated request to `GET /api/admin/wellness-director-config` -> 401 or 403.
+- [x] **31. RLS on new tables** — As anon, query `engagement_score_weights` -> only allowed rows (or empty), no cross-participant exposure.
 
 ## Still requires manual validation (not fully covered by automated tests)
-- [ ] **6. Nudge tables exist** — Studio table presence/shape check.
-- [ ] **7. Nudge reply is encrypted** — Verify stored ciphertext/bytea in DB, not just request success.
-- [ ] **8. Events nudge card renders** — UI presence is partially covered, but end-to-end participant rendering still needs manual confirmation.
-- [ ] **17. No-data state** — Data-logic fallback is covered, but end-to-end no-data dashboard rendering still needs manual confirmation.
-- [ ] **22. Cold-start "Building baseline"** — Baseline text is covered, but end-to-end participant selection flow still needs manual confirmation.
-- [ ] **23. Admin override - snooze** — API path is covered, but interactive UI + network behavior still needs manual confirmation.
-- [ ] **24. Admin override - dismiss** — API path is covered, but interactive UI dismiss flow still needs manual confirmation.
+- [x] **6. Nudge tables exist** — Studio table presence/shape check.
+- [x] **7. Nudge reply is encrypted** — Verify stored ciphertext/bytea in DB, not just request success.
+- [x] **8. Events nudge card renders** — UI presence is partially covered, but end-to-end participant rendering still needs manual confirmation.
+- [x] **17. No-data state** — Data-logic fallback is covered, but end-to-end no-data dashboard rendering still needs manual confirmation.
+- [x] **22. Cold-start "Building baseline"** — Baseline text is covered, but end-to-end participant selection flow still needs manual confirmation.
+- [x] **23. Admin override - snooze** — API path is covered, but interactive UI + network behavior still needs manual confirmation.
+- [x] **24. Admin override - dismiss** — API path is covered, but interactive UI dismiss flow still needs manual confirmation.
+
+## Challenge recompute cron validation
+
+- [ ] **Local automated cron auth** — Run `npm test -- --runInBand src/lib/challenges/__tests__/access.test.ts src/app/api/admin/challenges/recompute/route.test.ts` and confirm the cron-secret path is accepted without a session.
+- [ ] **Local automated recompute logic** — Run `npm test -- --runInBand src/lib/challenges/__tests__/progress.test.ts` and confirm scheduled recompute still updates progress and audit metadata correctly.
+- [ ] **Local route invocation with cron secret** — Start localhost, set `CRON_SECRET`, then `curl -X POST http://localhost:3000/api/admin/challenges/recompute -H "Authorization: Bearer <CRON_SECRET>"` and confirm JSON includes either `active_challenge` info or `{ "active_challenge": null, "updated_participants": 0 }`.
+- [ ] **Production cron observability** — In Vercel, confirm the cron schedule targets `/api/admin/challenges/recompute`, uses the same `CRON_SECRET`, and emits periodic `challenge_recompute_triggered` / `challenge_recompute_completed` logs or `challenge_recompute_no_active` when nothing is active.
 - [ ] **25. Weight editor saves** — API path and slider rendering are covered, but interactive save UX still needs manual confirmation.
 - [ ] **26. Participant blocked from WD dashboard** — Redirect logic is covered by middleware tests, but browser redirect behavior still needs manual confirmation.
 - [ ] **27. Engagement score weights table** — Studio table contents check.

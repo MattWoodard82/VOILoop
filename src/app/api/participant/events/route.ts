@@ -59,7 +59,7 @@ async function getTargetedNudge(
     .from('weekly_nudges')
     .select('id, message, author, week_of, nudge_acknowledgement_targets!inner(target_type, target_label, participant_id)')
     .lte('week_of', weekOf)
-    .order('week_of', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(10)
 
   if (error) return { error }

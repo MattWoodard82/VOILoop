@@ -378,6 +378,9 @@ export async function getTeamDashboard(): Promise<{
     getLatestPulse(),
     getInterventions(),
   ])
+  const riskFlags = participantIds.length > 0
+    ? await getRiskFlagsForParticipants(participantIds)
+    : []
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
   const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
@@ -386,6 +389,12 @@ export async function getTeamDashboard(): Promise<{
   }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const riskFlagMap = new Map<string, RiskFlag>()
+  for (const flag of riskFlags) {
+    if (!riskFlagMap.has(flag.participant_id)) {
+      riskFlagMap.set(flag.participant_id, flag)
+    }
+  }
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
@@ -432,6 +441,11 @@ export async function getTeamDashboard(): Promise<{
       ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
     ]
     const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
+    const overrideFlag = riskFlagMap.get(emp.id) ?? null
+    const snoozeExpired = overrideFlag?.override_state === 'snoozed'
+      && overrideFlag.override_expires_at != null
+      && new Date(overrideFlag.override_expires_at).getTime() <= Date.now()
+    const overrideState = snoozeExpired ? null : overrideFlag?.override_state ?? null
     const riskTriggers = [
       ...(engagementScore.score < 35 ? ['Low engagement score'] : []),
       ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
@@ -454,8 +468,9 @@ export async function getTeamDashboard(): Promise<{
       risk_trigger_reasons: riskTriggers,
       baseline_state: baselineState,
       baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
-      override_state: null,
-      override_note: null,
+      override_state: overrideState,
+      override_note: overrideFlag?.override_reason ?? null,
+      override_expires_at: snoozeExpired ? null : overrideFlag?.override_expires_at ?? null,
     }
   })
 
@@ -476,6 +491,19 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { participants: enriched, stats, interventions }
+}
+
+async function getRiskFlagsForParticipants(participantIds: string[]): Promise<RiskFlag[]> {
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('risk_flags')
+    .select('*')
+    .in('participant_id', participantIds)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
 }
 
 function buildParticipantRankContext(

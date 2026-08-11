@@ -51,8 +51,8 @@ export async function GET() {
       .order('event_date', { ascending: true }),
     supabase
       .from('weekly_nudges')
-      .select('*')
-      .order('week_of', { ascending: false })
+      .select('id, week_of, message, author, created_at, updated_at, response_due_at, nudge_acknowledgement_targets(target_type, target_label, participant_id)')
+      .order('created_at', { ascending: false })
       .limit(8),
     adminClient
       .from('participants')
@@ -67,15 +67,21 @@ export async function GET() {
   if (nudgesError) {
     return NextResponse.json({ error: nudgesError.message }, { status: 500 })
   }
+  if (participantsError) {
+    return NextResponse.json({ error: participantsError.message }, { status: 500 })
+  }
 
-  // Fetch acknowledgements for the most recent nudge and decrypt them
-  const recentNudge = nudges?.[0] ?? null
+  // Fetch acknowledgements for the recent nudges list. This preserves visibility
+  // when older responses exist and also keeps legacy/stranded weekly_nudges rows
+  // visible to admins even if a target row is missing.
+  const recentNudges = nudges ?? []
+  const recentNudgeIds = recentNudges.map((nudge) => nudge.id).filter(Boolean)
   let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
-  if (recentNudge) {
+  if (recentNudgeIds.length > 0) {
     const { data: acks } = await adminClient
       .from('nudge_acknowledgements')
-      .select('participant_id, acknowledged_at, response_text_encrypted')
-      .eq('nudge_id', recentNudge.id)
+      .select('nudge_id, participant_id, acknowledged_at, response_text_encrypted')
+      .in('nudge_id', recentNudgeIds)
       .order('acknowledged_at', { ascending: false })
 
     if (acks && acks.length > 0) {
@@ -102,7 +108,31 @@ export async function GET() {
     }
   }
 
-  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [], participants: participants ?? [], acknowledgements, recent_nudge_id: recentNudge?.id ?? null })
+  const normalizedNudges = (nudges ?? []).map((nudge) => {
+    const targets = Array.isArray((nudge as { nudge_acknowledgement_targets?: unknown }).nudge_acknowledgement_targets)
+      ? (nudge as { nudge_acknowledgement_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_acknowledgement_targets
+      : [((nudge as { nudge_acknowledgement_targets?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_acknowledgement_targets ?? {})]
+    const primaryTarget = targets.find(Boolean) ?? {}
+    return {
+      ...nudge,
+      target_type: primaryTarget.target_type ?? 'all',
+      target_label: primaryTarget.target_label ?? '',
+      participant_id: primaryTarget.participant_id ?? null,
+    }
+  })
+
+  return NextResponse.json({
+    events: events ?? [],
+    nudges: normalizedNudges,
+    participants: participants ?? [],
+    acknowledgements,
+    recent_nudge_id: normalizedNudges[0]?.id ?? null,
+    diagnostics: {
+      nudge_count: normalizedNudges.length,
+      acknowledgement_count: acknowledgements.length,
+      missing_target_rows: normalizedNudges.some((nudge) => !(nudge as { target_type?: string }).target_type),
+    },
+  })
 }
 
 export async function POST(request: Request) {

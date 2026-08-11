@@ -55,7 +55,8 @@ export function WellnessDirectorClient({ participants }: Props) {
     return result
   }, [participants, deptFilter, personFilter])
 
-  const selected = personFilter !== 'All' ? filtered[0] ?? null : deptFilter !== 'All' ? filtered[0] ?? null : participants[0] ?? null
+  const selected = personFilter !== 'All' ? filtered[0] ?? null : null
+  const overrideDisabled = selected == null
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
@@ -167,6 +168,7 @@ export function WellnessDirectorClient({ participants }: Props) {
               </div>
               <div style={{ fontSize: 12, color: '#A5ACAF' }}>
                 Override: <span style={{ color: '#fff' }}>{overrideLabel(overrides[selected.id] ?? selected.override_state)}</span>
+                {(selected.override_expires_at && (overrides[selected.id] ?? selected.override_state) === 'snoozed') ? ` until ${new Date(selected.override_expires_at).toLocaleDateString()}` : ''}
               </div>
               <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
                 Note
@@ -212,12 +214,14 @@ export function WellnessDirectorClient({ participants }: Props) {
                 <button
                   type="button"
                   className="btn-primary"
+                  disabled={overrideDisabled}
                   onClick={() => persistOverride(selected.id, 'snooze').catch(() => {})}
                 >
                   {overrideStatus === 'saving' ? 'Saving…' : 'Snooze'}
                 </button>
                 <button
                   type="button"
+                  disabled={overrideDisabled}
                   onClick={() => persistOverride(selected.id, 'dismiss').catch(() => {})}
                   style={{
                     background: '#001a33',
@@ -238,7 +242,7 @@ export function WellnessDirectorClient({ participants }: Props) {
               {overrideStatus === 'error' && <div style={{ fontSize: 11, color: '#ff6b6b' }}>{overrideError}</div>}
             </div>
           ) : (
-            <div style={{ fontSize: 12, color: '#A5ACAF' }}>Choose a participant to review baseline status and overrides.</div>
+            <div style={{ fontSize: 12, color: '#A5ACAF' }}>Select a participant to enable note, snooze, and dismiss controls. No override will be saved until a participant is selected.</div>
           )}
         </Card>
         <Card title="Engagement-score weights">
@@ -255,6 +259,7 @@ export function WellnessDirectorClient({ participants }: Props) {
                   type="range"
                   min={0}
                   max={100}
+                  step={5}
                   value={value}
                   onChange={(e) => {
                     const next = { ...weights, [key]: Number(e.target.value) }

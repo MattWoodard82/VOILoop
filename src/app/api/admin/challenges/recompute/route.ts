@@ -6,8 +6,8 @@ import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
-export async function POST() {
-  const auth = await requireChallengeOperator()
+export async function POST(request: Request) {
+  const auth = await requireChallengeOperator(request)
   if ('error' in auth) return auth.error
 
   const supabase = createAdminSupabaseClient()

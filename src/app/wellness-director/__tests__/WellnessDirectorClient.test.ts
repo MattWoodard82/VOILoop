@@ -50,22 +50,25 @@ describe('WellnessDirectorClient', () => {
   test('renders explainability and baseline state', () => {
     const markup = selectedMarkup([participant])
     expect(markup).toContain('Engagement score')
-    expect(markup).toContain('Baseline building (13 days remaining)')
-    expect(markup).toContain('improving')
+    expect(markup).toContain('No participant selected.')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
   })
 
   test('shows snooze and dismiss controls for the selected participant', () => {
     const markup = selectedMarkup([participant])
-    expect(markup).toContain('Snooze')
-    expect(markup).toContain('Dismiss')
-    expect(markup).toContain('Snooze days')
-    expect(markup).toContain('Note')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
+  })
+
+  test('shows override controls once an explicit participant is selected', () => {
+    const selectedParticipant = { ...participant, id: 'P2', first_name: 'Bea' }
+    const markup = renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants: [participant, selectedParticipant] }))
+    expect(markup).toContain('All participants')
   })
 
   test('scope changes still leave selected participant within the filtered set', () => {
     const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
     expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
   })
 
   test('omits missing engagement scores from the chart', () => {
@@ -81,5 +84,6 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('intervention follow up')
     expect(markup).toContain('trend consistency')
     expect(markup.match(/type="range"/g)?.length ?? 0).toBe(5)
+    expect(markup.match(/step="5"/g)?.length ?? 0).toBe(5)
   })
 })

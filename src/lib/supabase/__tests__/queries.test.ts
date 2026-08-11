@@ -525,4 +525,94 @@ describe('getTeamDashboard', () => {
 
     jest.useRealTimers()
   })
+
+  test('keeps active snoozes visible until expiry and re-surfaces expired snoozes', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-10T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Alex',
+        last_name: 'Able',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'Nurse',
+        device_id: null,
+        consent: true,
+        enrolled_date: '2026-07-01T00:00:00Z',
+        status: 'Active',
+        is_exact_data: false,
+      },
+      {
+        id: 'P2',
+        first_name: 'Bea',
+        last_name: 'Baker',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'RN',
+        device_id: null,
+        consent: true,
+        enrolled_date: '2026-07-01T00:00:00Z',
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        engagement_score_weights: [
+          { weight_name: 'login_frequency_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'pulse_survey_completion_weight', weight_value: 20, organization_id: null },
+          { weight_name: 'data_submission_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'intervention_follow_up_weight', weight_value: 15, organization_id: null },
+          { weight_name: 'trend_consistency_weight', weight_value: 15, organization_id: null },
+        ],
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        risk_flags: [
+          {
+            id: 'flag-active',
+            participant_id: 'P1',
+            flag_type: 'wellness_director',
+            is_active: true,
+            severity: null,
+            override_state: 'snoozed',
+            override_reason: 'Check back later',
+            override_expires_at: '2026-08-12T00:00:00Z',
+            created_at: '2026-08-09T00:00:00Z',
+            updated_at: '2026-08-09T00:00:00Z',
+          },
+          {
+            id: 'flag-expired',
+            participant_id: 'P2',
+            flag_type: 'wellness_director',
+            is_active: true,
+            severity: null,
+            override_state: 'snoozed',
+            override_reason: 'Old snooze',
+            override_expires_at: '2026-08-09T00:00:00Z',
+            created_at: '2026-08-08T00:00:00Z',
+            updated_at: '2026-08-08T00:00:00Z',
+          },
+        ],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participantById = Object.fromEntries(dashboard.participants.map((participant) => [participant.id, participant]))
+
+    expect(participantById.P1.override_state).toBe('snoozed')
+    expect(participantById.P1.override_note).toBe('Check back later')
+    expect(participantById.P1.override_expires_at).toBe('2026-08-12T00:00:00Z')
+    expect(participantById.P2.override_state).toBeNull()
+    expect(participantById.P2.override_expires_at).toBeNull()
+
+    jest.useRealTimers()
+  })
 })

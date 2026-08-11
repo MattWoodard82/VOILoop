@@ -9,9 +9,15 @@ jest.mock('@/lib/supabase/server', () => ({
 describe('challenge access', () => {
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockGetUserAccess = getUserAccess as jest.MockedFunction<typeof getUserAccess>
+  const originalCronSecret = process.env.CRON_SECRET
 
   beforeEach(() => {
     jest.clearAllMocks()
+    process.env.CRON_SECRET = originalCronSecret
+  })
+
+  afterAll(() => {
+    process.env.CRON_SECRET = originalCronSecret
   })
 
   test('allows admins and wellness directors to operate challenges', () => {
@@ -47,5 +53,21 @@ describe('challenge access', () => {
       const response = result.error!
       expect(response.status).toBe(403)
     }
+  })
+
+  test('allows cron bearer secret without session auth', async () => {
+    process.env.CRON_SECRET = 'cron-secret'
+
+    const request = new Request('http://localhost/api/admin/challenges/recompute', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer cron-secret',
+      },
+    })
+
+    const result = await requireChallengeOperator(request)
+    expect(result).toMatchObject({ userId: 'vercel-cron', role: 'admin' })
+    expect(mockGetSession).not.toHaveBeenCalled()
+    expect(mockGetUserAccess).not.toHaveBeenCalled()
   })
 })

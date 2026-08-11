@@ -153,6 +153,58 @@ async function runRankingDiagnostics() {
   return { results: nextResults, rawResponses: nextRaw }
 }
 
+async function runPrivacyAndAccessDiagnostics() {
+  const nextResults: DiagnosticResult[] = []
+  const nextRaw: Record<string, unknown> = {}
+
+  const rankingForbiddenResponse = await fetch('/api/participant/ranking?metric=recovery', { credentials: 'include' })
+  const rankingForbiddenBody = await rankingForbiddenResponse.json().catch(() => ({})) as Record<string, unknown>
+  nextRaw.admin_ranking_probe = {
+    status: rankingForbiddenResponse.status,
+    body: rankingForbiddenBody,
+  }
+  nextResults.push({
+    name: 'Step 29: admin blocked from participant ranking API',
+    ok: rankingForbiddenResponse.status === 403,
+    detail: rankingForbiddenResponse.status === 403
+      ? 'Admin session correctly receives 403 from participant ranking.'
+      : `Expected 403, got ${rankingForbiddenResponse.status}.`,
+  })
+
+  const configResponse = await fetch('/api/admin/wellness-director-config', { credentials: 'include' })
+  const configBody = await configResponse.json().catch(() => ({})) as Record<string, unknown>
+  nextRaw.admin_config_probe = {
+    status: configResponse.status,
+    body: configBody,
+  }
+  nextResults.push({
+    name: 'Step 30: admin-only Wellness Director config present',
+    ok: configResponse.status === 200 && typeof configBody.config === 'object' && configBody.config != null,
+    detail: configResponse.status === 200
+      ? 'Admin config route returned Wellness Director weights.'
+      : `Expected 200 for admin healthcheck session, got ${configResponse.status}.`,
+  })
+
+  const requiredWeightKeys = [
+    'login_frequency_weight',
+    'pulse_survey_completion_weight',
+    'data_submission_weight',
+    'intervention_follow_up_weight',
+    'trend_consistency_weight',
+  ]
+  const weights = (configBody.config as { weights?: Record<string, unknown> } | undefined)?.weights ?? {}
+  const weightKeysPresent = requiredWeightKeys.every((key) => key in weights)
+  nextResults.push({
+    name: 'Step 31: engagement score weights storage provisioned',
+    ok: configResponse.status === 200 && weightKeysPresent,
+    detail: weightKeysPresent
+      ? `Found ${requiredWeightKeys.length} expected weight keys in admin config.`
+      : 'Expected all engagement score weight keys to be available.',
+  })
+
+  return { results: nextResults, rawResponses: nextRaw }
+}
+
 function runPriority4Diagnostics() {
   const nextResults: DiagnosticResult[] = []
   const nextRaw: Record<string, unknown> = {}
@@ -252,9 +304,10 @@ export function HealthcheckClient() {
 
     const ranking = await runRankingDiagnostics()
     const priority4 = runPriority4Diagnostics()
+    const privacy = await runPrivacyAndAccessDiagnostics()
 
-    setResults([...ranking.results, ...priority4.results])
-    setRawResponses({ ...ranking.rawResponses, ...priority4.rawResponses })
+    setResults([...ranking.results, ...priority4.results, ...privacy.results])
+    setRawResponses({ ...ranking.rawResponses, ...priority4.rawResponses, ...privacy.rawResponses })
     setRunning(false)
   }
 
@@ -268,7 +321,7 @@ export function HealthcheckClient() {
         badge={<Badge variant={failed > 0 ? 'red' : passed > 0 ? 'green' : 'wolf'}>{results.length === 0 ? 'Idle' : `${passed} passed / ${failed} failed`}</Badge>}
       >
         <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 12, lineHeight: 1.6 }}>
-          Runs participant-facing diagnostics for the currently signed-in user. This currently includes the Priority 1 privacy-safe ranking checks and the Priority 4 personal baseline/streaks/bests/trends validations.
+          Runs admin healthchecks covering Priority 1 privacy-safe ranking checks, Priority 4 personal baseline/streaks/bests/trends validations, and access/storage probes for manual steps 29-31.
         </div>
         <button
           onClick={runDiagnostics}
