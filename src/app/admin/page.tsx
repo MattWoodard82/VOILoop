@@ -118,7 +118,7 @@ export default async function AdminPage() {
             Run participant-facing diagnostics for ranking privacy and Priority 4 insight calculations.
           </div>
           <Link
-            href="/my/healthcheck"
+            href="/admin/healthcheck"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -132,7 +132,7 @@ export default async function AdminPage() {
               textDecoration: 'none',
             }}
           >
-            Open participant healthcheck
+            Open admin healthcheck
           </Link>
         </section>
       </div>
