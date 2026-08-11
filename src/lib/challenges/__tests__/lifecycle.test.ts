@@ -282,7 +282,7 @@ describe('duplicate event idempotency via recompute', () => {
       },
       participants: [
         // already completed
-        { id: 'cp-1', participant_id: 'EMP001', completed: true, updated_at: null },
+        { id: 'cp-1', participant_id: 'EMP001', progress_value: 3, completed: true, updated_at: null },
       ],
       workouts: [
         { participant_id: 'EMP001', start_time: '2026-07-11T08:00:00.000Z' },
@@ -315,7 +315,7 @@ describe('duplicate event idempotency via recompute', () => {
         version: 1,
       },
       participants: [
-        { id: 'cp-2', participant_id: 'EMP002', completed: false, updated_at: null },
+        { id: 'cp-2', participant_id: 'EMP002', progress_value: 0, completed: false, updated_at: null },
       ],
       workouts: [
         { participant_id: 'EMP002', start_time: '2026-07-01T08:00:00.000Z' },
@@ -345,7 +345,7 @@ describe('duplicate event idempotency via recompute', () => {
         version: 1,
       },
       participants: [
-        { id: 'cp-3', participant_id: 'EMP003', completed: false, updated_at: null },
+        { id: 'cp-3', participant_id: 'EMP003', progress_value: 0, completed: false, updated_at: null },
       ],
       workouts: [
         { participant_id: 'EMP003', start_time: '2026-07-10T08:00:00.000Z' },
@@ -359,5 +359,37 @@ describe('duplicate event idempotency via recompute', () => {
     const emp003 = updates.find((u) => u.id === 'cp-3')
     expect(emp003?.progress_value).toBe(2)
     expect(emp003?.completed).toBeUndefined()
+  })
+
+  test('recompute never decrements progress below stored value (monotonic guarantee)', async () => {
+    // Participant has progress_value=4 from a prior event-driven update.
+    // The reconciliation window only finds 2 workouts (e.g. late-ingest gap).
+    // The stored value must be preserved (max semantics).
+    const { supabase, participantUpdates } = buildSupabaseMock({
+      challenge: {
+        id: 'ch-4',
+        status: 'active',
+        threshold_value: 5,
+        window_start_at: '2026-07-01T00:00:00.000Z',
+        window_end_at: '2099-07-31T23:59:59.000Z',
+        version: 1,
+      },
+      participants: [
+        // Stored value is 4 — higher than the 2 workouts we'll see in this recompute run
+        { id: 'cp-4', participant_id: 'EMP004', progress_value: 4, completed: false, updated_at: '2026-07-12T00:00:00.000Z' },
+      ],
+      workouts: [
+        { participant_id: 'EMP004', start_time: '2026-07-10T08:00:00.000Z' },
+        { participant_id: 'EMP004', start_time: '2026-07-11T08:00:00.000Z' },
+      ],
+    })
+
+    await recomputeActiveChallengeProgress(supabase as never, { source: 'scheduled_recompute' })
+
+    const updates = participantUpdates.flat()
+    const emp004 = updates.find((u) => u.id === 'cp-4')
+    // Must retain stored value of 4, not overwrite with recomputed count of 2
+    expect(emp004?.progress_value).toBe(4)
+    expect(emp004?.completed).toBeUndefined()
   })
 })

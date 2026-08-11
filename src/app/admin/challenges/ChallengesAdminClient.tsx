@@ -73,8 +73,8 @@ export function ChallengesAdminClient() {
 
   const setErrorFromResponse = async (response: Response, fallbackMessage: string) => {
     const parsed = await parseFrontendError(response, fallbackMessage)
-    const errorCode = parsed.detail ?? undefined
-    setError(formatApiError(errorCode, `${parsed.message}${parsed.detail ? ` (${parsed.detail})` : ''}`))
+    // parsed.message contains the `error` field from the API JSON body (e.g. "CHALLENGE_ACTIVE_EXISTS")
+    setError(formatApiError(parsed.message, `${parsed.message}${parsed.detail ? ` (${parsed.detail})` : ''}`))
   }
 
   const loadChallenges = async () => {
@@ -232,8 +232,8 @@ export function ChallengesAdminClient() {
       {/* Activate confirmation modal */}
       {activateModal && (
         <div style={overlayStyle}>
-          <div style={modalStyle}>
-            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Activate challenge?</h3>
+          <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="activate-modal-title">
+            <h3 id="activate-modal-title" style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Activate challenge?</h3>
             <p style={{ margin: '0 0 12px', color: '#A5ACAF', fontSize: 13 }}>
               <strong style={{ color: '#fff' }}>{activateModal.name}</strong> will become the active challenge.
               Once activated, the following fields are <strong style={{ color: '#ffd966' }}>locked and cannot be changed</strong>:
@@ -243,6 +243,7 @@ export function ChallengesAdminClient() {
               <li>Threshold: <strong style={{ color: '#fff' }}>{activateModal.threshold_value}</strong></li>
               <li>Window: <strong style={{ color: '#fff' }}>{new Date(activateModal.window_start_at).toLocaleDateString()} – {new Date(activateModal.window_end_at).toLocaleDateString()}</strong></li>
               <li>Eligibility mode: <strong style={{ color: '#fff' }}>{activateModal.eligibility_mode}</strong></li>
+              <li>Eligibility definition: <strong style={{ color: '#fff' }}>{activateModal.eligibility_mode === 'filtered' ? 'filtered criteria (locked)' : 'all participants'}</strong></li>
             </ul>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setActivateModal(null)} style={{ ...buttonStyle, background: '#1a2a3a' }}>Cancel</button>
@@ -255,8 +256,8 @@ export function ChallengesAdminClient() {
       {/* Cancel confirmation modal */}
       {cancelModal && (
         <div style={overlayStyle}>
-          <div style={modalStyle}>
-            <h3 style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Cancel challenge?</h3>
+          <div style={modalStyle} role="dialog" aria-modal="true" aria-labelledby="cancel-modal-title">
+            <h3 id="cancel-modal-title" style={{ margin: '0 0 8px', color: '#fff', fontSize: 15 }}>Cancel challenge?</h3>
             <p style={{ margin: '0 0 12px', color: '#A5ACAF', fontSize: 13 }}>
               This will cancel <strong style={{ color: '#fff' }}>{cancelModal.name}</strong>.
               {cancelModal.status === 'active' && ' No further progress or completion events will be recorded after cancellation.'}

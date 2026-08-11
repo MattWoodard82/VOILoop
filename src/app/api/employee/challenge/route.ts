@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
+import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
 import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 export const runtime = 'nodejs'
@@ -8,11 +8,14 @@ export const runtime = 'nodejs'
  * GET /api/employee/challenge
  *
  * Returns the employee-facing active challenge state for the authenticated participant.
+ * Requires the caller to have the `participant` role.
  *
  * Response shape:
  *   { visibility_state: 'none' }
- *   { visibility_state: 'ineligible', id, name, status, threshold_value, window_start_at, window_end_at }
- *   { visibility_state: 'eligible', id, name, status, threshold_value, window_start_at, window_end_at,
+ *   { visibility_state: 'ineligible', id, name, status, version, threshold_value,
+ *     eligibility_mode, window_start_at, window_end_at }
+ *   { visibility_state: 'eligible', id, name, status, version, threshold_value,
+ *     eligibility_mode, window_start_at, window_end_at,
  *     progress_value, completed, completed_at, last_computed_at }
  */
 export async function GET() {
@@ -23,6 +26,11 @@ export async function GET() {
   const session = await getSession()
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const access = await getUserAccess(session.user.id)
+  if (access.role !== 'participant') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const supabase = createServerSupabaseClient()
@@ -45,7 +53,7 @@ export async function GET() {
   // Prefer the active challenge; fall back to most recent terminal challenge for frozen-state visibility
   const { data: activeChallenge, error: challengeError } = await supabase
     .from('challenges')
-    .select('id, name, status, threshold_value, window_start_at, window_end_at')
+    .select('id, name, status, version, threshold_value, eligibility_mode, window_start_at, window_end_at')
     .eq('status', 'active')
     .maybeSingle()
 
@@ -57,7 +65,7 @@ export async function GET() {
   if (!visibleChallenge) {
     const { data: terminalChallenge, error: terminalError } = await supabase
       .from('challenges')
-      .select('id, name, status, threshold_value, window_start_at, window_end_at')
+      .select('id, name, status, version, threshold_value, eligibility_mode, window_start_at, window_end_at')
       .in('status', ['cancelled', 'completed'])
       .order('updated_at', { ascending: false })
       .limit(1)
@@ -89,7 +97,9 @@ export async function GET() {
     id: visibleChallenge.id,
     name: visibleChallenge.name,
     status: visibleChallenge.status,
+    version: visibleChallenge.version,
     threshold_value: visibleChallenge.threshold_value,
+    eligibility_mode: visibleChallenge.eligibility_mode,
     window_start_at: visibleChallenge.window_start_at,
     window_end_at: visibleChallenge.window_end_at,
   }
