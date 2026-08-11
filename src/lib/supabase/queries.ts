@@ -115,6 +115,18 @@ export class ParticipantRankContextError extends Error {
   }
 }
 
+function getEnrolledDays(enrolledDate: string | null | undefined): number | null {
+  if (!enrolledDate) return null
+
+  const enrolledDay = enrolledDate.slice(0, 10)
+  const enrolledUtc = new Date(`${enrolledDay}T00:00:00Z`)
+  if (Number.isNaN(enrolledUtc.getTime())) return null
+
+  const now = new Date()
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  return Math.floor((todayUtc.getTime() - enrolledUtc.getTime()) / 86400000)
+}
+
 export async function getParticipants(supabase = getQueryClient()): Promise<Participant[]> {
   const { data, error } = await supabase
     .from('participants')
@@ -377,7 +389,7 @@ export async function getTeamDashboard(): Promise<{
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
-    const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
+    const enrolledDays = getEnrolledDays(emp.enrolled_date)
     const recentWellness = wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21)
     const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
     const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)

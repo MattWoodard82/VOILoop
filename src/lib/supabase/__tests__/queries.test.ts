@@ -480,4 +480,49 @@ describe('getTeamDashboard', () => {
     expect(dashboard.participants[0].latest_wellness?.day_strain).toBe(12.4)
     expect(dashboard.participants[0].latest_wellness?.recovery_score).toBe(80)
   })
+
+  test('marks participants enrolled within 21 days as building baseline', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-10T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1',
+        first_name: 'Caleb',
+        last_name: 'Stone',
+        department: 'Ops',
+        location_id: null,
+        employment_type: null,
+        title: 'RN',
+        device_id: null,
+        consent: true,
+        enrolled_date: '2026-08-01T00:00:00Z',
+        status: 'Active',
+        is_exact_data: false,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        engagement_score_weights: [
+          { weight_name: 'login_frequency_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'pulse_survey_completion_weight', weight_value: 20, organization_id: null },
+          { weight_name: 'data_submission_weight', weight_value: 25, organization_id: null },
+          { weight_name: 'intervention_follow_up_weight', weight_value: 15, organization_id: null },
+          { weight_name: 'trend_consistency_weight', weight_value: 15, organization_id: null },
+        ],
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    expect(dashboard.participants[0].baseline_state).toBe('building')
+    expect(dashboard.participants[0].baseline_days_remaining).toBe(12)
+
+    jest.useRealTimers()
+  })
 })
