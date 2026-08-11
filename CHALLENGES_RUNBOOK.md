@@ -2,7 +2,7 @@
 
 ## Overview
 
-This runbook covers local setup, admin/employee smoke testing, and rollback for the
+This runbook covers local setup, admin/participant smoke testing, and rollback for the
 `PILOT_CHALLENGES_BASIC` feature (Issue #16).
 
 ---
@@ -163,9 +163,9 @@ If the participant is not in `challenge_participants.is_eligible = true`:
 ### 6. Verify API endpoint directly
 
 ```
-GET /api/employee/challenge
+GET /api/participant/challenge
 ```
-(Must be authenticated as the participant user)
+(Must be authenticated as a participant user)
 
 Expected payload example:
 ```json
@@ -247,14 +247,14 @@ Review structured logs for these events:
 - [ ] Admin cannot activate if any required field is invalid
 - [ ] Admin cannot activate if another challenge is already active
 - [ ] Exactly one active challenge exists at any time
-- [ ] Eligible employee sees active challenge with accurate threshold and progress values
+- [ ] Eligible participant sees active challenge with accurate threshold and progress values
 - [ ] Completion flips exactly once per participant when `progress >= threshold` within window
 - [ ] Duplicate events / retries do not create duplicate completion side effects
 - [ ] Active challenge immutable fields cannot be edited; API returns clear validation error
 - [ ] Completed/cancelled challenges reject rule mutations
 - [ ] Event-driven updates + scheduled recompute converge within 15-minute consistency target
 - [ ] Recompute and event failures are observable via logs
-- [ ] Authorization boundaries are enforced for all admin and employee endpoints
+- [ ] Authorization boundaries are enforced for all admin and participant endpoints
 - [ ] Audit log records all admin lifecycle actions with actor and timestamp
-- [ ] Employee `GET /api/employee/challenge` returns correct payload shape
+- [ ] `GET /api/participant/challenge` returns correct payload shape
 - [ ] Cron endpoint rejects requests without correct `CRON_SECRET`
