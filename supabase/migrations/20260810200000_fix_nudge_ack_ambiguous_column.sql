@@ -16,24 +16,32 @@ begin
     return json_build_object('error', 'Response text cannot be empty')::jsonb;
   end if;
 
+  -- TODO: review after 2026-09-01 — response window check removed with 48-hour feature
+  -- if not exists (
+  --   select 1 from public.weekly_nudges where id = p_nudge_id and response_due_at > now()
+  -- ) then
+  --   return json_build_object('error', 'Nudge not found or response window has closed')::jsonb;
+  -- end if;
   if not exists (
-    select 1 from public.weekly_nudges where id = p_nudge_id and response_due_at > now()
+    select 1 from public.weekly_nudges where id = p_nudge_id
   ) then
-    return json_build_object('error', 'Nudge not found or response window has closed')::jsonb;
+    return json_build_object('error', 'Nudge not found')::jsonb;
   end if;
 
-  insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text_encrypted, acknowledged_at, response_due_at)
+  insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text, response_text_encrypted, acknowledged_at, response_due_at)
   values (
     p_nudge_id,
     p_participant_id,
+    p_response_text,
     pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
     now(),
     (select response_due_at from public.weekly_nudges where id = p_nudge_id)
   )
   on conflict (nudge_id, participant_id) do update
-  set response_text_encrypted = pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
+  set response_text = p_response_text,
+      response_text_encrypted = pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
       acknowledged_at = now()
-  where nudge_acknowledgements.response_due_at > now()
+  -- TODO: review after 2026-09-01 — removed WHERE response_due_at > now() guard (48-hour window commented out)
   returning json_build_object('id', id, 'acknowledged_at', acknowledged_at) into v_result;
 
   return coalesce(v_result, '{"error": "Failed to upsert acknowledgement"}'::jsonb);

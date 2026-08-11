@@ -6,7 +6,7 @@
  * relevant tables to reflect the current schema, and provisions user_access
  * rows so participants can log in immediately after reset.
  *
- * test1@user.com  → Colin Stephenson (EMP005)  password: Test1234
+ * test1@user.com  → Colin Stephenson (EMP005)  password: Password!
  * All other participants get <firstname>@voiloop.local  password: Pilot1234
  */
 
@@ -389,7 +389,7 @@ async function seed() {
 
   console.log('\n🎉 VOILoop database seeded successfully!')
   console.log('   Travis Brandenburgh (EMP001) — exact WHOOP data, travis@voiloop.local / Pilot1234')
-  console.log('   Colin Stephenson (EMP005)   — test1@user.com / Test1234')
+  console.log('   Colin Stephenson (EMP005)   — test1@user.com / Password!')
   console.log('   8 other participants        — <firstname>@voiloop.local / Pilot1234')
   console.log('   4 interventions             — 2 pending, 1 in progress, 1 monitoring')
   console.log('   engagement_score_weights    — global defaults seeded')
