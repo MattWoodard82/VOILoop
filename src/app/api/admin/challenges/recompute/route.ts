@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { recomputeActiveChallengeProgress } from '@/lib/challenges/progress'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { requireChallengeOperator } from '@/lib/challenges/access'
 import { logger } from '@/lib/logger'
@@ -8,10 +7,6 @@ import { logger } from '@/lib/logger'
 export const runtime = 'nodejs'
 
 export async function POST() {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const auth = await requireChallengeOperator()
   if ('error' in auth) return auth.error
 

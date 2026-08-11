@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { requireChallengeOperator } from '@/lib/challenges/access'
 import { normalizeEligibilityDefinition, validateChallengePayload } from '@/lib/challenge-rules'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -19,10 +18,6 @@ interface CreateChallengeBody {
 }
 
 export async function POST(request: Request) {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const auth = await requireChallengeOperator()
   if ('error' in auth) return auth.error
 
@@ -102,10 +97,6 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const auth = await requireChallengeOperator()
   if ('error' in auth) return auth.error
 

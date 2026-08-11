@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { requireChallengeOperator } from '@/lib/challenges/access'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 export const runtime = 'nodejs'
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const auth = await requireChallengeOperator()
   if ('error' in auth) return auth.error
 

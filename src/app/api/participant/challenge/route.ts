@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { getSession, getUserAccess } from '@/lib/supabase/server'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 export const runtime = 'nodejs'
 
 export async function GET() {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

@@ -1,18 +1,14 @@
 import { GET } from '../route'
 import { createServerSupabaseClient, getRoleAndSession } from '@/lib/supabase/server'
-import { isRewardsRolloutEnabled } from '@/lib/feature-flags'
 
 jest.mock('@/lib/supabase/server', () => ({ createServerSupabaseClient: jest.fn(), getRoleAndSession: jest.fn() }))
-jest.mock('@/lib/feature-flags', () => ({ isRewardsRolloutEnabled: jest.fn() }))
 
 describe('GET /api/participant/rewards', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockGetRoleAndSession = getRoleAndSession as jest.MockedFunction<typeof getRoleAndSession>
-  const mockIsRewardsRolloutEnabled = isRewardsRolloutEnabled as jest.MockedFunction<typeof isRewardsRolloutEnabled>
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockIsRewardsRolloutEnabled.mockReturnValue(true)
   })
 
   test('returns participant rewards and rules when enabled', async () => {
@@ -87,17 +83,6 @@ describe('GET /api/participant/rewards', () => {
       },
       rules: { cap_text: 'Weekly point caps are enforced by the active rewards policy. Check with your operator for the current weekly cap and bonus tiers for this pilot rollout.' },
     })
-  })
-
-  test('returns 404 when rollout is disabled', async () => {
-    mockIsRewardsRolloutEnabled.mockReturnValue(false)
-    mockGetRoleAndSession.mockResolvedValue({ session: { user: { id: 'auth-user-1' } }, role: 'participant', mustChangePassword: false } as never)
-
-    const response = await GET()
-    const body = await response.json()
-
-    expect(response.status).toBe(404)
-    expect(body).toEqual({ error: 'Not found' })
   })
 
   test('returns 401 when unauthenticated', async () => {
