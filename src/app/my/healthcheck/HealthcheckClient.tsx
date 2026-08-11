@@ -94,58 +94,61 @@ function hasNoPeerIdentityLeak(payload: RankingPayload) {
 }
 
 async function runRankingDiagnostics() {
+  const response = await fetch('/api/diagnostic/participant-ranking', { credentials: 'include' })
+  const payload = await response.json().catch(() => ({})) as {
+    participant_email?: string
+    results?: Record<string, { status?: number; body?: RankingPayload }>
+    error?: string
+  }
+
   const nextResults: DiagnosticResult[] = []
-  const nextRaw: Record<string, unknown> = {}
+  const nextRaw: Record<string, unknown> = {
+    participant_email: payload.participant_email ?? null,
+    diagnostic_status: response.status,
+    diagnostic_error: payload.error ?? null,
+  }
+
+  if (!response.ok || !payload.results) {
+    nextResults.push({
+      name: 'Ranking diagnostic bootstrap',
+      ok: false,
+      detail: payload.error ?? `Expected 200 from admin diagnostic endpoint, got ${response.status}.`,
+    })
+    return { results: nextResults, rawResponses: nextRaw }
+  }
 
   for (const metric of METRICS) {
-    try {
-      const response = await fetch(`/api/participant/ranking?metric=${metric}`, { credentials: 'include' })
-      const body = await response.json().catch(() => ({})) as RankingPayload
-      nextRaw[metric] = { status: response.status, body }
+    const metricResult = payload.results[metric]
+    const body = (metricResult?.body ?? {}) as RankingPayload
+    nextRaw[metric] = metricResult ?? null
 
-      const context = body.context
-      const ok = response.status === 200
-        && !!context
-        && typeof context.participant_rank === 'number'
-        && typeof context.cohort_size === 'number'
-        && typeof context.cohort_percentile === 'number'
-        && typeof context.comparison_text === 'string'
-        && hasNoPeerIdentityLeak(body)
+    const context = body.context
+    const ok = metricResult?.status === 200
+      && !!context
+      && typeof context.participant_rank === 'number'
+      && typeof context.cohort_size === 'number'
+      && typeof context.cohort_percentile === 'number'
+      && typeof context.comparison_text === 'string'
+      && hasNoPeerIdentityLeak(body)
 
-      nextResults.push({
-        name: `Ranking metric: ${metric}`,
-        ok,
-        detail: ok
-          ? `200 OK. Rank ${context?.participant_rank} of ${context?.cohort_size}.`
-          : `Expected 200 + privacy-safe context, got ${response.status}.`,
-      })
-    } catch (error) {
-      nextResults.push({
-        name: `Ranking metric: ${metric}`,
-        ok: false,
-        detail: error instanceof Error ? error.message : 'Request failed.',
-      })
-    }
-  }
-
-  try {
-    const response = await fetch('/api/participant/ranking?metric=foo', { credentials: 'include' })
-    const body = await response.json().catch(() => ({})) as RankingPayload
-    nextRaw.invalid_metric = { status: response.status, body }
     nextResults.push({
-      name: 'Ranking invalid metric rejected',
-      ok: response.status === 400 && body.error === 'Invalid metric.',
-      detail: response.status === 400
-        ? '400 Bad Request returned as expected.'
-        : `Expected 400, got ${response.status}.`,
-    })
-  } catch (error) {
-    nextResults.push({
-      name: 'Ranking invalid metric rejected',
-      ok: false,
-      detail: error instanceof Error ? error.message : 'Request failed.',
+      name: `Ranking metric: ${metric}`,
+      ok,
+      detail: ok
+        ? `200 OK for ${payload.participant_email}. Rank ${context?.participant_rank} of ${context?.cohort_size}.`
+        : `Expected 200 + privacy-safe context, got ${metricResult?.status ?? 'unknown'}.`,
     })
   }
+
+  const invalidMetricResult = payload.results.invalid_metric
+  nextRaw.invalid_metric = invalidMetricResult ?? null
+  nextResults.push({
+    name: 'Ranking invalid metric rejected',
+    ok: invalidMetricResult?.status === 400 && invalidMetricResult.body?.error === 'Invalid metric.',
+    detail: invalidMetricResult?.status === 400
+      ? '400 Bad Request returned as expected.'
+      : `Expected 400, got ${invalidMetricResult?.status ?? 'unknown'}.`,
+  })
 
   return { results: nextResults, rawResponses: nextRaw }
 }
