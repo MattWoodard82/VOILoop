@@ -109,6 +109,32 @@ export default async function AdminPage() {
             Open events manager
           </Link>
         </section>
+
+        <section id="healthchecks" className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+            Healthchecks
+          </div>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 14 }}>
+            Run participant-facing diagnostics for ranking privacy and Priority 4 insight calculations.
+          </div>
+          <Link
+            href="/my/healthcheck"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#69BE28',
+              color: '#002244',
+              borderRadius: 7,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Open participant healthcheck
+          </Link>
+        </section>
       </div>
     </DashboardShell>
   )
