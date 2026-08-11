@@ -119,9 +119,8 @@ describe('/api/participant/events', () => {
           return {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
-                // TODO: review after 2026-09-01 — response_due_at removed from select
                 maybeSingle: jest.fn(async () => ({
-                  data: { acknowledged_at: '2026-07-20T12:00:00Z', response_text_encrypted: 'encrypted-response-data' }, // was: + response_due_at: '2026-07-22T12:00:00Z'
+                  data: { acknowledged_at: '2026-07-20T12:00:00Z', response_text_encrypted: 'encrypted-response-data', response_due_at: '2026-07-22T12:00:00Z' },
                   error: null,
                 })),
               })),

@@ -121,8 +121,7 @@ export async function GET() {
   if (nudge?.id) {
     const { data, error } = await supabase
       .from('nudge_acknowledgements')
-      // TODO: review after 2026-09-01 — remove response_due_at if 48-hour window not needed
-      .select('acknowledged_at, response_text_encrypted') // was: 'acknowledged_at, response_text_encrypted, response_due_at'
+      .select('acknowledged_at, response_text_encrypted, response_due_at')
       .eq('nudge_id', nudge.id)
       .eq('participant_id', participantId)
       .maybeSingle()
@@ -139,8 +138,7 @@ export async function GET() {
       acknowledgement = {
         acknowledged_at: data.acknowledged_at,
         response_text: decrypted,
-        // TODO: review after 2026-09-01 — remove response_due_at if 48-hour window not needed
-        // response_due_at: data.response_due_at,
+        response_due_at: data.response_due_at,
       }
     }
   }
@@ -248,12 +246,10 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 
-  // TODO: review after 2026-09-01 — response window check removed with 48-hour feature
-  // const responseDueAt = getResponseDueAt(nudge.week_of)
-  // if (responseDueAt.getTime() < Date.now()) {
-  //   return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
-  // }
-  void getResponseDueAt // suppress unused warning until TODO resolved
+  const responseDueAt = getResponseDueAt(nudge.week_of)
+  if (responseDueAt.getTime() < Date.now()) {
+    return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
+  }
 
   // Use RPC to upsert encrypted acknowledgement
   const { data, error } = await supabase

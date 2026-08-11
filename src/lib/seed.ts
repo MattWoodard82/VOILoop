@@ -379,7 +379,7 @@ async function seed() {
     week_of: WEEK_OF,
     message: 'Great work this week, team. Remember: small consistent habits compound over time. Even 10 minutes of movement today counts. You\'ve got this. 💪',
     author: 'Heather Simpson',
-    response_due_at: '2026-06-15T23:59:00Z', // Sunday end of seed week
+    response_due_at: '2099-12-31T23:59:00Z', // far future — always open for pilot testing
   }
   const { error: nudgeErr } = await supabase
     .from('weekly_nudges')
