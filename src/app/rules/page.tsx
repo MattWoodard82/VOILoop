@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 
 export const metadata = { title: 'Rules — VOILoop' }
@@ -35,15 +34,6 @@ export default function RulesPage() {
               </div>
             ))}
           </div>
-        </section>
-        <section className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 4 }}>Operator order</div>
-            <div style={{ fontSize: 12, color: '#A5ACAF' }}>Review rules content, then open rewards for participants.</div>
-          </div>
-          <Link href="/admin" style={{ color: '#69BE28', fontWeight: 700, textDecoration: 'none' }}>
-            Open admin
-          </Link>
         </section>
       </div>
     </DashboardShell>

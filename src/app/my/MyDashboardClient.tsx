@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
@@ -203,6 +204,24 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
             {importSyncLabel ? `Last sync ${importSyncLabel}` : 'No sync yet'}
           </Badge>
           {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
+          {rewardsEnabled ? (
+            <Link
+              href="/rules"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '6px 12px',
+                borderRadius: 999,
+                border: '1px solid #69BE28',
+                color: '#69BE28',
+                textDecoration: 'none',
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              Rules
+            </Link>
+          ) : null}
         </div>
       </div>
 <EventsNudgeCard />
@@ -500,4 +519,3 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
-
