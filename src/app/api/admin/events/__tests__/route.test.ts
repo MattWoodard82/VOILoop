@@ -11,6 +11,10 @@ jest.mock('@/lib/supabase/admin', () => ({
   createAdminSupabaseClient: jest.fn(),
 }))
 
+jest.mock('@/lib/supabase/encryption', () => ({
+  getDbEncryptionKey: jest.fn(() => 'test-key'),
+}))
+
 describe('admin events routes', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
@@ -77,18 +81,29 @@ describe('admin events routes', () => {
             })),
           }
         }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                order: jest.fn(async () => ({ data: [], error: null })),
+              })),
+            })),
+          }
+        }
         throw new Error(`Unexpected admin table ${table}`)
       }),
+      rpc: jest.fn(async () => ({ data: '', error: null })),
     } as never)
 
     const response = await GET()
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body).toEqual({
+    expect(body).toMatchObject({
       events: [{ id: 'evt-1', title: 'Morning Run' }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
       participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
+      acknowledgements: [],
     })
   })
 

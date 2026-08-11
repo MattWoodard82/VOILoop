@@ -64,7 +64,8 @@ describe('EventsNudgeCard', () => {
 
     expect(markup).toContain('This week&#x27;s focus')
     expect(markup).toContain('Hydrate today')
-    expect(markup).toContain('Open-text response required within 48 hours.')
+    // TODO: review after 2026-09-01 — was 'Open-text response required within 48 hours.'
+    expect(markup).toContain('Add a reflection when you')
     expect(markup).toContain('Upcoming events')
     expect(markup).toContain('Walk Club')
     expect(markup).toContain('Bring water')

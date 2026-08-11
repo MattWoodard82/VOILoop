@@ -24,7 +24,8 @@ interface Nudge {
 interface Acknowledgement {
   acknowledged_at: string
   response_text: string
-  response_due_at: string
+  // TODO: review after 2026-09-01 — remove if 48-hour response window not needed
+  // response_due_at: string
 }
 
 function getErrorMessage(error: unknown): string {
@@ -150,7 +151,8 @@ export function EventsNudgeCard() {
     setAcknowledgement({
       acknowledged_at: new Date().toISOString(),
       response_text: ackText.trim(),
-      response_due_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+      // TODO: review after 2026-09-01 — remove if 48-hour response window not needed
+      // response_due_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     })
     setShowAckModal(false)
     setAckText('')
@@ -211,7 +213,8 @@ export function EventsNudgeCard() {
             {nudge.message}
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: '#A5ACAF' }}>
-            {acknowledgement ? `Acknowledged: ${acknowledgement.response_text}` : 'Open-text response required within 48 hours.'}
+            {/* TODO: review after 2026-09-01 — remove "required within 48 hours" if not needed */}
+            {acknowledgement ? `Acknowledged: ${acknowledgement.response_text}` : 'Add a reflection when you\'re ready.'}
           </div>
           {!acknowledgement && (
             <button onClick={acknowledgeNudge} style={{ marginTop: 10, fontSize: 11, padding: '5px 10px', borderRadius: 18, border: '1px solid #69BE28', background: 'transparent', color: '#69BE28', cursor: 'pointer' }}>

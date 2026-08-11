@@ -121,7 +121,8 @@ export async function GET() {
   if (nudge?.id) {
     const { data, error } = await supabase
       .from('nudge_acknowledgements')
-      .select('acknowledged_at, response_text_encrypted, response_due_at')
+      // TODO: review after 2026-09-01 — remove response_due_at if 48-hour window not needed
+      .select('acknowledged_at, response_text_encrypted') // was: 'acknowledged_at, response_text_encrypted, response_due_at'
       .eq('nudge_id', nudge.id)
       .eq('participant_id', participantId)
       .maybeSingle()
@@ -138,7 +139,8 @@ export async function GET() {
       acknowledgement = {
         acknowledged_at: data.acknowledged_at,
         response_text: decrypted,
-        response_due_at: data.response_due_at,
+        // TODO: review after 2026-09-01 — remove response_due_at if 48-hour window not needed
+        // response_due_at: data.response_due_at,
       }
     }
   }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
 export const runtime = 'nodejs'
 
@@ -67,7 +68,41 @@ export async function GET() {
     return NextResponse.json({ error: nudgesError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [], participants: participants ?? [] })
+  // Fetch acknowledgements for the most recent nudge and decrypt them
+  const recentNudge = nudges?.[0] ?? null
+  let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
+  if (recentNudge) {
+    const { data: acks } = await adminClient
+      .from('nudge_acknowledgements')
+      .select('participant_id, acknowledged_at, response_text_encrypted')
+      .eq('nudge_id', recentNudge.id)
+      .order('acknowledged_at', { ascending: false })
+
+    if (acks && acks.length > 0) {
+      const participantMap = new Map((participants ?? []).map(p => [p.id, p]))
+      const decrypted = await Promise.all(acks.map(async (ack) => {
+        let response_text = ''
+        if (ack.response_text_encrypted) {
+          const { data } = await adminClient.rpc('decrypt_nudge_response', {
+            encrypted_data: ack.response_text_encrypted,
+            key: getDbEncryptionKey(),
+          })
+          response_text = data ?? ''
+        }
+        const p = participantMap.get(ack.participant_id)
+        return {
+          participant_id: ack.participant_id,
+          first_name: p?.first_name ?? 'Unknown',
+          last_name: p?.last_name ?? '',
+          acknowledged_at: ack.acknowledged_at,
+          response_text,
+        }
+      }))
+      acknowledgements = decrypted
+    }
+  }
+
+  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [], participants: participants ?? [], acknowledgements, recent_nudge_id: recentNudge?.id ?? null })
 }
 
 export async function POST(request: Request) {
