@@ -26,6 +26,9 @@ describe('EventsNudgeCard', () => {
       .mockReturnValueOnce([[], jest.fn()]) // rsvps
       .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce(['Events card failed to load. Detail: Request failed (500)', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
+      .mockReturnValueOnce(['', jest.fn()]) // ackText
+      .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
 
     const { EventsNudgeCard } = await import('../EventsNudgeCard')
     const markup = renderToStaticMarkup(React.createElement(EventsNudgeCard))
@@ -52,6 +55,9 @@ describe('EventsNudgeCard', () => {
       .mockReturnValueOnce([['evt-1'], jest.fn()]) // rsvps
       .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
+      .mockReturnValueOnce(['', jest.fn()]) // ackText
+      .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
 
     const { EventsNudgeCard } = await import('../EventsNudgeCard')
     const markup = renderToStaticMarkup(React.createElement(EventsNudgeCard))

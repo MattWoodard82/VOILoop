@@ -73,7 +73,7 @@ const PARTICIPANT_AUTH: Record<string, { email: string; password: string }> = {
   EMP002: { email: 'tina@voiloop.local',     password: 'Pilot1234' },
   EMP003: { email: 'nicole@voiloop.local',   password: 'Pilot1234' },
   EMP004: { email: 'kyle@voiloop.local',     password: 'Pilot1234' },
-  EMP005: { email: 'test1@user.com',         password: 'Test1234'  }, // Colin Stephenson
+  EMP005: { email: 'test1@user.com',         password: 'Password!' }, // Colin Stephenson
   EMP006: { email: 'franklin@voiloop.local', password: 'Pilot1234' },
   EMP007: { email: 'david@voiloop.local',    password: 'Pilot1234' },
   EMP008: { email: 'dzenan@voiloop.local',   password: 'Pilot1234' },
