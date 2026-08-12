@@ -40,11 +40,12 @@ describe('admin challenge recompute route', () => {
       },
     })
     const response = await POST(request)
-    const body = await response.json()
+    expect(response).toBeDefined()
+    const body = await response!.json()
 
     expect(mockRequireChallengeOperator).toHaveBeenCalledWith(request)
     expect(mockRecomputeActiveChallengeProgress).toHaveBeenCalledWith({}, { source: 'scheduled_recompute' })
-    expect(response.status).toBe(200)
+    expect(response!.status).toBe(200)
     expect(body).toEqual({
       active_challenge: 'challenge-1',
       updated_participants: 3,
@@ -61,7 +62,8 @@ describe('admin challenge recompute route', () => {
     } as never)
 
     const response = await POST(new Request('http://localhost/api/admin/challenges/recompute', { method: 'POST' }))
+    expect(response).toBeDefined()
 
-    expect(response.status).toBe(401)
+    expect(response!.status).toBe(401)
   })
 })

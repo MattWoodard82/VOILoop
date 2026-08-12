@@ -1,6 +1,7 @@
 'use client'
 
 import { Badge } from '@/components/ui'
+import type { InterventionStatus } from '@/types'
 import { formatDate } from '@/lib/utils'
 
 interface Participant {
@@ -18,7 +19,7 @@ interface Intervention {
   intervention_type: string | null
   assigned_to: string | null
   date_triggered: string | null
-  outcome: string
+  outcome: InterventionStatus
   department: string | null
   notes: string | null
 }

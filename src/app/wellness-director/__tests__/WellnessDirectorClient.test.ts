@@ -62,13 +62,14 @@ describe('WellnessDirectorClient', () => {
   })
 
   test('shows override controls once an explicit participant is selected', () => {
-    const selectedParticipant = { ...participant, id: 'P2', first_name: 'Bea' }
+    const selectedParticipant: ParticipantWithWellness = { ...participant, id: 'P2', first_name: 'Bea' }
     const markup = renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants: [participant, selectedParticipant] }))
     expect(markup).toContain('All participants')
   })
 
   test('scope changes still leave selected participant within the filtered set', () => {
-    const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
+    const secondParticipant: ParticipantWithWellness = { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }
+    const markup = selectedMarkup([participant, secondParticipant])
     expect(markup).toContain('Bea Able')
     expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
   })

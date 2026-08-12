@@ -9,6 +9,12 @@ const AUTHENTICATED_ROUTES = ['/admin/import']
 const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/pulse', '/interventions', '/outcomes', '/admin/challenges']
 const LEGACY_EXECUTIVE_ROUTE = '/executive'
 
+type CookieToSet = {
+  name: string
+  value: string
+  options: CookieOptions
+}
+
 function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`)
 }
@@ -48,7 +54,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: CookieToSet[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request: { headers: request.headers } })
           cookiesToSet.forEach(({ name, value, options }) => {

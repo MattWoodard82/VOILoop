@@ -13,6 +13,12 @@ export interface AuthenticatedUserSession {
   user: User
 }
 
+type CookieToSet = {
+  name: string
+  value: string
+  options: CookieOptions
+}
+
 function getRedirectPathForRole(role: AppRole | null): string {
   if (!role || role === 'participant') return '/my'
   return '/wellness-director'
@@ -46,7 +52,7 @@ export function createServerSupabaseClient() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+        setAll(cookiesToSet: CookieToSet[]) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
