@@ -1,5 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import type { ParticipantWithWellness } from '@/types'
 import { WellnessDirectorClient } from '../WellnessDirectorClient'
 
 jest.mock('../WellnessDirectorCharts', () => ({ WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)) }))
@@ -13,7 +14,7 @@ jest.mock('@/components/ui', () => {
 })
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
 
-const participant = {
+const participant: ParticipantWithWellness = {
   id: 'P1',
   first_name: 'Alex',
   last_name: 'Able',
@@ -44,7 +45,8 @@ const participant = {
   override_note: null,
 }
 
-const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
+const selectedMarkup = (participants: ParticipantWithWellness[]) =>
+  renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
 
 describe('WellnessDirectorClient', () => {
   test('renders explainability and baseline state', () => {
@@ -72,7 +74,7 @@ describe('WellnessDirectorClient', () => {
   })
 
   test('omits missing engagement scores from the chart', () => {
-    const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
+    const markup = selectedMarkup([{ ...participant, engagement_score: null }])
     expect(markup).not.toContain('"value":0')
   })
 

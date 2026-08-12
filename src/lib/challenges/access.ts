@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server'
-import { getSession, getUserAccess } from '@/lib/supabase/server'
+import { getSession, getUserAccess, type AppRole } from '@/lib/supabase/server'
 
-export function canOperateChallenges(role: string | null): boolean {
+type ChallengeOperatorResult =
+  | { userId: string; role: Extract<AppRole, 'admin' | 'wellness_director'> }
+  | { error: NextResponse }
+
+export function canOperateChallenges(
+  role: string | null
+): role is Extract<AppRole, 'admin' | 'wellness_director'> {
   return role === 'admin' || role === 'wellness_director'
 }
 
@@ -16,7 +22,7 @@ function hasValidCronSecret(request: Request): boolean {
   return authorization.slice(bearerPrefix.length).trim() === configuredSecret
 }
 
-export async function requireChallengeOperator(request?: Request) {
+export async function requireChallengeOperator(request?: Request): Promise<ChallengeOperatorResult> {
   if (request && hasValidCronSecret(request)) {
     return { userId: 'vercel-cron', role: 'admin' as const }
   }

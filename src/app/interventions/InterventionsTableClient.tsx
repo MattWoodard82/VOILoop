@@ -13,9 +13,9 @@ interface Participant {
 interface Intervention {
   id: string
   participant_id: string
-  trigger_metric: string
-  trigger_value: string | number
-  intervention_type: string
+  trigger_metric: string | null
+  trigger_value: string | null
+  intervention_type: string | null
   assigned_to: string | null
   date_triggered: string | null
   outcome: string

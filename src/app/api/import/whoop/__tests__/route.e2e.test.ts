@@ -37,6 +37,10 @@ jest.mock('@/lib/whoop/workbook-context', () => ({
   })),
 }))
 
+jest.mock('@/lib/challenges/progress', () => ({
+  recomputeActiveChallengeProgress: jest.fn().mockResolvedValue(null),
+}))
+
 function makeRequest(fileNames = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv']): NextRequest {
   const formData = new FormData()
   fileNames.forEach((fileName) => {
