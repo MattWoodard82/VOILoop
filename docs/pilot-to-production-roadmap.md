@@ -3,16 +3,16 @@
 
 ---
 
-## Context
+## 1. Context
 
 Client 2 brings 175–200 users — roughly 5x current scale. This document categorizes every initiative across three tiers: **Must Have**, **Recommended**, and **Nice to Have**, with open issues cross-referenced. Scope recommendations for the open backlog are included at the end.
 
 ---
 
-## 🔴 Must Have
+## 2. 🔴 Must Have
 *Non-negotiable for operating with a second client at production scale with PHI sensitivity.*
 
-### 1. Multi-Tenancy (Issue #18)
+### 2.1 1. Multi-Tenancy (Issue #18)
 The most foundational architectural change. Without it, two clients share the same data boundaries.
 - Introduce `organizations` / `pilots` table with lifecycle metadata
 - `org_memberships` table: user ↔ org ↔ role
@@ -22,7 +22,7 @@ The most foundational architectural change. Without it, two clients share the sa
 - Backfill existing data to `org_id = 1` (Lyle Pearson)
 - **Blocks almost everything else. Do this first.**
 
-### 2. Supabase RLS Hardening (Issues #8, #53, #57, #4)
+### 2.2 2. Supabase RLS Hardening (Issues #8, #53, #57, #4)
 Already well-documented. PHI risk is open and urgent regardless of infrastructure choice.
 - Enable RLS on all browser-accessible PHI tables
 - Deny-by-default posture + explicit policies per role (`participant`, `wellness_director`, `admin`)
@@ -30,7 +30,7 @@ Already well-documented. PHI risk is open and urgent regardless of infrastructur
 - CI guardrail: fail schema PRs that introduce new public tables without RLS
 - **Estimated LOE: 3–5 engineering days**
 
-### 3. Proper Identity Provider — Replace Custom Login
+### 2.3 3. Proper Identity Provider — Replace Custom Login
 Current system: custom email/password with forced password change on first login. Does not scale, lacks MFA, lacks enterprise SSO.
 - **Recommendation: Azure Entra External ID (formerly B2C)** — OIDC-compliant, supports MFA, social login, and future SAML/SSO for enterprise clients. Free tier covers 50,000 MAU.
 - Alternative: Auth0 (simpler DX, higher cost at scale) or Clerk (best DX, newer vendor)
@@ -38,7 +38,7 @@ Current system: custom email/password with forced password change on first login
 - Benefits: MFA out-of-box, password reset/self-service, audit log, no home-rolled credential handling
 - **LOE: ~1–2 weeks including integration testing**
 
-### 4. Azure Infrastructure & Proper CI/CD
+### 2.4 4. Azure Infrastructure & Proper CI/CD
 Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-controlled Azure stack.
 
 **Proposed minimal production stack:**
@@ -61,7 +61,7 @@ Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-co
 
 **Estimated LOE: 3–5 weeks** (can run parallel to RLS hardening)
 
-### 5. Schema Release Pipeline Hardening (Issue #15)
+### 2.5 5. Schema Release Pipeline Hardening (Issue #15)
 Pre-requisite for safe production database operations with two clients.
 - Destructive SQL guards (auto-detect `DROP`, mass `DELETE`, risky constraint changes)
 - Post-deploy schema smoke checks
@@ -69,7 +69,17 @@ Pre-requisite for safe production database operations with two clients.
 - Forward-only migration model (already partially in place)
 - **LOE: 2–3 days**
 
-### 6. Self-Service WHOOP CSV Import (Issue #74)
+### 2.6 6. Architecture Quality & Extensibility Pass
+The codebase was built rapidly for the pilot and now needs a targeted hardening pass before scaling to a second client and larger data volume.
+- Refactor duplicated import, mapping, and persistence patterns into provider-agnostic domain services
+- Standardize authz, validation, and error handling across server-side APIs
+- Consolidate one-off feature flags / scripts / data handling into documented, testable modules
+- Add regression coverage around import flows, role enforcement, token refresh, and dashboard queries
+- Remove technical debt that would otherwise make multi-tenancy, API ingestion, and future integrations brittle
+- **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
+- **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
+
+### 2.7 7. Self-Service WHOOP CSV Import (Issue #74)
 175–200 users means Matt cannot continue as the sole data importer. This is an operational blocker.
 - Fix Import History bug (prerequisite per issue spec)
 - Build per-participant weekly submission tracking (Submitted / Late / Missing)
@@ -79,10 +89,10 @@ Pre-requisite for safe production database operations with two clients.
 
 ---
 
-## 🟡 Recommended
+## 3. 🟡 Recommended
 *Materially improves operations, reliability, or client value. Do within the first 60–90 days of client 2 onboarding.*
 
-### 7. SRE / Observability Foundation
+### 3.1 8. SRE / Observability Foundation
 With two clients and PHI in play, you need to know about problems before clients do.
 - **Application Insights** — trace every API call, capture exceptions
 - Structured logging: every API route logs `org_id`, `user_id`, action, duration — no PII in logs
@@ -91,7 +101,7 @@ With two clients and PHI in play, you need to know about problems before clients
 - On-call runbook and alerting to Slack/Teams for P1s
 - **LOE: 1 week to implement basics; ongoing ops discipline**
 
-### 8. Engagement Features + Wellness Director Risk Scoring (Issue #66)
+### 3.2 9. Engagement Features + Wellness Director Risk Scoring (Issue #66)
 High-value, well-specified. Risk scoring is operationally necessary at 175-user scale — Heather cannot manually track this many people without it.
 - **Priority 1:** Privacy-safe leaderboard (participant-only rank, no peer names)
 - **Priority 2:** Tiered nudges + free-text reply box (targeted send by person/subgroup)
@@ -100,14 +110,14 @@ High-value, well-specified. Risk scoring is operationally necessary at 175-user 
 - **WD Risk Scoring:** Engagement score (FR-13) + physiological trend flags (FR-14) + risk tiers (FR-15) + admin override/snooze (FR-18) + configurable weights (FR-19)
 - **LOE: 3–5 weeks; phase across multiple PRs**
 
-### 9. Pulse Survey v2 (Issue #21)
+### 3.3 10. Pulse Survey v2 (Issue #21)
 Complete spec exists. Employee submission flow is expected day-one by a second client.
 - Activate employee submission from `/my`
 - v2 question set with HRV/RHR context at submission time
 - Aggregate dashboard updates for new questions
 - **LOE: 1–2 weeks**
 
-### 10. Performance at 175–200 Users: Database & Query Optimization
+### 3.4 11. Performance at 175–200 Users: Database & Query Optimization
 Currently built for ~40 users. Required attention areas:
 - **Indexing audit:** Add indexes on `(org_id, employee_id)`, `(org_id, date)`, `(period_key)` on high-read tables
 - **Pagination:** All list endpoints (team roster, intervention log, import history) must paginate — no unbounded queries
@@ -116,7 +126,7 @@ Currently built for ~40 users. Required attention areas:
 - **Dashboard query budget:** Target P95 < 500ms for all dashboard loads at 200 users
 - **LOE: 1 week audit + targeted fixes**
 
-### 11. Dashboard Changes for a Larger Participant Group
+### 3.5 12. Dashboard Changes for a Larger Participant Group
 At 175–200 users, current dashboard patterns break down:
 - **Team roster:** Search + multi-column filter (risk tier, submission status, org) — scrolling 175 rows is unusable without it
 - **WD KPI cards:** Org-level aggregates + week-over-week trend delta as primary; drill-down available
@@ -124,34 +134,46 @@ At 175–200 users, current dashboard patterns break down:
 - **Risk score distribution:** Replace per-person scanning with a histogram/breakdown (X green, Y yellow, Z red) as the primary top-level view
 - **Pulse survey completion rate:** Track per-week response rate as a metric in its own right
 - **Export:** Wellness Director should be able to export aggregate (never individual) reports as CSV/PDF for client stakeholder reporting
+- **Large-cohort seed validation:** Add a reproducible seed profile for **~175 participants** with realistic variation in departments, enrollment dates, device data freshness, pulse completion, submission compliance, and risk distribution so the UX can be exercised before Client 2 goes live
+- **Unexpected UI breakpoints:** Expect row-density, filter discoverability, empty/loading states, pagination controls, sticky headers, mobile/tablet overflow, and chart legibility to change once the app is tested with a real 175-person cohort instead of a 9-person demo dataset
 - **LOE: 2–3 weeks of UI work**
 
-### 12. Secure Pulse Survey Submission (Issue #53)
+### 3.6 13. Large-Cohort Test Data & UX Validation
+Before calling the app "ready" for Client 2, the team should be able to boot a realistic local/staging environment with **175 participants worth of seeded data** and review the main operator and participant flows against it.
+- Extend the existing seed system to generate 175 participants across multiple departments / cohorts with realistic biometric spread, participation patterns, and missing-data cases
+- Seed multiple behavioral segments on purpose: highly engaged, average, disengaged, recent enrollee, missing uploads, declining trend, red-flag participant
+- Seed enough interventions, pulse responses, uploads/sync events, and rewards activity to surface pagination, sorting, and filter problems
+- Use this dataset as a formal UX review gate for `/team`, `/wellness-director`, `/pulse`, `/interventions`, `/outcomes`, and `/my`
+- Capture resulting UX fixes as first-class scope, not polish; large-cohort testing will likely reveal real information architecture changes
+- **Recommendation:** treat this as required validation before finalizing the larger-group dashboard work, because several needed UI changes will only become obvious with realistic volume
+- **LOE: 2–4 days for seed generation + 2–5 days of follow-on UX fixes discovered from review**
+
+### 3.7 14. Secure Pulse Survey Submission (Issue #53)
 Resolves with the RLS hardening work; low incremental effort after #8 is done. **LOE: 1–2 days**
 
-### 13. Duplicate WHOOP Import Detection (Issue #9)
+### 3.8 15. Duplicate WHOOP Import Detection (Issue #9)
 Natural companion to self-service import (#74). Prevents data integrity issues when participants upload overlapping date ranges. Bundle into the #74 implementation sprint.
 
 ---
 
-## 🟢 Nice to Have
+## 4. 🟢 Nice to Have
 *Real value, but deferrable without risk to client 2 success.*
 
-### 14. Anonymized Benchmark Comparisons (Issue #17)
+### 4.1 16. Anonymized Benchmark Comparisons (Issue #17)
 Showing employees how their metrics compare to an anonymized cohort. Valuable for engagement but needs sufficient data volume to be statistically meaningful. Revisit in Q2 of client 2.
 
-### 15. Intervention Tracking Logging (Issue #52)
+### 4.2 17. Intervention Tracking Logging (Issue #52)
 Additional audit trail for intervention actions. Useful for compliance reporting. Bundle lightly with engagement feature work; low LOE.
 
-### 16. WHOOP / Oura API Direct Integration
+### 4.3 18. WHOOP / Oura API Direct Integration
 Self-import via CSV is the right first step. Direct API sync eliminates all friction but requires OAuth, token management, and polling/webhook infrastructure. Roadmap after self-upload proves out the pattern.
 
-### 17. Multi-Region / Disaster Recovery
+### 4.4 19. Multi-Region / Disaster Recovery
 Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, document recovery runbook. Full geo-redundancy waits until a client contract requires it.
 
 ---
 
-## Open Issues: Scope Recommendations
+## 5. Open Issues: Scope Recommendations
 
 | # | Title | Recommendation | Tier | Rationale |
 |---|---|---|---|---|
@@ -164,6 +186,8 @@ Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, d
 | #19 | Onboarding intake v2 | **Evaluate** | TBD | Important for client 2 day-one; review spec before committing |
 | #20 | Events/nudges | **Include with #66** | Recommended | FR-5 through FR-8 in #66 covers this substantially |
 | #21 | Pulse survey v2 | **Include** | Recommended | Complete spec, foundational for client 2 |
+| New | Architecture quality & extensibility pass | **Include** | Must Have | Required refactor work to reduce pilot-era technical debt before scaling |
+| New | Large-cohort seed dataset (175 participants) | **Include** | Recommended | Required to validate dashboard UX and expose scale-driven UI changes before Client 2 launch |
 | #52 | Intervention tracking log | **Include lightly** | Nice to Have | Bundle with engagement work |
 | #53 | Secure pulse submission | **Include** | Recommended | Resolves with #8; low incremental LOE |
 | #57 | Security hardening decision record | **Close/merge into #8** | — | Captures analysis; execution tracked in #8 |
@@ -173,23 +197,25 @@ Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, d
 
 ---
 
-## Sequencing Recommendation
+## 6. Sequencing Recommendation
 
 ```
 Week 1–2:   RLS hardening (#8, #53) → unblocks safe client 2 data
 Week 2–4:   Multi-tenancy schema + APIs (#18) → unblocks org isolation
 Week 2–6:   Azure infra + CI/CD (#4) → run parallel to above
+Week 2–4:   Architecture quality + extensibility pass → reduces pilot-era debt before bulk scale work
 Week 3–4:   Self-import + submission tracking (#74, #9)
 Week 4–5:   Identity provider migration (Azure Entra External ID)
 Week 5–6:   Schema pipeline hardening (#15)
-Week 6–8:   Pulse v2 (#21) + dashboard scaling changes + performance tuning
+Week 6–7:   Large-cohort seed dataset (175 participants) + UX review pass
+Week 7–8:   Pulse v2 (#21) + dashboard scaling changes + performance tuning
 Week 8–12:  Engagement features + WD risk scoring (#66, #20)
 Ongoing:    Observability, benchmarks, API direct integrations
 ```
 
 ---
 
-## Cost Estimate (Azure Production Stack)
+## 7. Cost Estimate (Azure Production Stack)
 
 | Service | Est. Monthly |
 |---|---|
@@ -209,15 +235,15 @@ Current Vercel Pro + Supabase Pro: ~$45–100/mo. Delta is justified by enterpri
 
 ---
 
-## Appendix A: API Ingestion — Architecture, Application Changes, and Integrator Decision
+## 8. Appendix A: API Ingestion — Architecture, Application Changes, and Integrator Decision
 
-### The shift from manual CSV upload to automated API ingestion
+### 8.1 The shift from manual CSV upload to automated API ingestion
 
 Moving from "Matt uploads an XLSX once a week" to "data arrives automatically when participants sync their devices" is not just a backend plumbing change. It touches the data model, the import pipeline, the application surface, token management infrastructure, and the background job layer. This section documents what changes and why.
 
 ---
 
-### What the current import pipeline does (and what must change)
+### 8.2 What the current import pipeline does (and what must change)
 
 The current pipeline is designed around **batch file uploads**:
 
@@ -234,9 +260,9 @@ The WHOOP CSV column names (`Recovery score %`, `Heart rate variability (ms)`, e
 
 ---
 
-### Application changes required for API ingestion
+### 8.3 Application changes required for API ingestion
 
-#### 1. OAuth token management infrastructure (new)
+#### 8.3.1 1. OAuth token management infrastructure (new)
 This is the largest new system. Every participant must independently authorize VOILoop to access their wearable account. Per-user tokens must be stored securely and kept fresh.
 
 - **New DB table: `wearable_connections`** — stores per-participant OAuth tokens
@@ -246,7 +272,7 @@ This is the largest new system. Every participant must independently authorize V
 - **Token refresh service** — access tokens expire (WHOOP: typically 1 hour; Fitbit: 8 hours). A background job must check expiry and refresh proactively before sync jobs run
 - **Revocation handling** — when a participant disconnects or revokes consent in the wearable app, the API will return 401; the sync system must handle this gracefully and update `status = 'revoked'`
 
-#### 2. New background sync worker (new — cannot run in Next.js API routes)
+#### 8.3.2 2. New background sync worker (new — cannot run in Next.js API routes)
 API-driven sync jobs run on a schedule or on webhook trigger — not during a user's HTTP request. **Next.js serverless functions (Vercel or Azure) have a maximum execution time of 10–60 seconds and are not appropriate for bulk historical backfill or multi-participant batch sync.**
 
 Options in the Azure stack:
@@ -254,7 +280,7 @@ Options in the Azure stack:
 - **Azure Functions with timer trigger** — simpler for periodic tasks, cold-start latency acceptable for non-time-sensitive sync
 - The worker should: iterate active connections → check last sync → call provider API for new data since last sync → normalize → upsert via the same persistence layer → update `last_sync_at`
 
-#### 3. New API-to-domain mappers (new)
+#### 8.3.3 3. New API-to-domain mappers (new)
 The existing `src/lib/whoop/mappers.ts` maps CSV column names. API responses have completely different shapes. New mappers are needed per provider:
 
 **WHOOP API data model** (from `api.prod.whoop.com/developer/v1`):
@@ -273,7 +299,7 @@ The existing `src/lib/whoop/mappers.ts` maps CSV column names. API responses hav
 - `GET /1/user/-/spo2/date/{date}.json` → blood oxygen
 - Fitbit **does not have a recovery score** equivalent to WHOOP's composite Recovery %. Fitbit has a "Cardio Fitness Score (VO2 Max)" but it is not the same concept. This is a schema gap to address (see below)
 
-#### 4. Data model changes: provider-agnostic schema
+#### 8.3.4 4. Data model changes: provider-agnostic schema
 The current `daily_wellness` and `workouts` tables are implicitly WHOOP-shaped (field names like `sleep_consistency` and `day_strain` are WHOOP-specific concepts). Adding Fitbit requires decisions:
 
 - Add `data_source` column to `daily_wellness`, `workouts`, and `habits` (values: `whoop_csv`, `whoop_api`, `fitbit_api`, `manual`) — critical for knowing what source a row came from and for dedup logic
@@ -283,7 +309,7 @@ The current `daily_wellness` and `workouts` tables are implicitly WHOOP-shaped (
 - `day_strain` is WHOOP-specific. Fitbit equivalent is active zone minutes or activity score — new field or different mapping
 - **Recommendation:** Add a `device_type` column and make recovery/strain fields nullable with provider-aware display logic in the UI
 
-#### 5. Webhook ingestion endpoint (new, recommended for Fitbit)
+#### 8.3.5 5. Webhook ingestion endpoint (new, recommended for Fitbit)
 Fitbit offers a Subscription API (webhooks) that pushes a notification when new data is available for a user. This is strongly preferred over polling because:
 - Fitbit rate limit: **150 requests/hour per user token** — with 175+ users, polling all users every hour consumes 175+ API calls just for existence checks before fetching any data
 - Fitbit subscription webhooks notify on new sleep, activity, heart rate, and body data
@@ -291,20 +317,20 @@ Fitbit offers a Subscription API (webhooks) that pushes a notification when new 
 
 Webhook handler: new Next.js API route `POST /api/webhooks/fitbit` and `POST /api/webhooks/whoop` that validates the request signature and enqueues a sync job for the affected user. The actual data fetch happens asynchronously in the worker.
 
-#### 6. Import History and submission tracking rethink (Issue #74 dependency)
+#### 8.3.6 6. Import History and submission tracking rethink (Issue #74 dependency)
 The current `upload_batches` table tracks admin-uploaded files. With API sync, "upload" is no longer the right concept:
 - Rename or extend `upload_batches` → `sync_events` with `source_type: 'csv_upload' | 'api_sync' | 'webhook_trigger'`
 - The per-week submission tracking from Issue #74 still works — just populated by API sync events instead of file uploads
 - The Wellness Director submission visibility card ("24 of 37 submitted — 65%") becomes "24 of 37 synced this week" — same concept, different mechanism
 
-#### 7. Admin import UI remains needed (do not remove)
+#### 8.3.7 7. Admin import UI remains needed (do not remove)
 Even with full API integration, admin CSV upload should stay for:
 - Participants who don't want to connect their wearable account (consent is voluntary)
 - Historical backfill when a participant newly connects and you want their prior data
 - Failsafe when API is unavailable or a user's token is revoked
 - Fitbit/WHOOP export CSVs have different formats — Fitbit CSVs would need their own mapper
 
-#### 8. Participant onboarding flow changes
+#### 8.3.8 8. Participant onboarding flow changes
 Current: admin provisions accounts, Matt imports their data. API model:
 1. Admin provisions account (unchanged)
 2. Participant logs in for the first time → `/my` shows "Connect your WHOOP" or "Connect your Fitbit" CTA
@@ -315,7 +341,7 @@ This is a meaningful UX and trust change — participants must actively consent 
 
 ---
 
-### WHOOP vs Fitbit: data richness comparison
+### 8.4 WHOOP vs Fitbit: data richness comparison
 
 | Metric | WHOOP API | Fitbit API | Notes |
 |---|---|---|---|
@@ -344,7 +370,7 @@ This is a meaningful UX and trust change — participants must actively consent 
 
 ---
 
-### Should VOILoop use Terra API as the third-party integrator?
+### 8.5 Should VOILoop use Terra API as the third-party integrator?
 
 **Terra API** (tryterra.co) is a YC W21 company that provides a unified wearable data layer across WHOOP, Fitbit, Garmin, Oura, Apple Health, Google Fit, and 50+ other sources. They are HIPAA-compliant and SOC 2 certified.
 
@@ -389,7 +415,7 @@ Fitbit is where Terra becomes compelling. Fitbit's 150 req/hr rate limit is a ge
 
 ---
 
-### Do current tooling and framework choices matter?
+### 8.6 Do current tooling and framework choices matter?
 
 **Next.js 14 (App Router) — assessment: stay, with architectural additions**
 
@@ -410,7 +436,7 @@ The existing mapper/validator/persistence pattern in `src/lib/whoop/` is well-st
 
 ---
 
-### Summary: what must be built for API ingestion
+### 8.7 Summary: what must be built for API ingestion
 
 | Component | Effort | Notes |
 |---|---|---|
@@ -429,7 +455,7 @@ The existing mapper/validator/persistence pattern in `src/lib/whoop/` is well-st
 
 ---
 
-## Appendix B: Personas & Key Journey Moments
+## 9. Appendix B: Personas & Key Journey Moments
 
 *This is a living reference, not a finished artifact. Edit it as you learn more from Client 2.*
 
@@ -437,11 +463,11 @@ The goal is not to produce a wall poster. It is to have a shared answer to "who 
 
 ---
 
-### The Four Personas
+### 9.1 The Four Personas
 
 ---
 
-#### Persona 1: The Participant
+#### 9.1.1 Persona 1: The Participant
 **Archetype:** Travis Brandenburgh (Client 1 COO), and the 174 people like him at Client 2
 
 **Who they are:**
@@ -481,7 +507,7 @@ Mostly passive consumers. They upload data (or in the future, sync their device)
 
 ---
 
-#### Persona 2: The Wellness Director
+#### 9.1.2 Persona 2: The Wellness Director
 **Archetype:** Heather (Client 1), and her equivalent at Client 2
 
 **Who they are:**
@@ -521,7 +547,7 @@ A health professional employed by or contracted to the client organization. She 
 
 ---
 
-#### Persona 3: The Executive Sponsor / Buyer
+#### 9.1.3 Persona 3: The Executive Sponsor / Buyer
 **Archetype:** Travis in his *buyer* role (distinct from his participant role), and the equivalent at Client 2
 
 **Who they are:**
@@ -558,7 +584,7 @@ Travis is *both* a participant and the buyer. He built his own competing prototy
 
 ---
 
-#### Persona 4: The VOILoop Operator
+#### 9.1.4 Persona 4: The VOILoop Operator
 **Archetype:** Matt and Garrison
 
 **Who they are:**
@@ -594,7 +620,7 @@ The small team running the platform across multiple clients. At current scale th
 
 ---
 
-### Journey Intersection Map
+### 9.2 Journey Intersection Map
 
 Where personas collide at the same moment — these are the highest-leverage design points:
 
@@ -609,7 +635,7 @@ Where personas collide at the same moment — these are the highest-leverage des
 
 ---
 
-### What this changes about prioritization
+### 9.3 What this changes about prioritization
 
 1. **Onboarding (Issue #19) is higher priority than it currently appears.** It is the entry point for the Participant's trust relationship with the product, and it unblocks the WD's visibility into participant readiness. At 175 users, launching without it means 175 people hit an unclear first experience.
 
