@@ -32,14 +32,57 @@ select
   nr.responded_at,
   coalesce(nr.response_type, ''),
   nr.responded_at + interval '48 hours'
-from public.nudge_responses nr
-where not exists (
+from (
+  select participant_id, responded_at, response_type
+  from public.nudge_responses
+) nr
+where exists (
   select 1
-  from public.nudge_acknowledgements na
-  where na.participant_id = nr.participant_id
-    and na.acknowledged_at = nr.responded_at
-    and na.response_text = coalesce(nr.response_type, '')
-);
+  from information_schema.tables
+  where table_schema = 'public'
+    and table_name = 'nudge_responses'
+)
+  and not exists (
+    select 1
+    from public.nudge_acknowledgements na
+    where na.participant_id = nr.participant_id
+      and na.acknowledged_at = nr.responded_at
+      and na.response_text = coalesce(nr.response_type, '')
+  );
+
+insert into public.nudge_acknowledgements (
+  nudge_id,
+  participant_id,
+  acknowledged_at,
+  response_text,
+  response_due_at
+)
+select
+  null,
+  nr.participant_id,
+  nr.responded_at,
+  coalesce(nr.response_type, ''),
+  nr.responded_at + interval '48 hours'
+from public.engagement_nudge_responses nr
+where exists (
+  select 1
+  from information_schema.tables
+  where table_schema = 'public'
+    and table_name = 'engagement_nudge_responses'
+)
+  and not exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'nudge_responses'
+  )
+  and not exists (
+    select 1
+    from public.nudge_acknowledgements na
+    where na.participant_id = nr.participant_id
+      and na.acknowledged_at = nr.responded_at
+      and na.response_text = coalesce(nr.response_type, '')
+  );
 
 update public.nudge_acknowledgements
 set response_text_encrypted = pgp_sym_encrypt(

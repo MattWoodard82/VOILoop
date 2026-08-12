@@ -50,19 +50,25 @@ export async function GET() {
 
   if (participantChallengeError) return NextResponse.json({ error: participantChallengeError.message }, { status: 500 })
 
+  if (!activeChallenge) {
+    return NextResponse.json({
+      visibility_state: 'none',
+      rewards: null,
+      rules: buildRulesCopy(),
+    })
+  }
+
   return NextResponse.json({
     visibility_state: challengeParticipant?.is_eligible ? 'eligible' : 'ineligible',
-    rewards: activeChallenge
-      ? {
-          challenge: activeChallenge,
-          participant: challengeParticipant ?? null,
-          redemption_state: challengeParticipant?.completed
-            ? 'approved'
-            : challengeParticipant?.progress_value
-              ? 'submitted'
-              : 'available',
-        }
-      : null,
+    rewards: {
+      challenge: activeChallenge,
+      participant: challengeParticipant ?? null,
+      redemption_state: challengeParticipant?.completed
+        ? 'approved'
+        : challengeParticipant?.progress_value
+          ? 'submitted'
+          : 'available',
+    },
     rules: buildRulesCopy(),
   })
 }

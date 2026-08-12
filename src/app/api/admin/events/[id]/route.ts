@@ -19,9 +19,15 @@ export async function DELETE(
 
   const supabase = createServerSupabaseClient()
   const kind = new URL(request.url).searchParams.get('kind')
-  const table = kind === 'nudge' ? 'weekly_nudges' : 'events'
+  if (kind === 'nudge') {
+    return NextResponse.json(
+      { error: 'Published nudges are append-only and cannot be deleted.' },
+      { status: 405 }
+    )
+  }
+
   const { error } = await supabase
-    .from(table)
+    .from('events')
     .delete()
     .eq('id', eventId)
 

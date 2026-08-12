@@ -17,6 +17,7 @@ create or replace function public.upsert_nudge_with_engagement_target(
 returns jsonb as $$
 declare
   v_nudge_id uuid;
+  v_response_due_at timestamptz;
 begin
   if public.current_app_role() <> 'admin' then
     return json_build_object('error', 'Only admins may publish nudges')::jsonb;
@@ -29,11 +30,13 @@ begin
     return json_build_object('error', 'Invalid target type')::jsonb;
   end if;
 
+  v_response_due_at := now() + interval '48 hours';
+
   insert into public.weekly_nudges (week_of, message, author, response_due_at)
-  values (p_week_of, p_message, p_author, p_week_of::timestamptz + interval '48 hours')
+  values (p_week_of, p_message, p_author, v_response_due_at)
   returning id into v_nudge_id;
 
-  insert into public.nudge_acknowledgement_targets (nudge_id, target_type, target_label, participant_id)
+  insert into public.nudge_targets (nudge_id, target_type, target_label, participant_id)
   values (
     v_nudge_id,
     p_target_type,
@@ -56,6 +59,7 @@ create or replace function public.upsert_nudge_acknowledgement(
 returns jsonb as $$
 declare
   v_result jsonb;
+  v_response_due_at timestamptz;
 begin
   if public.current_app_role() <> 'participant' then
     return json_build_object('error', 'Only participants may submit nudge responses')::jsonb;
@@ -74,23 +78,41 @@ begin
     return json_build_object('error', 'Response text cannot be empty')::jsonb;
   end if;
 
-  if not exists (
-    select 1 from public.weekly_nudges where id = p_nudge_id and response_due_at > now()
-  ) then
+  select wn.response_due_at
+  into v_response_due_at
+  from public.weekly_nudges wn
+  where wn.id = p_nudge_id
+    and wn.response_due_at > now();
+
+  if v_response_due_at is null then
     return json_build_object('error', 'Nudge not found or response window has closed')::jsonb;
+  end if;
+
+  if not exists (
+    select 1
+    from public.nudge_targets nt
+    join public.participants p on p.id = p_participant_id
+    where nt.nudge_id = p_nudge_id
+      and (
+        nt.target_type = 'all'
+        or (nt.target_type = 'participant' and nt.participant_id = p_participant_id)
+        or (nt.target_type = 'subgroup' and nt.target_label = coalesce(p.cohort, ''))
+      )
+  ) then
+    return json_build_object('error', 'Nudge not targeted to this participant')::jsonb;
   end if;
 
   insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text, response_text_encrypted, acknowledged_at, response_due_at)
   values (
     p_nudge_id,
     p_participant_id,
-    p_response_text,
+    '',
     pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
     now(),
-    (select response_due_at from public.weekly_nudges where id = p_nudge_id)
+    v_response_due_at
   )
   on conflict (nudge_id, participant_id) do update
-  set response_text = p_response_text,
+  set response_text = '',
       response_text_encrypted = pgp_sym_encrypt(p_response_text, p_encryption_key)::bytea,
       acknowledged_at = now()
   where nudge_acknowledgements.response_due_at > now()

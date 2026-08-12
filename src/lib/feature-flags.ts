@@ -4,11 +4,11 @@ function isEnabled(raw: string | undefined): boolean {
 }
 
 export function isPilotChallengesBasicEnabled(): boolean {
-  return true
+  return isEnabled(process.env.PILOT_CHALLENGES_BASIC)
 }
 
 export function isRewardsRolloutEnabled(): boolean {
-  return true
+  return isPilotChallengesBasicEnabled()
 }
 
 export function isPublicErrorDiagnosticsEnabled(): boolean {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getUserAccess } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { provisionSupabaseAccount } from '@/lib/supabase/provision-account'
+import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
 
@@ -77,6 +78,22 @@ async function writeLoginActivityIfParticipant(userId: string): Promise<void> {
 
   if (insertError) {
     throw new Error(`Failed to write login activity: ${insertError.message}`)
+  }
+}
+
+function sanitizeRedirectTarget(request: Request, requestedRedirectTo: string, mustChangePassword: boolean): string | null {
+  if (mustChangePassword) return null
+  if (!requestedRedirectTo) return null
+
+  try {
+    const candidateUrl = new URL(requestedRedirectTo, request.url)
+    const requestUrl = new URL(request.url)
+    if (candidateUrl.origin !== requestUrl.origin) {
+      return null
+    }
+    return `${candidateUrl.pathname}${candidateUrl.search}${candidateUrl.hash}`
+  } catch {
+    return null
   }
 }
 
@@ -188,14 +205,22 @@ export async function POST(request: Request) {
       access = await getUserAccess(data.user.id)
     }
 
-    await writeLoginActivityIfParticipant(data.user.id)
+    try {
+      await writeLoginActivityIfParticipant(data.user.id)
+    } catch (error) {
+      logger.error({
+        event: 'login_activity_write_failed',
+        user_id: data.user.id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
 
     const defaultRedirectTo = access.mustChangePassword
       ? '/change-password'
       : !access.role || access.role === 'participant'
         ? '/my'
         : '/wellness-director'
-    const redirectTo = requestedRedirectTo || defaultRedirectTo
+    const redirectTo = sanitizeRedirectTarget(request, requestedRedirectTo, access.mustChangePassword) || defaultRedirectTo
 
     return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
   } catch (error) {

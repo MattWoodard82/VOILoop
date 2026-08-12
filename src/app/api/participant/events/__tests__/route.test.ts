@@ -334,7 +334,7 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP999' }] },
                   error: null,
                 })),
               })),
@@ -356,7 +356,7 @@ describe('/api/participant/events', () => {
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Response window has closed.' })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Nudge not targeted to this participant.' })
     expect(rpcUpsert).not.toHaveBeenCalled()
   })
 })
