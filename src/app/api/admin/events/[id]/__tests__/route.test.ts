@@ -60,6 +60,24 @@ describe('DELETE /api/admin/events/[id]', () => {
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
 
+  test('deletes nudge for admins when kind=nudge', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+
+    const eq = jest.fn(async () => ({ error: null }))
+    const from = jest.fn((table: string) => ({
+      delete: jest.fn(() => ({ eq })),
+    }))
+    mockCreateServerSupabaseClient.mockReturnValue({ from } as never)
+
+    const response = await DELETE(new Request('http://localhost/api/admin/events/nudge-1?kind=nudge'), {
+      params: { id: 'nudge-1' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(from).toHaveBeenCalledWith('weekly_nudges')
+    expect(eq).toHaveBeenCalledWith('id', 'nudge-1')
+  })
+
   test('returns 500 when delete fails', async () => {
     mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 

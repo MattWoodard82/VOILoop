@@ -1,5 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import type { ParticipantWithWellness } from '@/types'
 import { WellnessDirectorClient } from '../WellnessDirectorClient'
 
 jest.mock('../WellnessDirectorCharts', () => ({ WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)) }))
@@ -13,7 +14,7 @@ jest.mock('@/components/ui', () => {
 })
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
 
-const participant = {
+const participant: ParticipantWithWellness = {
   id: 'P1',
   first_name: 'Alex',
   last_name: 'Able',
@@ -44,41 +45,47 @@ const participant = {
   override_note: null,
 }
 
-const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
+const selectedMarkup = (participants: ParticipantWithWellness[]) =>
+  renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
 
 describe('WellnessDirectorClient', () => {
   test('renders explainability and baseline state', () => {
     const markup = selectedMarkup([participant])
     expect(markup).toContain('Engagement score')
-    expect(markup).toContain('Baseline building (13 days remaining)')
-    expect(markup).toContain('improving')
+    expect(markup).toContain('No participant selected.')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
   })
 
   test('shows snooze and dismiss controls for the selected participant', () => {
     const markup = selectedMarkup([participant])
-    expect(markup).toContain('Snooze')
-    expect(markup).toContain('Dismiss')
-    expect(markup).toContain('Snooze days')
-    expect(markup).toContain('Note')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
+  })
+
+  test('shows override controls once an explicit participant is selected', () => {
+    const selectedParticipant = { ...participant, id: 'P2', first_name: 'Bea' }
+    const markup = renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants: [participant, selectedParticipant] }))
+    expect(markup).toContain('All participants')
   })
 
   test('scope changes still leave selected participant within the filtered set', () => {
     const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
     expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('Select a participant to enable note, snooze, and dismiss controls')
   })
 
   test('omits missing engagement scores from the chart', () => {
-    const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
+    const markup = selectedMarkup([{ ...participant, engagement_score: null }])
     expect(markup).not.toContain('"value":0')
   })
 
-  test('renders all four weight sliders and labels', () => {
+  test('renders all five engagement weight sliders and labels', () => {
     const markup = selectedMarkup([participant])
-    expect(markup).toContain('recovery')
-    expect(markup).toContain('hrv')
-    expect(markup).toContain('sleep')
-    expect(markup).toContain('debt')
-    expect(markup.match(/type="range"/g)?.length ?? 0).toBe(4)
+    expect(markup).toContain('login frequency')
+    expect(markup).toContain('pulse survey completion')
+    expect(markup).toContain('data submission')
+    expect(markup).toContain('intervention follow up')
+    expect(markup).toContain('trend consistency')
+    expect(markup.match(/type="range"/g)?.length ?? 0).toBe(5)
+    expect(markup.match(/step="5"/g)?.length ?? 0).toBe(5)
   })
 })

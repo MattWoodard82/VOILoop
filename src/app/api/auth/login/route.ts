@@ -53,7 +53,6 @@ async function ensureUserAccessRow(userId: string): Promise<void> {
   if (error) {
     throw new Error(`Failed to initialize user_access for authenticated user: ${error.message}`)
   }
-
 }
 
 async function writeLoginActivityIfParticipant(userId: string): Promise<void> {
@@ -68,6 +67,7 @@ async function writeLoginActivityIfParticipant(userId: string): Promise<void> {
     throw new Error(`Failed to look up participant login mapping: ${error.message}`)
   }
   if (!participantRow?.id) return
+
   const { error: insertError } = await adminClient
     .from('login_activity')
     .insert({
@@ -110,9 +110,10 @@ export async function POST(request: Request) {
   try {
     let email = ''
     let password = ''
+    let requestedRedirectTo = ''
 
     if (wantsJson(request)) {
-      let body: { email?: string; password?: string }
+      let body: { email?: string; password?: string; redirectTo?: string }
       try {
         body = await request.json()
       } catch {
@@ -123,6 +124,7 @@ export async function POST(request: Request) {
       }
       email = String(body.email ?? '').trim()
       password = String(body.password ?? '')
+      requestedRedirectTo = String(body.redirectTo ?? '').trim()
     } else {
       let formData: FormData
       try {
@@ -135,6 +137,7 @@ export async function POST(request: Request) {
       }
       email = String(formData.get('email') ?? '').trim()
       password = String(formData.get('password') ?? '')
+      requestedRedirectTo = String(formData.get('redirectTo') ?? '').trim()
     }
 
     if (!email || !password) {
@@ -184,12 +187,15 @@ export async function POST(request: Request) {
       await ensureUserAccessRow(data.user.id)
       access = await getUserAccess(data.user.id)
     }
+
     await writeLoginActivityIfParticipant(data.user.id)
-    const redirectTo = access.mustChangePassword
+
+    const defaultRedirectTo = access.mustChangePassword
       ? '/change-password'
       : !access.role || access.role === 'participant'
         ? '/my'
         : '/wellness-director'
+    const redirectTo = requestedRedirectTo || defaultRedirectTo
 
     return jsonOrRedirect(request, { success: true, redirectTo }, 200, redirectTo)
   } catch (error) {

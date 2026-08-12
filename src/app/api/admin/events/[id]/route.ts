@@ -4,7 +4,7 @@ import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   const admin = await requireAdmin()
@@ -18,8 +18,10 @@ export async function DELETE(
   }
 
   const supabase = createServerSupabaseClient()
+  const kind = new URL(request.url).searchParams.get('kind')
+  const table = kind === 'nudge' ? 'weekly_nudges' : 'events'
   const { error } = await supabase
-    .from('events')
+    .from(table)
     .delete()
     .eq('id', eventId)
 

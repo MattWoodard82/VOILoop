@@ -17,7 +17,7 @@ describe('setMustChangePassword', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCookies.mockReturnValue({
-      get: jest.fn(),
+      getAll: jest.fn(() => []),
       set: jest.fn(),
     } as never)
   })

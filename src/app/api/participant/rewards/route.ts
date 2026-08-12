@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getRoleAndSession } from '@/lib/supabase/server'
-import { isRewardsRolloutEnabled } from '@/lib/feature-flags'
 
 export const runtime = 'nodejs'
 
 function buildRulesCopy() {
   return {
-    accrual_text: 'Points accrue daily from eligible wellness activities. During pilot rollout phases, the operator team manages point balances and recomputes them from the source of truth. Participant view is gated by the PILOT_CHALLENGES_BASIC rollout flag.',
+    accrual_text: 'Points accrue daily from eligible wellness activities. During pilot rollout phases, the operator team manages point balances and recomputes them from the source of truth.',
     cap_text: 'Weekly point caps are enforced by the active rewards policy. Check with your operator for the current weekly cap and bonus tiers for this pilot rollout.',
     bonus_text: 'Bonus points are awarded only after the associated activity is confirmed or explicitly approved by an operator. Redemption requires admin verification in the PTO request flow.',
     updated_at: new Date().toISOString(),
@@ -14,10 +13,6 @@ function buildRulesCopy() {
 }
 
 export async function GET() {
-  if (!isRewardsRolloutEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
   const { session, role } = await getRoleAndSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (role !== 'participant') {

@@ -1,6 +1,7 @@
 import { createClient } from './client'
 import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
+import { calculateEngagementScore } from '@/lib/scoring'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -68,6 +69,42 @@ function getPrivilegedQueryClient() {
   return createAdminSupabaseClient()
 }
 
+const DEFAULT_ENGAGEMENT_SCORE_WEIGHTS = {
+  login_frequency_weight: 25,
+  pulse_survey_completion_weight: 20,
+  data_submission_weight: 25,
+  intervention_follow_up_weight: 15,
+  trend_consistency_weight: 15,
+}
+
+type EngagementScoreWeights = typeof DEFAULT_ENGAGEMENT_SCORE_WEIGHTS
+
+async function getEngagementScoreWeights(supabase = getQueryClient()): Promise<EngagementScoreWeights> {
+  const { data, error } = await supabase
+    .from('engagement_score_weights')
+    .select('weight_name, weight_value')
+    .is('organization_id', null)
+
+  if (error) {
+    const message = (error.message ?? '').toLowerCase()
+    if (error.code === 'PGRST205' || message.includes('engagement_score_weights')) {
+      return DEFAULT_ENGAGEMENT_SCORE_WEIGHTS
+    }
+    throw error
+  }
+
+  const weights: EngagementScoreWeights = { ...DEFAULT_ENGAGEMENT_SCORE_WEIGHTS }
+  for (const row of data ?? []) {
+    if (!(row.weight_name in weights)) continue
+    const value = Number(row.weight_value)
+    if (Number.isFinite(value)) {
+      weights[row.weight_name as keyof EngagementScoreWeights] = value
+    }
+  }
+
+  return weights
+}
+
 export class ParticipantRankContextError extends Error {
   status: number
 
@@ -76,6 +113,18 @@ export class ParticipantRankContextError extends Error {
     this.name = 'ParticipantRankContextError'
     this.status = status
   }
+}
+
+function getEnrolledDays(enrolledDate: string | null | undefined): number | null {
+  if (!enrolledDate) return null
+
+  const enrolledDay = enrolledDate.slice(0, 10)
+  const enrolledUtc = new Date(`${enrolledDay}T00:00:00Z`)
+  if (Number.isNaN(enrolledUtc.getTime())) return null
+
+  const now = new Date()
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  return Math.floor((todayUtc.getTime() - enrolledUtc.getTime()) / 86400000)
 }
 
 export async function getParticipants(supabase = getQueryClient()): Promise<Participant[]> {
@@ -319,6 +368,7 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
+  const scoreWeights = await getEngagementScoreWeights()
   const participants = await getParticipants()
   const participantIds = participants.map((participant) => participant.id)
   const [wellness, workouts, habits, pulse, interventions] = await Promise.all([
@@ -328,6 +378,9 @@ export async function getTeamDashboard(): Promise<{
     getLatestPulse(),
     getInterventions(),
   ])
+  const riskFlags = participantIds.length > 0
+    ? await getRiskFlagsForParticipants(participantIds)
+    : []
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
   const workoutMap = workouts.reduce<Record<string, Workout>>((map, workout) => {
@@ -336,10 +389,16 @@ export async function getTeamDashboard(): Promise<{
   }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const riskFlagMap = new Map<string, RiskFlag>()
+  for (const flag of riskFlags) {
+    if (!riskFlagMap.has(flag.participant_id)) {
+      riskFlagMap.set(flag.participant_id, flag)
+    }
+  }
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
-    const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
+    const enrolledDays = getEnrolledDays(emp.enrolled_date)
     const recentWellness = wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21)
     const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
     const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)
@@ -347,26 +406,24 @@ export async function getTeamDashboard(): Promise<{
     const submissionConsistency = recentWellness.length > 0
       ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100)
       : null
-    const deviceWearConsistency = recentWellness.length > 0
-      ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100)
-      : null
-    const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
+    const pulseCompletion = recentPulse.length > 0 ? 100 : 0
     const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
     const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
     const engagementComponents: Record<string, number> = {
-      submission_consistency: submissionConsistency ?? 0,
-      device_wear_consistency: deviceWearConsistency ?? 0,
-      pulse_completion: pulseCompletion ?? 0,
-      nudge_response: nudgeResponse ?? 0,
-      workout_volume: workoutVolume ?? 0,
+      login_frequency: Math.min(100, Math.round((recentWellness.length / 5) * 100)),
+      pulse_survey_completion: pulseCompletion,
+      data_submission: submissionConsistency ?? 0,
+      intervention_follow_up: nudgeResponse ?? 0,
+      trend_consistency: workoutVolume ?? 0,
     }
-    const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
-    ].reduce((sum, part) => sum + part, 0)
+    const engagementScore = calculateEngagementScore(
+      recentWellness.length,
+      recentPulse.length,
+      recentWellness.filter((row) => row.recovery_score != null).length,
+      recentHabits.filter((row) => row.notes != null).length,
+      workoutVolume ?? 0,
+      scoreWeights,
+    )
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const earlier = rows.slice(0, Math.max(1, rows.length - 7))
@@ -384,12 +441,17 @@ export async function getTeamDashboard(): Promise<{
       ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
     ]
     const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
+    const overrideFlag = riskFlagMap.get(emp.id) ?? null
+    const snoozeExpired = overrideFlag?.override_state === 'snoozed'
+      && overrideFlag.override_expires_at != null
+      && new Date(overrideFlag.override_expires_at).getTime() <= Date.now()
+    const overrideState = snoozeExpired ? null : overrideFlag?.override_state ?? null
     const riskTriggers = [
-      ...(engagementScore < 35 ? ['Low engagement score'] : []),
+      ...(engagementScore.score < 35 ? ['Low engagement score'] : []),
       ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),
       ...(zeroDataFor14Days ? ['No wellness data for 14 days'] : []),
     ]
-    const riskLevel = zeroDataFor14Days || (engagementScore < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
+    const riskLevel = zeroDataFor14Days || (engagementScore.score < 35 && physiologicalTrend === 'declining') ? 'High' : engagementScore.score < 65 || physiologicalTrend === 'declining' ? 'Medium' : 'Low'
     return {
       ...emp,
       latest_wellness: w,
@@ -398,7 +460,7 @@ export async function getTeamDashboard(): Promise<{
       latest_pulse: pulseMap[emp.id] ?? null,
       risk_level: riskLevel,
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
-      engagement_score: engagementScore,
+      engagement_score: engagementScore.score,
       engagement_score_components: engagementComponents,
       physiological_trend: physiologicalTrend,
       physiological_trend_metrics: physiologicalMetrics,
@@ -406,8 +468,9 @@ export async function getTeamDashboard(): Promise<{
       risk_trigger_reasons: riskTriggers,
       baseline_state: baselineState,
       baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
-      override_state: null,
-      override_note: null,
+      override_state: overrideState,
+      override_note: overrideFlag?.override_reason ?? null,
+      override_expires_at: snoozeExpired ? null : overrideFlag?.override_expires_at ?? null,
     }
   })
 
@@ -428,6 +491,19 @@ export async function getTeamDashboard(): Promise<{
   }
 
   return { participants: enriched, stats, interventions }
+}
+
+async function getRiskFlagsForParticipants(participantIds: string[]): Promise<RiskFlag[]> {
+  const supabase = getQueryClient()
+  const { data, error } = await supabase
+    .from('risk_flags')
+    .select('*')
+    .in('participant_id', participantIds)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
 }
 
 function buildParticipantRankContext(

@@ -5,7 +5,6 @@ import { getParticipants } from '@/lib/supabase/queries'
 import { WhoopImportClient } from './import/WhoopImportClient'
 import { AccountProvisioningClient } from './accounts/AccountProvisioningClient'
 import { ChallengesAdminClient } from './challenges/ChallengesAdminClient'
-import { isRewardsRolloutEnabled } from '@/lib/feature-flags'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import type { Participant } from '@/types'
 import Link from 'next/link'
@@ -82,13 +81,7 @@ export default async function AdminPage() {
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
             Rewards rollout
           </div>
-          {!isRewardsRolloutEnabled() ? (
-            <div style={{ fontSize: 12, color: '#A5ACAF' }}>
-              Set <code>PILOT_CHALLENGES_BASIC=true</code> to enable rewards redemption, rules visibility, and operator tools.
-            </div>
-          ) : (
-            <ChallengesAdminClient />
-          )}
+          <ChallengesAdminClient />
         </section>
 
         <section id="events-nudges" className="card">
@@ -114,6 +107,32 @@ export default async function AdminPage() {
             }}
           >
             Open events manager
+          </Link>
+        </section>
+
+        <section id="healthchecks" className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+            Healthchecks
+          </div>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 14 }}>
+            Run participant-facing diagnostics for ranking privacy and Priority 4 insight calculations.
+          </div>
+          <Link
+            href="/admin/healthcheck"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#69BE28',
+              color: '#002244',
+              borderRadius: 7,
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Open admin healthcheck
           </Link>
         </section>
       </div>
