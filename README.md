@@ -114,6 +114,13 @@ gh repo create voiloop --public --push
    - App rollback: promote a previous Vercel production deployment.
    - DB rollback: use Supabase backup/PITR restore process.
 
+### Rewards rollout order
+1. Merge the rewards/rules PR to the `issue-66-integration` base branch.
+2. Verify the rewards rule text and PTO request rows exist in Supabase.
+3. Turn on `PILOT_CHALLENGES_BASIC=true` only after the operator/admin surfaces are ready.
+4. Confirm the participant rules page and admin approvals are visible before inviting users.
+5. Turn the flag off again if the rollout needs to be paused.
+
 ### Required GitHub configuration for schema deploy
 - Environment: `demo-prod`
 - Secret: `SUPABASE_DB_URL` — the **Session Pooler** connection string for the Supabase project.

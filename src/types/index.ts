@@ -136,6 +136,7 @@ export interface ParticipantWithWellness extends Participant {
   baseline_days_remaining?: number | null
   override_state?: 'none' | 'snoozed' | 'dismissed' | null
   override_note?: string | null
+  override_expires_at?: string | null
 }
 
 export interface TeamStats {

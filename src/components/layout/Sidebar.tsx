@@ -11,7 +11,6 @@ type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
     { href: '/wellness-director', label: 'Wellness Director', icon: BarChart2 },
-    { href: '/team', label: 'Team Roster', icon: Users },
     { href: '/pulse', label: 'Pulse Surveys', icon: MessageSquare },
   ]},
   { label: 'Programs', items: [
@@ -31,6 +30,7 @@ const ADMIN_NAV = [
 const PARTICIPANT_NAV = [
   { label: 'My Dashboard', items: [
     { href: '/my', label: 'My Wellness', icon: Activity },
+    { href: '/team', label: 'My Ranking', icon: Users },
   ]},
 ]
 
@@ -157,14 +157,16 @@ export function Sidebar() {
 }
 
 function LoopMark() {
+  // Arc segments connect the four cardinal dots on the circle (r=14, center 18,18):
+  // top (18,4) → right (32,18) → bottom (18,32) → left (4,18) → top (18,4)
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
       <circle cx="18" cy="18" r="14" stroke="#0a3560" strokeWidth="2.5"/>
-      <path d="M18,4 A14,14 0 0,1 31,21" stroke="#69BE28" strokeWidth="2.5" strokeLinecap="round"/>
-      <path d="M31,21 A14,14 0 0,1 18,32" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.65"/>
-      <path d="M18,32 A14,14 0 0,1 5,21" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.4"/>
-      <path d="M5,18 A14,14 0 0,1 16,4" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.2"/>
-      <path d="M27 18 L32 22 L27 27" stroke="#69BE28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+      <path d="M18,4 A14,14 0 0,1 32,18" stroke="#69BE28" strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M32,18 A14,14 0 0,1 18,32" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.65"/>
+      <path d="M18,32 A14,14 0 0,1 4,18" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.4"/>
+      <path d="M4,18 A14,14 0 0,1 18,4" stroke="#69BE28" strokeWidth="1.8" strokeLinecap="round" opacity="0.2"/>
+      <path d="M29,14 L32,18 L29,22" stroke="#69BE28" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
       <circle cx="18" cy="4" r="2.5" fill="#69BE28"/>
       <circle cx="32" cy="18" r="2.5" fill="#69BE28"/>
       <circle cx="18" cy="32" r="2.5" fill="#69BE28"/>

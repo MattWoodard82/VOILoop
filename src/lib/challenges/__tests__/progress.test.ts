@@ -64,8 +64,8 @@ describe('recomputeActiveChallengeProgress', () => {
               eq: () => ({
                 eq: async () => ({
                   data: [
-                    { id: 'p1', participant_id: 'EMP001', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
-                    { id: 'p2', participant_id: 'EMP002', completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
+                    { id: 'p1', participant_id: 'EMP001', progress_value: 0, completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
+                    { id: 'p2', participant_id: 'EMP002', progress_value: 0, completed: false, updated_at: '2026-07-10T00:00:00.000Z' },
                   ],
                   error: null,
                 }),

@@ -19,27 +19,68 @@ create index if not exists idx_nudge_acknowledgements_participant_id
 alter table if exists public.nudge_acknowledgements
   add column if not exists response_text_encrypted bytea;
 
-insert into public.nudge_acknowledgements (
-  nudge_id,
-  participant_id,
-  acknowledged_at,
-  response_text,
-  response_due_at
-)
-select
-  null,
-  nr.participant_id,
-  nr.responded_at,
-  coalesce(nr.response_type, ''),
-  nr.responded_at + interval '48 hours'
-from public.nudge_responses nr
-where not exists (
-  select 1
-  from public.nudge_acknowledgements na
-  where na.participant_id = nr.participant_id
-    and na.acknowledged_at = nr.responded_at
-    and na.response_text = coalesce(nr.response_type, '')
-);
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'nudge_responses'
+  ) then
+    execute $sql$
+      insert into public.nudge_acknowledgements (
+        nudge_id,
+        participant_id,
+        acknowledged_at,
+        response_text,
+        response_due_at
+      )
+      select
+        null,
+        nr.participant_id,
+        nr.responded_at,
+        coalesce(nr.response_type, ''),
+        nr.responded_at + interval '48 hours'
+      from public.nudge_responses nr
+      where not exists (
+        select 1
+        from public.nudge_acknowledgements na
+        where na.participant_id = nr.participant_id
+          and na.acknowledged_at = nr.responded_at
+          and na.response_text = coalesce(nr.response_type, '')
+      )
+    $sql$;
+  elsif exists (
+    select 1
+    from information_schema.tables
+    where table_schema = 'public'
+      and table_name = 'engagement_nudge_responses'
+  ) then
+    execute $sql$
+      insert into public.nudge_acknowledgements (
+        nudge_id,
+        participant_id,
+        acknowledged_at,
+        response_text,
+        response_due_at
+      )
+      select
+        null,
+        nr.participant_id,
+        nr.responded_at,
+        coalesce(nr.response_type, ''),
+        nr.responded_at + interval '48 hours'
+      from public.engagement_nudge_responses nr
+      where not exists (
+        select 1
+        from public.nudge_acknowledgements na
+        where na.participant_id = nr.participant_id
+          and na.acknowledged_at = nr.responded_at
+          and na.response_text = coalesce(nr.response_type, '')
+      )
+    $sql$;
+  end if;
+end $$;
 
 update public.nudge_acknowledgements
 set response_text_encrypted = pgp_sym_encrypt(

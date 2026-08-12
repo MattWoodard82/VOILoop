@@ -37,6 +37,10 @@ jest.mock('@/lib/whoop/mappers', () => ({
   mapManualEntries: jest.fn(() => ({ habits: [], errors: [], processed: 0 })),
 }))
 
+jest.mock('@/lib/challenges/progress', () => ({
+  recomputeActiveChallengeProgress: jest.fn().mockResolvedValue(null),
+}))
+
 function makeRequest(
   fileNames = ['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'],
   contentType = 'multipart/form-data; boundary=test',

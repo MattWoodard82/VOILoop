@@ -1,3 +1,30 @@
+-- Preserve the legacy engagement-targeting tables introduced earlier in the rollout.
+-- This migration repurposes the `nudge_targets` name for weekly nudge delivery targets,
+-- so first move the legacy tables aside when upgrading an existing schema.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'nudge_targets'
+      and column_name = 'nudge_type'
+  ) then
+    if exists (
+      select 1
+      from information_schema.tables
+      where table_schema = 'public'
+        and table_name = 'nudge_responses'
+    ) then
+      execute 'alter table public.nudge_responses rename to engagement_nudge_responses';
+    end if;
+    execute 'alter table public.nudge_targets rename to engagement_nudge_targets';
+  end if;
+end $$;
+
+alter table if exists public.participants
+  add column if not exists cohort text;
+
 create table if not exists public.nudge_targets (
   id uuid primary key default gen_random_uuid(),
   nudge_id uuid not null references public.weekly_nudges(id) on delete cascade,

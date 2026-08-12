@@ -4,7 +4,7 @@ import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: { id: string } }
 ) {
   const admin = await requireAdmin()
@@ -18,6 +18,14 @@ export async function DELETE(
   }
 
   const supabase = createServerSupabaseClient()
+  const kind = new URL(request.url).searchParams.get('kind')
+  if (kind === 'nudge') {
+    return NextResponse.json(
+      { error: 'Published nudges are append-only and cannot be deleted.' },
+      { status: 405 }
+    )
+  }
+
   const { error } = await supabase
     .from('events')
     .delete()

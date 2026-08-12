@@ -1,7 +1,6 @@
 import { GET } from '../route'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { getSession, getUserAccess } from '@/lib/supabase/server'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 jest.mock('@/lib/supabase/admin', () => ({
   createAdminSupabaseClient: jest.fn(),
@@ -12,19 +11,13 @@ jest.mock('@/lib/supabase/server', () => ({
   getUserAccess: jest.fn(),
 }))
 
-jest.mock('@/lib/feature-flags', () => ({
-  isPilotChallengesBasicEnabled: jest.fn(),
-}))
-
 describe('GET /api/participant/challenge', () => {
   const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockGetUserAccess = getUserAccess as jest.MockedFunction<typeof getUserAccess>
-  const mockIsPilotChallengesBasicEnabled = isPilotChallengesBasicEnabled as jest.MockedFunction<typeof isPilotChallengesBasicEnabled>
 
   beforeEach(() => {
     jest.clearAllMocks()
-    mockIsPilotChallengesBasicEnabled.mockReturnValue(true)
   })
 
   test('returns 403 for non-participant users', async () => {

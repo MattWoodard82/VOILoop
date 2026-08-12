@@ -60,6 +60,19 @@ describe('DELETE /api/admin/events/[id]', () => {
     await expect(response.json()).resolves.toEqual({ ok: true })
   })
 
+  test('rejects nudge deletion for admins when kind=nudge', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+
+    const response = await DELETE(new Request('http://localhost/api/admin/events/nudge-1?kind=nudge'), {
+      params: { id: 'nudge-1' },
+    })
+
+    expect(response.status).toBe(405)
+    await expect(response.json()).resolves.toEqual({
+      error: 'Published nudges are append-only and cannot be deleted.',
+    })
+  })
+
   test('returns 500 when delete fails', async () => {
     mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 

@@ -6,8 +6,14 @@ const PASSWORD_CHANGE_ROUTE = '/change-password'
 const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to any authenticated user; list it before ADMIN_ONLY so it takes priority
 const AUTHENTICATED_ROUTES = ['/admin/import']
-const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/team', '/pulse', '/interventions', '/outcomes', '/admin/challenges']
+const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/pulse', '/interventions', '/outcomes', '/admin/challenges']
 const LEGACY_EXECUTIVE_ROUTE = '/executive'
+
+type CookieToSet = {
+  name: string
+  value: string
+  options: CookieOptions
+}
 
 function isRouteMatch(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -45,16 +51,15 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) { return request.cookies.get(name)?.value },
-        set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value, ...options })
+        getAll() {
+          return request.cookies.getAll()
         },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
+        setAll(cookiesToSet: CookieToSet[]) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request: { headers: request.headers } })
-          response.cookies.set({ name, value: '', ...options })
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
         },
       },
     }

@@ -1,7 +1,13 @@
 /**
  * VOILoop seed script
  * Run: npm run db:seed
- * Inserts Travis Brandenburgh's exact WHOOP data + 9 generated team members
+ *
+ * Creates auth users for each participant, links auth_user_id, seeds all
+ * relevant tables to reflect the current schema, and provisions user_access
+ * rows so participants can log in immediately after reset.
+ *
+ * test1@user.com  → Colin Stephenson (EMP005)  password: Password!
+ * All other participants get <firstname>@voiloop.local  password: Pilot1234
  */
 
 import dotenv from 'dotenv'
@@ -58,50 +64,90 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 })
 
 const DATE = '2026-06-09'
+const WEEK_OF = '2026-06-09' // Monday of seed week
+
+// Maps participant id → { email, password }
+// test1@user.com is mapped to Colin Stephenson (EMP005)
+const PARTICIPANT_AUTH: Record<string, { email: string; password: string }> = {
+  EMP001: { email: 'travis@voiloop.local',   password: 'Pilot1234' },
+  EMP002: { email: 'tina@voiloop.local',     password: 'Pilot1234' },
+  EMP003: { email: 'nicole@voiloop.local',   password: 'Pilot1234' },
+  EMP004: { email: 'kyle@voiloop.local',     password: 'Pilot1234' },
+  EMP005: { email: 'test1@user.com',         password: 'Password!' }, // Colin Stephenson
+  EMP006: { email: 'franklin@voiloop.local', password: 'Pilot1234' },
+  EMP007: { email: 'david@voiloop.local',    password: 'Pilot1234' },
+  EMP008: { email: 'dzenan@voiloop.local',   password: 'Pilot1234' },
+  EMP009: { email: 'eddie@voiloop.local',    password: 'Pilot1234' },
+  EMP010: { email: 'caleb@voiloop.local',    password: 'Pilot1234' },
+}
+
+async function upsertAuthUser(email: string, password: string): Promise<string> {
+  // Check if user already exists
+  const { data: list } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
+  const existing = list?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+  if (existing) {
+    // Update password in case it changed
+    await supabase.auth.admin.updateUserById(existing.id, { password })
+    return existing.id
+  }
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  })
+  if (error || !data.user) throw new Error(`Failed to create auth user ${email}: ${error?.message}`)
+  return data.user.id
+}
 
 async function seed() {
   console.log('🌱 Seeding VOILoop database...')
 
-  // ── Participants ──────────────────────────────────────────────────────────────
-  const participants = [
-    // Travis — exact data, COO
-    { id: 'EMP001', first_name: 'Travis', last_name: 'Brandenburgh',
-      department: 'Manager', title: 'COO', device_id: 'WHP-001',
-      consent: true, enrolled_date: '2026-01-15', status: 'Active', is_exact_data: true },
-    { id: 'EMP002', first_name: 'Tina', last_name: 'Turley',
-      department: 'Pediatrics', title: 'Pediatric Nurse', device_id: 'WHP-002',
-      consent: true, enrolled_date: '2026-01-15', status: 'Active', is_exact_data: false },
-    { id: 'EMP003', first_name: 'Nicole', last_name: 'Revis',
-      department: 'Cardiology', title: 'Cardio Nurse', device_id: 'WHP-003',
-      consent: true, enrolled_date: '2026-02-01', status: 'Active', is_exact_data: false },
-    { id: 'EMP004', first_name: 'Kyle', last_name: 'Schuppan',
-      department: 'Surgery', title: 'Surgical Tech', device_id: 'WHP-004',
-      consent: true, enrolled_date: '2026-02-01', status: 'Active', is_exact_data: false },
-    { id: 'EMP005', first_name: 'Colin', last_name: 'Stephenson',
-      department: 'Night Shift', title: 'RN', device_id: 'WHP-005',
-      consent: true, enrolled_date: '2026-02-15', status: 'Active', is_exact_data: false },
-    { id: 'EMP006', first_name: 'Franklin', last_name: 'Turley',
-      department: 'Oncology', title: 'Oncology RN', device_id: 'WHP-006',
-      consent: true, enrolled_date: '2026-03-01', status: 'Active', is_exact_data: false },
-    { id: 'EMP007', first_name: 'David', last_name: 'Rosamond',
-      department: 'Admin', title: 'HR Coordinator', device_id: 'WHP-007',
-      consent: true, enrolled_date: '2026-03-01', status: 'Active', is_exact_data: false },
-    { id: 'EMP008', first_name: 'Dzenan', last_name: 'Blambic',
-      department: 'ICU', title: 'ICU Nurse', device_id: 'WHP-008',
-      consent: true, enrolled_date: '2026-03-15', status: 'Active', is_exact_data: false },
-    { id: 'EMP009', first_name: 'Eddie', last_name: 'Rediske',
-      department: 'Emergency Dept', title: 'ER Tech', device_id: 'WHP-009',
-      consent: true, enrolled_date: '2026-04-01', status: 'Active', is_exact_data: false },
-    { id: 'EMP010', first_name: 'Caleb', last_name: 'Stone',
-      department: 'Surgery', title: 'Surgical RN', device_id: 'WHP-010',
-      consent: true, enrolled_date: '2026-04-01', status: 'Active', is_exact_data: false },
+  // ── Auth users + Participants ─────────────────────────────────────────────
+  const participantDefs = [
+    { id: 'EMP001', first_name: 'Travis',   last_name: 'Brandenburgh', department: 'Manager',        title: 'COO',             device_id: 'WHP-001', cohort: 'management',  enrolled_date: '2026-01-15', is_exact_data: true  },
+    { id: 'EMP002', first_name: 'Tina',     last_name: 'Turley',       department: 'Pediatrics',     title: 'Pediatric Nurse', device_id: 'WHP-002', cohort: 'day-shift',   enrolled_date: '2026-01-15', is_exact_data: false },
+    { id: 'EMP003', first_name: 'Nicole',   last_name: 'Revis',        department: 'Cardiology',     title: 'Cardio Nurse',    device_id: 'WHP-003', cohort: 'day-shift',   enrolled_date: '2026-02-01', is_exact_data: false },
+    { id: 'EMP004', first_name: 'Kyle',     last_name: 'Schuppan',     department: 'Surgery',        title: 'Surgical Tech',   device_id: 'WHP-004', cohort: 'day-shift',   enrolled_date: '2026-02-01', is_exact_data: false },
+    { id: 'EMP005', first_name: 'Colin',    last_name: 'Stephenson',   department: 'Night Shift',    title: 'RN',              device_id: 'WHP-005', cohort: 'night-shift', enrolled_date: '2026-02-15', is_exact_data: false },
+    { id: 'EMP006', first_name: 'Franklin', last_name: 'Turley',       department: 'Oncology',       title: 'Oncology RN',     device_id: 'WHP-006', cohort: 'day-shift',   enrolled_date: '2026-03-01', is_exact_data: false },
+    { id: 'EMP007', first_name: 'David',    last_name: 'Rosamond',     department: 'Admin',          title: 'HR Coordinator',  device_id: 'WHP-007', cohort: 'management',  enrolled_date: '2026-03-01', is_exact_data: false },
+    { id: 'EMP008', first_name: 'Dzenan',   last_name: 'Blambic',      department: 'ICU',            title: 'ICU Nurse',       device_id: 'WHP-008', cohort: 'night-shift', enrolled_date: '2026-03-15', is_exact_data: false },
+    { id: 'EMP009', first_name: 'Eddie',    last_name: 'Rediske',      department: 'Emergency Dept', title: 'ER Tech',         device_id: 'WHP-009', cohort: 'day-shift',   enrolled_date: '2026-04-01', is_exact_data: false },
+    { id: 'EMP010', first_name: 'Caleb',    last_name: 'Stone',        department: 'Surgery',        title: 'Surgical RN',     device_id: 'WHP-010', cohort: 'day-shift',   enrolled_date: '2026-08-01', is_exact_data: false },
   ]
+
+  const authUserIds: Record<string, string> = {}
+  for (const p of participantDefs) {
+    const { email, password } = PARTICIPANT_AUTH[p.id]
+    const userId = await upsertAuthUser(email, password)
+    authUserIds[p.id] = userId
+  }
+  console.log('✅ Auth users provisioned')
+
+  const participants = participantDefs.map(p => ({
+    ...p,
+    auth_user_id: authUserIds[p.id],
+    consent: true,
+    status: 'Active',
+  }))
 
   const { error: participantErr } = await supabase
     .from('participants')
     .upsert(participants, { onConflict: 'id' })
   if (participantErr) { console.error('Participants:', participantErr); process.exit(1) }
   console.log('✅ Participants seeded')
+
+  // ── user_access rows (role: participant, no forced password change) ────────
+  const userAccessRows = participantDefs.map(p => ({
+    user_id: authUserIds[p.id],
+    role: 'participant',
+    must_change_password: false,
+  }))
+  const { error: accessErr } = await supabase
+    .from('user_access')
+    .upsert(userAccessRows, { onConflict: 'user_id' })
+  if (accessErr) { console.error('user_access:', accessErr); process.exit(1) }
+  console.log('✅ user_access rows seeded')
 
   // ── Daily Wellness ─────────────────────────────────────────────────────────
   // EMP001 = Travis exact WHOOP data from Excel
@@ -296,10 +342,58 @@ async function seed() {
   if (intErr) { console.error('Interventions:', intErr); process.exit(1) }
   console.log('✅ Interventions seeded')
 
+  // ── Engagement score weights (global defaults) ────────────────────────────
+  const weights = [
+    { organization_id: null, weight_name: 'login_frequency_weight',         weight_value: 0.20 },
+    { organization_id: null, weight_name: 'pulse_survey_completion_weight',  weight_value: 0.25 },
+    { organization_id: null, weight_name: 'data_submission_weight',          weight_value: 0.25 },
+    { organization_id: null, weight_name: 'intervention_follow_up_weight',   weight_value: 0.15 },
+    { organization_id: null, weight_name: 'trend_consistency_weight',        weight_value: 0.15 },
+  ]
+  const { error: weightsErr } = await supabase
+    .from('engagement_score_weights')
+    .upsert(weights, { onConflict: 'organization_id,weight_name' })
+  if (weightsErr) { console.error('Engagement weights:', weightsErr); process.exit(1) }
+  console.log('✅ Engagement score weights seeded')
+
+  // ── Events ────────────────────────────────────────────────────────────────
+  const events = [
+    { title: 'Group Hike — Foothills Trail', description: 'Meet at the trailhead parking lot. All fitness levels welcome.',
+      event_date: '2026-06-21', event_time: '7:00 AM', location: 'Foothills Trail, Boise ID',
+      event_type: 'outdoor', recurring: false, recurrence: null, rsvp_enabled: true },
+    { title: 'Lunchtime Yoga', description: '30-minute guided yoga session in the breakroom.',
+      event_date: '2026-06-18', event_time: '12:00 PM', location: 'Breakroom B',
+      event_type: 'fitness', recurring: true, recurrence: 'weekly', rsvp_enabled: false },
+    { title: 'Hospital 5K Fun Run', description: 'Annual charity 5K around the hospital campus.',
+      event_date: '2026-07-04', event_time: '8:00 AM', location: 'Hospital Main Campus',
+      event_type: 'race', recurring: false, recurrence: null, rsvp_enabled: true },
+  ]
+  const { error: eventsErr } = await supabase
+    .from('events')
+    .upsert(events, { onConflict: 'id' })
+  if (eventsErr) { console.error('Events:', eventsErr); process.exit(1) }
+  console.log('✅ Events seeded')
+
+  // ── Weekly nudge ──────────────────────────────────────────────────────────
+  const nudge = {
+    week_of: WEEK_OF,
+    message: 'Great work this week, team. Remember: small consistent habits compound over time. Even 10 minutes of movement today counts. You\'ve got this. 💪',
+    author: 'Heather Simpson',
+    response_due_at: '2099-12-31T23:59:00Z', // far future — always open for pilot testing
+  }
+  const { error: nudgeErr } = await supabase
+    .from('weekly_nudges')
+    .upsert(nudge, { onConflict: 'week_of' })
+  if (nudgeErr) { console.error('Weekly nudge:', nudgeErr); process.exit(1) }
+  console.log('✅ Weekly nudge seeded')
+
   console.log('\n🎉 VOILoop database seeded successfully!')
-  console.log('   Travis Brandenburgh (EMP001) — exact WHOOP data locked in')
-  console.log('   9 team members — generated data')
-  console.log('   4 interventions — 2 pending, 1 in progress, 1 monitoring')
+  console.log('   Travis Brandenburgh (EMP001) — exact WHOOP data, travis@voiloop.local / Pilot1234')
+  console.log('   Colin Stephenson (EMP005)   — test1@user.com / Password!')
+  console.log('   8 other participants        — <firstname>@voiloop.local / Pilot1234')
+  console.log('   4 interventions             — 2 pending, 1 in progress, 1 monitoring')
+  console.log('   engagement_score_weights    — global defaults seeded')
+  console.log('   events + weekly nudge       — sample data seeded')
 }
 
 seed().catch((err) => {
