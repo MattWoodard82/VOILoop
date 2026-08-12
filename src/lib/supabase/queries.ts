@@ -65,7 +65,11 @@ function getQueryClient() {
 }
 
 function getPrivilegedQueryClient() {
-  return createAdminSupabaseClient()
+  try {
+    return createAdminSupabaseClient()
+  } catch {
+    return getQueryClient()
+  }
 }
 
 export class ParticipantRankContextError extends Error {
@@ -282,8 +286,7 @@ export async function getPulseTrend(): Promise<{ date: string; avg_mental_wellbe
   }))
 }
 
-export async function getInterventions(status?: string): Promise<Intervention[]> {
-  const supabase = getQueryClient()
+export async function getInterventions(status?: string, supabase = getQueryClient()): Promise<Intervention[]> {
   let q = supabase
     .from('interventions')
     .select('*')
@@ -319,14 +322,17 @@ export async function getTeamDashboard(): Promise<{
   stats: TeamStats
   interventions: Intervention[]
 }> {
-  const participants = await getParticipants()
+  const supabase = getQueryClient()
+  const privilegedSupabase = getPrivilegedQueryClient()
+  const participants = await getParticipants(supabase)
   const participantIds = participants.map((participant) => participant.id)
-  const [wellness, workouts, habits, pulse, interventions] = await Promise.all([
-    getLatestWellness(undefined, participantIds),
-    getLatestWorkouts(),
-    getLatestHabits(),
-    getLatestPulse(),
-    getInterventions(),
+  const [wellness, workouts, habits, pulse, interventions, riskFlags] = await Promise.all([
+    getLatestWellness(undefined, participantIds, supabase),
+    getLatestWorkouts(undefined, supabase),
+    getLatestHabits(undefined, supabase),
+    getLatestPulse(supabase),
+    getInterventions(undefined, supabase),
+    getRiskFlagsForParticipantGroup(participantIds, privilegedSupabase),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
@@ -408,8 +414,32 @@ export async function getTeamDashboard(): Promise<{
       baseline_days_remaining: enrolledDays != null ? Math.max(0, 21 - enrolledDays) : null,
       override_state: null,
       override_note: null,
+      override_expires_at: null,
     }
   })
+
+  const activeOverrideByParticipant = new Map<string, RiskFlag>()
+  for (const flag of riskFlags) {
+    if (
+      flag.flag_type !== 'wellness_director' ||
+      flag.is_active !== true ||
+      !flag.override_state ||
+      (flag.override_expires_at && new Date(flag.override_expires_at).getTime() < Date.now())
+    ) {
+      continue
+    }
+    if (!activeOverrideByParticipant.has(flag.participant_id)) {
+      activeOverrideByParticipant.set(flag.participant_id, flag)
+    }
+  }
+
+  for (const participant of enriched) {
+    const override = activeOverrideByParticipant.get(participant.id)
+    if (!override) continue
+    participant.override_state = override.override_state
+    participant.override_note = override.override_reason
+    participant.override_expires_at = override.override_expires_at
+  }
 
   const recoveries = enriched.map((e) => e.latest_wellness?.recovery_score ?? null)
   const hrvs = enriched.map((e) => e.latest_wellness?.hrv_ms ?? null)
@@ -666,6 +696,22 @@ export async function getRiskFlagsForParticipant(
   }
 
   const { data, error } = await query
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getRiskFlagsForParticipantGroup(
+  participantIds: string[],
+  supabase = getQueryClient(),
+): Promise<RiskFlag[]> {
+  if (participantIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('risk_flags')
+    .select('*')
+    .in('participant_id', participantIds)
     .order('created_at', { ascending: false })
 
   if (error) throw error
