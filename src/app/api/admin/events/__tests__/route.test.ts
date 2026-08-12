@@ -71,6 +71,10 @@ describe('admin events routes', () => {
       data: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
       error: null,
     }))
+    const eventRsvpsSelect = jest.fn(async () => ({
+      data: [{ event_id: 'evt-1', participant_id: 'p-1' }],
+      error: null,
+    }))
     const acknowledgementsOrder = jest.fn(async () => ({
       data: [{
         participant_id: 'p-1',
@@ -103,6 +107,11 @@ describe('admin events routes', () => {
             })),
           }
         }
+        if (table === 'event_rsvps') {
+          return {
+            select: eventRsvpsSelect,
+          }
+        }
         throw new Error(`Unexpected admin table ${table}`)
       }),
       rpc: rpcDecrypt,
@@ -113,7 +122,15 @@ describe('admin events routes', () => {
 
     expect(response.status).toBe(200)
     expect(body).toEqual({
-      events: [{ id: 'evt-1', title: 'Morning Run' }],
+      events: [{
+        id: 'evt-1',
+        title: 'Morning Run',
+        rsvps: [{
+          participant_id: 'p-1',
+          first_name: 'Jane',
+          last_name: 'Doe',
+        }],
+      }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
       participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
       acknowledgements: [{

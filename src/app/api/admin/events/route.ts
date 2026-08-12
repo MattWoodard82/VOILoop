@@ -25,6 +25,12 @@ interface NudgePayload {
   participant_id?: string
 }
 
+interface EventRsvpSummary {
+  participant_id: string
+  first_name: string
+  last_name: string
+}
+
 const VALID_EVENT_TYPES = new Set(['outdoor', 'fitness', 'race', 'general'])
 
 function getMondayOfCurrentWeekIso(): string {
@@ -43,7 +49,7 @@ export async function GET() {
   const adminClient = createAdminSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
-  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }, { data: participants, error: participantsError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }, { data: participants, error: participantsError }, { data: rsvps, error: rsvpsError }] = await Promise.all([
     supabase
       .from('events')
       .select('*')
@@ -59,6 +65,9 @@ export async function GET() {
       .select('id, first_name, last_name')
       .eq('status', 'Active')
       .order('last_name', { ascending: true }),
+    adminClient
+      .from('event_rsvps')
+      .select('event_id, participant_id'),
   ])
 
   if (eventsError) {
@@ -70,8 +79,24 @@ export async function GET() {
   if (participantsError) {
     return NextResponse.json({ error: participantsError.message }, { status: 500 })
   }
+  if (rsvpsError) {
+    return NextResponse.json({ error: rsvpsError.message }, { status: 500 })
+  }
 
   const recentNudge = nudges?.[0] ?? null
+  const participantMap = new Map((participants ?? []).map((participant) => [participant.id, participant]))
+  const rsvpsByEventId = new Map<string, EventRsvpSummary[]>()
+  for (const rsvp of rsvps ?? []) {
+    const participant = participantMap.get(rsvp.participant_id)
+    if (!participant) continue
+    const eventRsvps = rsvpsByEventId.get(rsvp.event_id) ?? []
+    eventRsvps.push({
+      participant_id: rsvp.participant_id,
+      first_name: participant.first_name,
+      last_name: participant.last_name,
+    })
+    rsvpsByEventId.set(rsvp.event_id, eventRsvps)
+  }
   let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
   if (recentNudge) {
     const { data: acks, error: acknowledgementsError } = await adminClient
@@ -83,9 +108,7 @@ export async function GET() {
     if (acknowledgementsError) {
       return NextResponse.json({ error: acknowledgementsError.message }, { status: 500 })
     }
-
     if (acks && acks.length > 0) {
-      const participantMap = new Map((participants ?? []).map((participant) => [participant.id, participant]))
       acknowledgements = await Promise.all(acks.map(async (ack) => {
         let responseText = ''
         if (ack.response_text_encrypted) {
@@ -111,7 +134,10 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    events: events ?? [],
+    events: (events ?? []).map((event) => ({
+      ...event,
+      rsvps: rsvpsByEventId.get(event.id) ?? [],
+    })),
     nudges: nudges ?? [],
     participants: participants ?? [],
     acknowledgements,

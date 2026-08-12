@@ -11,6 +11,11 @@ interface Event {
   event_type: string
   recurring: boolean
   recurrence: string | null
+  rsvps?: Array<{
+    participant_id: string
+    first_name: string
+    last_name: string
+  }>
 }
 
 interface Nudge {
@@ -294,6 +299,18 @@ export function AdminEventsClient({ participants }: AdminEventsClientProps) {
                     {event.recurring && <span style={{ fontSize: 9, color: '#A5ACAF', background: '#001a33', borderRadius: 20, padding: '1px 6px', marginLeft: 6 }}>recurring</span>}
                   </div>
                   <div style={{ fontSize: 11, color: '#A5ACAF' }}>{event.event_date}{event.event_time ? ` · ${event.event_time}` : ''}{event.location ? ` · ${event.location}` : ''}</div>
+                  {event.rsvps && event.rsvps.length > 0 ? (
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600, marginBottom: 4 }}>
+                        RSVPs · {event.rsvps.length}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#A5ACAF', lineHeight: 1.5 }}>
+                        {event.rsvps.map((rsvp) => `${rsvp.first_name} ${rsvp.last_name}`.trim()).join(', ')}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 8, fontSize: 10, color: '#A5ACAF' }}>No RSVPs yet</div>
+                  )}
                 </div>
                 <button onClick={() => deleteEvent(event.id)}
                   style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 5, padding: '3px 8px', fontSize: 10, color: '#ff6b6b', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
