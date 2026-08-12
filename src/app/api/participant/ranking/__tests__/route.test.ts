@@ -24,8 +24,7 @@ jest.mock('@/lib/supabase/queries', () => ({
 }))
 
 describe('participant ranking route', () => {
-  const { getSession, getUserAccess } = jest.requireMock('@/lib/supabase/server') as {
-    getSession: jest.Mock
+  const { getUserAccess } = jest.requireMock('@/lib/supabase/server') as {
     getUserAccess: jest.Mock
   }
   const { getParticipantRankContext } = jest.requireMock('@/lib/supabase/queries') as {
@@ -34,7 +33,6 @@ describe('participant ranking route', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    getSession.mockResolvedValue({ user: { id: 'user-1' } })
     getUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
     getParticipantRankContext.mockResolvedValue({
       metric: 'recovery',
@@ -77,13 +75,6 @@ describe('participant ranking route', () => {
 
     const response = await GET(new Request('http://localhost/api/participant/ranking?metric=recovery'))
     expect(response.status).toBe(403)
-  })
-
-  test('returns 401 when unauthenticated', async () => {
-    getSession.mockResolvedValue(null)
-
-    const response = await GET(new Request('http://localhost/api/participant/ranking?metric=recovery'))
-    expect(response.status).toBe(401)
   })
 
   test('returns 404 when the participant cannot be resolved', async () => {

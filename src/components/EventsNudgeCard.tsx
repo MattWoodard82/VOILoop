@@ -75,9 +75,6 @@ export function EventsNudgeCard() {
   const [rsvps, setRsvps] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showAckModal, setShowAckModal] = useState(false)
-  const [ackText, setAckText] = useState('')
-  const [ackSubmitting, setAckSubmitting] = useState(false)
 
   useEffect(() => {
     const loadCardData = async () => {
@@ -130,65 +127,29 @@ export function EventsNudgeCard() {
 
   const acknowledgeNudge = async () => {
     if (!nudge) return
-    setShowAckModal(true)
-  }
-
-  const submitAcknowledgement = async () => {
-    if (!nudge || !ackText.trim()) return
-    setAckSubmitting(true)
+    const responseText = window.prompt('Add a short acknowledgement for this nudge:')?.trim()
+    if (!responseText) return
     const response = await fetch('/api/participant/events', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nudgeId: nudge.id, responseText: ackText.trim() }),
+      body: JSON.stringify({ nudgeId: nudge.id, responseText }),
     })
     if (!response.ok) {
       const payload = await response.json().catch(() => null) as { error?: string } | null
       setError(`Nudge acknowledgement failed. Detail: ${payload?.error ?? 'Request failed.'}`)
-      setAckSubmitting(false)
       return
     }
     setAcknowledgement({
       acknowledged_at: new Date().toISOString(),
-      response_text: ackText.trim(),
+      response_text: responseText,
       response_due_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     })
-    setShowAckModal(false)
-    setAckText('')
-    setAckSubmitting(false)
   }
 
   if (loading) return null
 
   return (
     <div style={{ marginBottom: 14 }}>
-      {showAckModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,10,25,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: '24px 28px', width: 420, maxWidth: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Acknowledge this week&apos;s nudge</div>
-            <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 16 }}>Share a brief reflection. Your response is private and visible only to your wellness director.</div>
-            <textarea
-              autoFocus
-              value={ackText}
-              onChange={e => setAckText(e.target.value)}
-              placeholder="How are you feeling about this week's focus?"
-              rows={3}
-              style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, padding: '9px 12px', fontSize: 12, color: '#fff', fontFamily: 'Inter, sans-serif', resize: 'vertical', outline: 'none', boxSizing: 'border-box' } as React.CSSProperties}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button onClick={() => { setShowAckModal(false); setAckText('') }}
-                disabled={ackSubmitting}
-                style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #0a3560', background: 'transparent', color: '#A5ACAF', fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>
-                Cancel
-              </button>
-              <button onClick={submitAcknowledgement}
-                disabled={ackSubmitting || !ackText.trim()}
-                style={{ padding: '8px 18px', borderRadius: 7, border: 'none', background: ackText.trim() ? '#69BE28' : '#0a3560', color: ackText.trim() ? '#002244' : '#A5ACAF', fontSize: 12, fontWeight: 700, cursor: ackText.trim() ? 'pointer' : 'default', fontFamily: 'Inter, sans-serif' }}>
-                {ackSubmitting ? 'Sending…' : 'Send'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {error && (
         <div style={{ marginBottom: 10, padding: '10px 12px', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 8, color: '#ffb4b4', fontSize: 12 }}>
           {error}

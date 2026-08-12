@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
@@ -40,7 +39,6 @@ interface Props {
     } | null
   } | null
   importBatches: ImportBatch[]
-  rewardsEnabled: boolean
 }
 
 function getRecoverySummary(score: number | null) {
@@ -128,7 +126,7 @@ function trendBadgeVariant(state: PersonalTrend['state']) {
   return 'wolf'
 }
 
-export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, rewardsEnabled, insights }: Props) {
+export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, insights }: Props) {
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
@@ -204,24 +202,6 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
             {importSyncLabel ? `Last sync ${importSyncLabel}` : 'No sync yet'}
           </Badge>
           {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
-          {rewardsEnabled ? (
-            <Link
-              href="/rules"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '6px 12px',
-                borderRadius: 999,
-                border: '1px solid #69BE28',
-                color: '#69BE28',
-                textDecoration: 'none',
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              Rules
-            </Link>
-          ) : null}
         </div>
       </div>
 <EventsNudgeCard />
@@ -289,13 +269,6 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           deltaDir="neutral"
         />
       </div>
-      {rewardsEnabled ? (
-        <Card title="Rewards" badge={<Badge variant="green">Pilot</Badge>}>
-          <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
-            Rewards redemption is available during the rollout. Points convert into PTO requests, and final approval stays with the admin team.
-          </div>
-        </Card>
-      ) : null}
 
       <Card
         title="Your baseline vs recent 21 days"
@@ -519,3 +492,4 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
+

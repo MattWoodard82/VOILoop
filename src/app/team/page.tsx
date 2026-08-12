@@ -17,7 +17,7 @@ export default async function TeamPage() {
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'status' in error && Number((error as { status: number }).status) === 404) {
       return (
-        <DashboardShell title="My Ranking" showExport={false}>
+        <DashboardShell title="Team Roster">
           <Card title="Participant ranking context">
             <div style={{ color: '#A5ACAF' }}>Your participant record is being prepared. Check back shortly.</div>
           </Card>
@@ -28,7 +28,7 @@ export default async function TeamPage() {
   }
 
   return (
-    <DashboardShell title="My Ranking" showExport={false}>
+    <DashboardShell title="Team Roster">
       <TeamRosterClient participantContext={participantContext} />
     </DashboardShell>
   )

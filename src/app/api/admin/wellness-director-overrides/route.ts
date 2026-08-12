@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { requireAdmin } from '@/lib/supabase/server'
-import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -20,37 +19,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid override payload' }, { status: 400 })
   }
 
-  const supabase = createAdminSupabaseClient()
-  const { data: existingFlag, error: existingFlagError } = await supabase
-    .from('risk_flags')
-    .select('id')
-    .eq('participant_id', participantId)
-    .eq('flag_type', 'wellness_director')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (existingFlagError) {
-    return NextResponse.json({ error: existingFlagError.message }, { status: 500 })
-  }
-
-  const overridePayload = {
-    participant_id: participantId,
-    flag_type: 'wellness_director',
-    is_active: true,
-    severity: null,
-    override_state: action === 'snooze' ? 'snoozed' : 'dismissed',
-    override_reason: note,
-    override_expires_at: action === 'snooze' ? snoozeUntil : null,
-    updated_at: new Date().toISOString(),
-  }
-
-  const target = existingFlag
-    ? supabase.from('risk_flags').update(overridePayload).eq('id', existingFlag.id)
-    : supabase.from('risk_flags').insert(overridePayload)
-
-  const { data, error } = await target
+  const supabase = createServerSupabaseClient()
+  const { data, error } = await supabase
+    .from('wellness_director_overrides')
+    .upsert({
+      participant_id: participantId,
+      action,
+      note,
+      snooze_until: action === 'snooze' ? snoozeUntil : null,
+      updated_by: admin.session.user.id,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'participant_id' })
     .select('*')
     .single()
 

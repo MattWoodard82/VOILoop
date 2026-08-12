@@ -9,6 +9,7 @@ import { MyDashboardClient } from './MyDashboardClient'
 import { buildParticipantInsights } from './insights'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 import { getRoleAndSession } from '@/lib/supabase/server'
+import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,51 +89,52 @@ export default async function MyPage() {
     } | null
   } | null = null
 
-  const { data: activeChallenge } = await supabase
-    .from('challenges')
-    .select('id, name, status, threshold_value')
-    .eq('status', 'active')
-    .maybeSingle()
-
-  let visibleChallenge = activeChallenge
-  if (!visibleChallenge) {
-    const { data: terminalChallenge } = await supabase
+  if (isPilotChallengesBasicEnabled()) {
+    const { data: activeChallenge } = await supabase
       .from('challenges')
       .select('id, name, status, threshold_value')
-      .in('status', ['cancelled', 'completed'])
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-    visibleChallenge = terminalChallenge
-  }
-
-  if (visibleChallenge) {
-    const { data: challengeParticipant } = await supabase
-      .from('challenge_participants')
-      .select('is_eligible, progress_value, completed, completed_at, updated_at')
-      .eq('challenge_id', visibleChallenge.id)
-      .eq('participant_id', participant.id)
+      .eq('status', 'active')
       .maybeSingle()
 
-    challenge = {
-      visibility_state: challengeParticipant?.is_eligible ? 'eligible' : 'ineligible',
-      data: {
-        id: visibleChallenge.id,
-        name: visibleChallenge.name,
-        status: visibleChallenge.status,
-        threshold_value: visibleChallenge.threshold_value,
-        progress_value: challengeParticipant?.is_eligible ? (challengeParticipant.progress_value ?? 0) : 0,
-        completed: Boolean(challengeParticipant?.completed),
-        completed_at: challengeParticipant?.completed_at ?? null,
-        last_computed_at: challengeParticipant?.updated_at ?? null,
-      },
+    let visibleChallenge = activeChallenge
+    if (!visibleChallenge) {
+      const { data: terminalChallenge } = await supabase
+        .from('challenges')
+        .select('id, name, status, threshold_value')
+        .in('status', ['cancelled', 'completed'])
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      visibleChallenge = terminalChallenge
     }
-  } else {
-    challenge = { visibility_state: 'none', data: null }
+
+    if (visibleChallenge) {
+      const { data: challengeParticipant } = await supabase
+        .from('challenge_participants')
+        .select('is_eligible, progress_value, completed, completed_at, updated_at')
+        .eq('challenge_id', visibleChallenge.id)
+        .eq('participant_id', participant.id)
+        .maybeSingle()
+
+      challenge = {
+        visibility_state: challengeParticipant?.is_eligible ? 'eligible' : 'ineligible',
+        data: {
+          id: visibleChallenge.id,
+          name: visibleChallenge.name,
+          status: visibleChallenge.status,
+          threshold_value: visibleChallenge.threshold_value,
+          progress_value: challengeParticipant?.is_eligible ? (challengeParticipant.progress_value ?? 0) : 0,
+          completed: Boolean(challengeParticipant?.completed),
+          completed_at: challengeParticipant?.completed_at ?? null,
+          last_computed_at: challengeParticipant?.updated_at ?? null,
+        },
+      }
+    } else {
+      challenge = { visibility_state: 'none', data: null }
+    }
   }
 
   const latestWellnessDate = wellness?.[0]?.date ? formatDate(wellness[0].date) : null
-  const rewardsEnabled = true
   const insights = buildParticipantInsights(wellness ?? [], workouts ?? [])
 
   return (
@@ -151,7 +153,6 @@ export default async function MyPage() {
         pulse={pulse ?? []}
         challenge={challenge}
         importBatches={importBatches}
-        rewardsEnabled={rewardsEnabled}
         insights={insights}
       />
     </DashboardShell>

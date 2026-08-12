@@ -18,23 +18,11 @@ interface Nudge {
   week_of: string
   message: string
   author: string
-  created_at?: string
-  updated_at?: string
-  response_due_at?: string
   target_type?: string
   target_label?: string
-  participant_id?: string | null
 }
-
-interface Participant {
-  id: string
-  first_name: string
-  last_name: string
-}
-
 
 const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
-
 const TYPE_LABELS: Record<string, string> = {
   outdoor: '🥾 Outdoor',
   fitness: '🧘 Fitness',
@@ -50,20 +38,10 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
   return fallback
 }
 
-interface Acknowledgement {
-  nudge_id?: string
-  participant_id: string
-  first_name: string
-  last_name: string
-  acknowledged_at: string
-  response_text: string
-}
-
 export function AdminEventsClient() {
   const [events, setEvents] = useState<Event[]>([])
   const [nudges, setNudges] = useState<Nudge[]>([])
-  const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([])
-  const [tab, setTab] = useState<'events' | 'nudge' | 'responses'>('events')
+  const [tab, setTab] = useState<'events' | 'nudge'>('events')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -78,7 +56,6 @@ export function AdminEventsClient() {
   const [nudgeTargetType, setNudgeTargetType] = useState<'all' | 'subgroup' | 'participant'>('all')
   const [nudgeTargetLabel, setNudgeTargetLabel] = useState('')
   const [nudgeParticipantId, setNudgeParticipantId] = useState('')
-  const [participants, setParticipants] = useState<Participant[]>([])
   const savedResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -109,11 +86,9 @@ export function AdminEventsClient() {
       setError(`Unable to load events: ${message}`)
       return
     }
-    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; participants?: Participant[]; acknowledgements?: Acknowledgement[] }
+    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[] }
     setEvents(payload.events ?? [])
     setNudges(payload.nudges ?? [])
-    setParticipants(payload.participants ?? [])
-    setAcknowledgements(payload.acknowledgements ?? [])
     setError('')
   }
 
@@ -147,18 +122,6 @@ export function AdminEventsClient() {
     if (!response.ok) {
       const message = await parseErrorMessage(response, 'Unable to delete event.')
       setError(`Unable to delete event: ${message}`)
-      return
-    }
-    await loadData()
-  }
-
-  const deleteNudge = async (id: string) => {
-    const response = await fetch(`/api/admin/events/${encodeURIComponent(id)}?kind=nudge`, {
-      method: 'DELETE',
-    })
-    if (!response.ok) {
-      const message = await parseErrorMessage(response, 'Unable to delete nudge.')
-      setError(`Unable to delete nudge: ${message}`)
       return
     }
     await loadData()
@@ -213,7 +176,7 @@ export function AdminEventsClient() {
       ) : null}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {(['events', 'nudge', 'responses'] as const).map(t => (
+        {(['events', 'nudge'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '7px 16px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
             background: tab === t ? '#69BE28' : 'transparent',
@@ -221,7 +184,7 @@ export function AdminEventsClient() {
             border: `1px solid ${tab === t ? '#69BE28' : '#0a3560'}`,
             fontWeight: tab === t ? 700 : 400,
           }}>
-            {t === 'events' ? '📅 Events' : t === 'nudge' ? '💬 Weekly nudge' : `💌 Responses${acknowledgements.length > 0 ? ` · ${acknowledgements.length}` : ''}`}
+            {t === 'events' ? '📅 Events' : '💬 Weekly nudge'}
           </button>
         ))}
       </div>
@@ -340,20 +303,9 @@ export function AdminEventsClient() {
                 </select>
               </div>
               <div>
-                <label style={s.label}>Label / participant</label>
-                {nudgeTargetType === 'participant' ? (
-                  <select style={{ ...s.input, cursor: 'pointer' }} value={nudgeParticipantId}
-                    onChange={e => setNudgeParticipantId(e.target.value)}>
-                    <option value="">— select participant —</option>
-                    {participants.map(p => (
-                      <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input style={s.input} value={nudgeTargetLabel}
-                    onChange={e => setNudgeTargetLabel(e.target.value)}
-                    placeholder={nudgeTargetType === 'subgroup' ? 'e.g. Team A' : ''} />
-                )}
+                <label style={s.label}>Label / participant id</label>
+                <input style={s.input} value={nudgeTargetType === 'participant' ? nudgeParticipantId : nudgeTargetLabel}
+                  onChange={e => nudgeTargetType === 'participant' ? setNudgeParticipantId(e.target.value) : setNudgeTargetLabel(e.target.value)} />
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -366,62 +318,17 @@ export function AdminEventsClient() {
 
           <div style={s.card}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 12 }}>Previous nudges</div>
-            {nudges.length === 0 && (
-              <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No weekly nudges have been published yet.</div>
-            )}
             {nudges.map(n => (
               <div key={n.id} style={{ padding: '10px 0', borderBottom: '1px solid #0a3560' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600 }}>
-                    Published {n.created_at ? new Date(n.created_at).toLocaleString() : `week of ${n.week_of}`}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ fontSize: 10, color: '#A5ACAF' }}>— {n.author}</div>
-                    <button
-                      onClick={() => deleteNudge(n.id)}
-                      style={{ background: 'transparent', border: '1px solid #0a3560', borderRadius: 5, padding: '3px 8px', fontSize: 10, color: '#ff6b6b', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                  <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600 }}>Week of {n.week_of}</div>
+                  <div style={{ fontSize: 10, color: '#A5ACAF' }}>— {n.author}</div>
                 </div>
                 <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.5 }}>{n.message}</div>
-                <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>
-                  Target: {n.target_type === 'participant'
-                    ? `Individual participant${n.participant_id ? ` (${n.participant_id})` : ''}`
-                    : n.target_type === 'subgroup'
-                      ? `Subgroup (${n.target_label || 'unnamed'})`
-                      : 'All participants'}
-                </div>
-                {n.response_due_at && (
-                  <div style={{ fontSize: 10, color: '#A5ACAF', marginTop: 6 }}>
-                    Response window closes {new Date(n.response_due_at).toLocaleString()}
-                  </div>
-                )}
               </div>
             ))}
           </div>
         </>
-      )}
-
-      {tab === 'responses' && (
-        <div style={s.card}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Nudge responses · recent nudges</div>
-          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 14 }}>
-            Participant reflections submitted for the recent weekly nudges. Responses are decrypted for wellness director review only.
-          </div>
-          {acknowledgements.length === 0 ? (
-            <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No responses found for the recent nudges.</div>
-          ) : acknowledgements.map((ack, i) => (
-            <div key={ack.participant_id} style={{ padding: '12px 0', borderBottom: i < acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{ack.first_name} {ack.last_name}</div>
-                <div style={{ fontSize: 10, color: '#A5ACAF' }}>{new Date(ack.acknowledged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-              </div>
-              <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{ack.response_text}&rdquo;</div>
-            </div>
-          ))}
-        </div>
       )}
     </div>
   )

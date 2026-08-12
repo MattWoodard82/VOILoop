@@ -168,7 +168,7 @@ describe('role access e2e (route-level)', () => {
             })),
           }
         }
-        if (table === 'nudge_acknowledgement_targets') return { upsert: jest.fn(async () => ({ error: null })) }
+        if (table === 'nudge_targets') return { upsert: jest.fn(async () => ({ error: null })) }
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)
