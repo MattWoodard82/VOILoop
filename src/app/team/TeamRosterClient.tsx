@@ -81,13 +81,14 @@ export function TeamRosterClient({ participantContext }: { participantContext: P
           </Badge>
         </div>
         <div style={{ fontSize: 13, color: '#A5ACAF' }}>{context.metric_description}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {context.metric === 'recovery' ? <ScorePill value={context.participant_value} /> : <ScorePill value={Math.min(100, context.participant_value)} />}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, alignItems: 'start' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {loadingMetric === metric
+              ? <span style={{ fontSize: 11, color: '#A5ACAF' }}>Loading…</span>
+              : context.metric === 'recovery' ? <ScorePill value={context.participant_value} /> : <ScorePill value={Math.min(100, context.participant_value)} />}
+          </div>
           <div><strong>Rank</strong><div>{context.participant_rank} of {context.cohort_size}</div></div>
           <div><strong>Context</strong><div>{context.comparison_text}</div></div>
-        </div>
-        <div style={{ fontSize: 11, color: valueColor }}>
-          {loadingMetric === metric ? 'Loading…' : context.metric_value_label}
         </div>
         <div style={{ fontSize: 11, color: '#A5ACAF' }}>{context.safe_context_note}</div>
       </div>

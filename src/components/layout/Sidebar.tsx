@@ -11,7 +11,6 @@ type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
     { href: '/wellness-director', label: 'Wellness Director', icon: BarChart2 },
-    { href: '/team', label: 'Team Roster', icon: Users },
     { href: '/pulse', label: 'Pulse Surveys', icon: MessageSquare },
   ]},
   { label: 'Programs', items: [
@@ -31,6 +30,7 @@ const ADMIN_NAV = [
 const PARTICIPANT_NAV = [
   { label: 'My Dashboard', items: [
     { href: '/my', label: 'My Wellness', icon: Activity },
+    { href: '/team', label: 'My Ranking', icon: Users },
   ]},
 ]
 
