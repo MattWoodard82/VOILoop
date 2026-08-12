@@ -1,13 +1,23 @@
 import { GET, POST, PUT } from '../route'
 import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   requireAdmin: jest.fn(),
 }))
 
+jest.mock('@/lib/supabase/admin', () => ({
+  createAdminSupabaseClient: jest.fn(),
+}))
+
+jest.mock('@/lib/supabase/encryption', () => ({
+  getDbEncryptionKey: jest.fn(() => 'test-key'),
+}))
+
 describe('admin events routes', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
   const mockRequireAdmin = requireAdmin as jest.MockedFunction<typeof requireAdmin>
 
   beforeEach(() => {
@@ -57,6 +67,46 @@ describe('admin events routes', () => {
         throw new Error(`Unexpected table ${table}`)
       }),
     } as never)
+    const participantsOrder = jest.fn(async () => ({
+      data: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
+      error: null,
+    }))
+    const acknowledgementsOrder = jest.fn(async () => ({
+      data: [{
+        participant_id: 'p-1',
+        acknowledged_at: '2026-08-12T10:00:00Z',
+        response_text_encrypted: 'ciphertext-1',
+      }],
+      error: null,
+    }))
+    const rpcDecrypt = jest.fn(async () => ({
+      data: 'I am in.',
+      error: null,
+    }))
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                order: participantsOrder,
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                order: acknowledgementsOrder,
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected admin table ${table}`)
+      }),
+      rpc: rpcDecrypt,
+    } as never)
 
     const response = await GET()
     const body = await response.json()
@@ -65,6 +115,15 @@ describe('admin events routes', () => {
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Morning Run' }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
+      participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
+      acknowledgements: [{
+        participant_id: 'p-1',
+        first_name: 'Jane',
+        last_name: 'Doe',
+        acknowledged_at: '2026-08-12T10:00:00Z',
+        response_text: 'I am in.',
+      }],
+      recent_nudge_id: 'nud-1',
     })
   })
 

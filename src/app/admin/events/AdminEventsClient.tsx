@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Event {
   id: string
@@ -22,6 +22,20 @@ interface Nudge {
   target_label?: string
 }
 
+interface ParticipantOption {
+  id: string
+  label: string
+  meta: string
+}
+
+interface Acknowledgement {
+  participant_id: string
+  first_name: string
+  last_name: string
+  acknowledged_at: string
+  response_text: string
+}
+
 const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
 const TYPE_LABELS: Record<string, string> = {
   outdoor: '🥾 Outdoor',
@@ -38,10 +52,15 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
   return fallback
 }
 
-export function AdminEventsClient() {
+interface AdminEventsClientProps {
+  participants: ParticipantOption[]
+}
+
+export function AdminEventsClient({ participants }: AdminEventsClientProps) {
   const [events, setEvents] = useState<Event[]>([])
   const [nudges, setNudges] = useState<Nudge[]>([])
-  const [tab, setTab] = useState<'events' | 'nudge'>('events')
+  const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([])
+  const [tab, setTab] = useState<'events' | 'nudge' | 'responses'>('events')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
@@ -57,6 +76,17 @@ export function AdminEventsClient() {
   const [nudgeTargetLabel, setNudgeTargetLabel] = useState('')
   const [nudgeParticipantId, setNudgeParticipantId] = useState('')
   const savedResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (nudgeTargetType !== 'participant') return
+    if (participants.length === 0) {
+      setNudgeParticipantId('')
+      return
+    }
+    if (!participants.some((participant) => participant.id === nudgeParticipantId)) {
+      setNudgeParticipantId(participants[0]?.id ?? '')
+    }
+  }, [nudgeParticipantId, nudgeTargetType, participants])
 
   useEffect(() => {
     void loadData()
@@ -86,9 +116,10 @@ export function AdminEventsClient() {
       setError(`Unable to load events: ${message}`)
       return
     }
-    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[] }
+    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; acknowledgements?: Acknowledgement[] }
     setEvents(payload.events ?? [])
     setNudges(payload.nudges ?? [])
+    setAcknowledgements(payload.acknowledgements ?? [])
     setError('')
   }
 
@@ -176,7 +207,7 @@ export function AdminEventsClient() {
       ) : null}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {(['events', 'nudge'] as const).map(t => (
+        {(['events', 'nudge', 'responses'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '7px 16px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
             background: tab === t ? '#69BE28' : 'transparent',
@@ -184,7 +215,7 @@ export function AdminEventsClient() {
             border: `1px solid ${tab === t ? '#69BE28' : '#0a3560'}`,
             fontWeight: tab === t ? 700 : 400,
           }}>
-            {t === 'events' ? '📅 Events' : '💬 Weekly nudge'}
+            {t === 'events' ? '📅 Events' : t === 'nudge' ? '💬 Weekly nudge' : `💌 Responses${acknowledgements.length > 0 ? ` · ${acknowledgements.length}` : ''}`}
           </button>
         ))}
       </div>
@@ -304,8 +335,29 @@ export function AdminEventsClient() {
               </div>
               <div>
                 <label style={s.label}>Label / participant id</label>
-                <input style={s.input} value={nudgeTargetType === 'participant' ? nudgeParticipantId : nudgeTargetLabel}
-                  onChange={e => nudgeTargetType === 'participant' ? setNudgeParticipantId(e.target.value) : setNudgeTargetLabel(e.target.value)} />
+                {nudgeTargetType === 'participant' ? (
+                  <select
+                    style={{ ...s.input, cursor: 'pointer' }}
+                    value={nudgeParticipantId}
+                    onChange={e => setNudgeParticipantId(e.target.value)}
+                  >
+                    {participants.length === 0 ? (
+                      <option value="">No participants available</option>
+                    ) : (
+                      participants.map((participant) => (
+                        <option key={participant.id} value={participant.id}>
+                          {[participant.label, participant.meta, participant.id].filter(Boolean).join(' · ')}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    style={s.input}
+                    value={nudgeTargetLabel}
+                    onChange={e => setNudgeTargetLabel(e.target.value)}
+                  />
+                )}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -329,6 +381,28 @@ export function AdminEventsClient() {
             ))}
           </div>
         </>
+      )}
+
+      {tab === 'responses' && (
+        <div style={s.card}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Nudge responses · most recent nudge</div>
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 14 }}>
+            Participant reflections submitted for this week&apos;s nudge. Responses are decrypted for wellness director review only.
+          </div>
+          {acknowledgements.length === 0 ? (
+            <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No responses yet for the most recent nudge.</div>
+          ) : acknowledgements.map((ack, index) => (
+            <div key={`${ack.participant_id}-${ack.acknowledged_at}`} style={{ padding: '12px 0', borderBottom: index < acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, gap: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{ack.first_name} {ack.last_name}</div>
+                <div style={{ fontSize: 10, color: '#A5ACAF' }}>
+                  {new Date(ack.acknowledged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{ack.response_text}&rdquo;</div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )

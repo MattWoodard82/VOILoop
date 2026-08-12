@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
 export const runtime = 'nodejs'
 
@@ -38,9 +40,10 @@ export async function GET() {
   }
 
   const supabase = createServerSupabaseClient()
+  const adminClient = createAdminSupabaseClient()
   const today = new Date().toISOString().split('T')[0]
 
-  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, { data: nudges, error: nudgesError }, { data: participants, error: participantsError }] = await Promise.all([
     supabase
       .from('events')
       .select('*')
@@ -51,6 +54,11 @@ export async function GET() {
       .select('*')
       .order('week_of', { ascending: false })
       .limit(8),
+    adminClient
+      .from('participants')
+      .select('id, first_name, last_name')
+      .eq('status', 'Active')
+      .order('last_name', { ascending: true }),
   ])
 
   if (eventsError) {
@@ -59,8 +67,56 @@ export async function GET() {
   if (nudgesError) {
     return NextResponse.json({ error: nudgesError.message }, { status: 500 })
   }
+  if (participantsError) {
+    return NextResponse.json({ error: participantsError.message }, { status: 500 })
+  }
 
-  return NextResponse.json({ events: events ?? [], nudges: nudges ?? [] })
+  const recentNudge = nudges?.[0] ?? null
+  let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
+  if (recentNudge) {
+    const { data: acks, error: acknowledgementsError } = await adminClient
+      .from('nudge_acknowledgements')
+      .select('participant_id, acknowledged_at, response_text_encrypted')
+      .eq('nudge_id', recentNudge.id)
+      .order('acknowledged_at', { ascending: false })
+
+    if (acknowledgementsError) {
+      return NextResponse.json({ error: acknowledgementsError.message }, { status: 500 })
+    }
+
+    if (acks && acks.length > 0) {
+      const participantMap = new Map((participants ?? []).map((participant) => [participant.id, participant]))
+      acknowledgements = await Promise.all(acks.map(async (ack) => {
+        let responseText = ''
+        if (ack.response_text_encrypted) {
+          const { data: decrypted, error: decryptError } = await adminClient.rpc('decrypt_nudge_response', {
+            encrypted_data: ack.response_text_encrypted,
+            key: getDbEncryptionKey(),
+          })
+          if (decryptError) {
+            throw decryptError
+          }
+          responseText = decrypted ?? ''
+        }
+        const participant = participantMap.get(ack.participant_id)
+        return {
+          participant_id: ack.participant_id,
+          first_name: participant?.first_name ?? 'Unknown',
+          last_name: participant?.last_name ?? '',
+          acknowledged_at: ack.acknowledged_at,
+          response_text: responseText,
+        }
+      }))
+    }
+  }
+
+  return NextResponse.json({
+    events: events ?? [],
+    nudges: nudges ?? [],
+    participants: participants ?? [],
+    acknowledgements,
+    recent_nudge_id: recentNudge?.id ?? null,
+  })
 }
 
 export async function POST(request: Request) {
