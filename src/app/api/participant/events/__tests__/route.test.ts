@@ -12,12 +12,20 @@ jest.mock('@/lib/supabase/encryption', () => ({
   getDbEncryptionKey: jest.fn(() => 'staging-placeholder-key-only-for-demo'),
 }))
 
-function makePostRequest(body: unknown): Request {
+function makeRequest(method: 'POST' | 'PATCH', body: unknown): Request {
   return new Request('http://localhost/api/participant/events', {
-    method: 'POST',
+    method,
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
   })
+}
+
+function makePostRequest(body: unknown): Request {
+  return makeRequest('POST', body)
+}
+
+function makePatchRequest(body: unknown): Request {
+  return makeRequest('PATCH', body)
 }
 
 describe('/api/participant/events', () => {
@@ -54,7 +62,10 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
     const eventsLimit = jest.fn(async () => ({
       data: [{ id: 'evt-1', title: 'Walk Club' }],
       error: null,
@@ -149,7 +160,10 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
     const upsert = jest.fn(async () => ({ error: null }))
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
@@ -181,7 +195,10 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
     const eqParticipant = jest.fn(async () => ({ error: null }))
     const eqEvent = jest.fn(() => ({ eq: eqParticipant }))
 
@@ -219,7 +236,10 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
         if (table === 'participants') {
@@ -240,7 +260,10 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest.fn(async () => ({ data: { id: 'EMP123' }, error: null }))
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
     const rpcUpsert = jest.fn(async (params: unknown) => ({ data: { id: 'ack-1', acknowledged_at: '2026-08-07T12:00:00Z' }, error: null }))
 
     mockCreateServerSupabaseClient.mockReturnValue({
@@ -271,17 +294,9 @@ describe('/api/participant/events', () => {
         if (table === 'weekly_nudges') {
           return {
             select: jest.fn(() => ({
-              lte: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: jest.fn(async () => ({
-                    data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-08-11', nudge_targets: [{ target_type: 'all', participant_id: null }] }],
-                    error: null,
-                  })),
-                })),
-              })),
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-08-11', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123' }] },
+                  data: { id: 'nudge-1', week_of: '2099-08-11', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }] },
                   error: null,
                 })),
               })),
@@ -299,7 +314,7 @@ describe('/api/participant/events', () => {
       }),
     } as never)
 
-    const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    const response = await PATCH(makePatchRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(200)
@@ -352,7 +367,7 @@ describe('/api/participant/events', () => {
       }),
     } as never)
 
-    const response = await PATCH(makePostRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    const response = await PATCH(makePatchRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(403)
