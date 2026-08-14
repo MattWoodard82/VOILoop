@@ -1,19 +1,45 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { WellnessDirectorClient } from '../WellnessDirectorClient'
+import WellnessDirectorPage from '../page'
+import { requireAuth } from '@/lib/supabase/server'
+import { getTeamDashboard } from '@/lib/supabase/queries'
+import type { ParticipantWithWellness } from '@/types'
+
+jest.mock('@/lib/supabase/server', () => ({
+  requireAuth: jest.fn(),
+}))
+jest.mock('@/lib/supabase/queries', () => ({
+  getTeamDashboard: jest.fn(),
+}))
+jest.mock('@/components/layout/DashboardShell', () => {
+  const React = require('react')
+  return {
+    DashboardShell: ({ title, children }: { title: string; children: React.ReactNode }) =>
+      React.createElement('div', { 'data-title': title }, children),
+  }
+})
 
 jest.mock('../WellnessDirectorCharts', () => ({ WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)) }))
 jest.mock('@/components/ui', () => {
   const React = require('react')
   return {
+    KpiCard: ({ label, value }: { label: string; value: React.ReactNode }) => React.createElement('div', null, `${label}:${value}`),
+    Alert: ({ children }: { children: React.ReactNode }) => React.createElement('div', null, children),
     Card: ({ title, children }: { title: string; children: React.ReactNode }) => React.createElement('section', { 'data-title': title }, children),
     Badge: ({ children }: { children: React.ReactNode }) => React.createElement('span', null, children),
     BarRow: ({ label, value }: { label: string; value: number }) => React.createElement('div', null, `${label}:${value}`),
   }
 })
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
+jest.mock('next/link', () => {
+  const React = require('react')
+  const MockLink = ({ href, children }: { href: string; children: React.ReactNode }) => React.createElement('a', { href }, children)
+  MockLink.displayName = 'MockLink'
+  return MockLink
+})
 
-const participant = {
+const participant: ParticipantWithWellness = {
   id: 'P1',
   first_name: 'Alex',
   last_name: 'Able',
@@ -47,6 +73,10 @@ const participant = {
 const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
 
 describe('WellnessDirectorClient', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   test('renders explainability and baseline state', () => {
     const markup = selectedMarkup([participant])
     expect(markup).toContain('Engagement score')
@@ -69,5 +99,32 @@ describe('WellnessDirectorClient', () => {
   test('omits missing engagement scores from the chart', () => {
     const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
     expect(markup).not.toContain('"value":0')
+  })
+
+  test('wellness director page links to the events manager for leadership users', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+      },
+      interventions: [],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).toContain('Events and nudges')
+    expect(markup).toContain('Open events manager')
+    expect(markup).toContain('href="/admin/events"')
   })
 })

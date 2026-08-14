@@ -59,9 +59,10 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
 
 interface AdminEventsClientProps {
   participants: ParticipantOption[]
+  role: 'admin' | 'wellness_director'
 }
 
-export function AdminEventsClient({ participants }: AdminEventsClientProps) {
+export function AdminEventsClient({ participants, role }: AdminEventsClientProps) {
   const [events, setEvents] = useState<Event[]>([])
   const [nudges, setNudges] = useState<Nudge[]>([])
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([])
@@ -202,7 +203,7 @@ export function AdminEventsClient({ participants }: AdminEventsClientProps) {
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
       <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 16 }}>
-        Manage participant-facing events and weekly nudges from one admin workflow.
+        Manage participant-facing events and weekly nudges from one leadership workflow.
       </div>
 
       {error ? (
@@ -211,7 +212,7 @@ export function AdminEventsClient({ participants }: AdminEventsClientProps) {
         </div>
       ) : null}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
         {(['events', 'nudge', 'responses'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)} style={{
             padding: '7px 16px', borderRadius: 20, fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
@@ -223,6 +224,9 @@ export function AdminEventsClient({ participants }: AdminEventsClientProps) {
             {t === 'events' ? '📅 Events' : t === 'nudge' ? '💬 Weekly nudge' : `💌 Responses${acknowledgements.length > 0 ? ` · ${acknowledgements.length}` : ''}`}
           </button>
         ))}
+        <span style={{ fontSize: 11, color: '#A5ACAF', marginLeft: 'auto' }}>
+          Access: {role === 'admin' ? 'Admin' : 'Wellness Director'}
+        </span>
       </div>
 
       {tab === 'events' && (

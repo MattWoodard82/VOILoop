@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { requireAdmin } from '@/lib/supabase/server'
+import { requireLeadership } from '@/lib/supabase/server'
 import { getParticipants } from '@/lib/supabase/queries'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { AdminEventsClient } from './AdminEventsClient'
@@ -35,8 +35,11 @@ async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, 
 }
 
 export default async function AdminEventsPage() {
-  const { redirect: redirectTo } = await requireAdmin()
+  const leadership = await requireLeadership()
+  const { redirect: redirectTo } = leadership
   if (redirectTo) redirect(redirectTo)
+  const role = leadership.role
+  if (!role) redirect('/my')
 
   const participantRecords = await getParticipants()
   const authUserIds = participantRecords
@@ -50,8 +53,8 @@ export default async function AdminEventsPage() {
   }))
 
   return (
-    <DashboardShell title="Admin · Events and nudges" showPeriodFilter={false} showExport={false} showSignOut={false}>
-      <AdminEventsClient participants={participants} />
+    <DashboardShell title="Events and nudges" showPeriodFilter={false} showExport={false} showSignOut={false}>
+      <AdminEventsClient participants={participants} role={role} />
     </DashboardShell>
   )
 }

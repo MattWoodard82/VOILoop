@@ -52,7 +52,7 @@ describe('AdminEventsClient', () => {
       .mockReturnValueOnce(['', jest.fn()]) // nudgeParticipantId
 
     const { AdminEventsClient } = await import('../AdminEventsClient')
-    const markup = renderToStaticMarkup(React.createElement(AdminEventsClient, { participants: [] }))
+    const markup = renderToStaticMarkup(React.createElement(AdminEventsClient, { participants: [], role: 'wellness_director' }))
 
     expect(markup).toContain('RSVPs · 2')
     expect(markup).toContain('Jane Doe, John Smith')

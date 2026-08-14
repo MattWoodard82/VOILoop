@@ -1,20 +1,20 @@
 import { GET as getAdminEvents, POST as postAdminEvents } from '@/app/api/admin/events/route'
 import { PATCH as patchIntervention } from '@/app/api/interventions/[id]/route'
 import { GET as getParticipantEvents } from '@/app/api/participant/events/route'
-import { createServerSupabaseClient, getSession, getUserAccess, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, getSession, getUserAccess, requireLeadership } from '@/lib/supabase/server'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   getSession: jest.fn(),
   getUserAccess: jest.fn(),
-  requireAdmin: jest.fn(),
+  requireLeadership: jest.fn(),
 }))
 
 describe('role access e2e (route-level)', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockGetUserAccess = getUserAccess as jest.MockedFunction<typeof getUserAccess>
-  const mockRequireAdmin = requireAdmin as jest.MockedFunction<typeof requireAdmin>
+  const mockRequireLeadership = requireLeadership as jest.MockedFunction<typeof requireLeadership>
 
   beforeEach(() => {
     jest.clearAllMocks()
@@ -32,7 +32,7 @@ describe('role access e2e (route-level)', () => {
   test('participants can read participant events but cannot access admin or intervention mutation', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
-    mockRequireAdmin.mockResolvedValue({ redirect: '/my' } as never)
+    mockRequireLeadership.mockResolvedValue({ redirect: '/my' } as never)
 
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
@@ -116,10 +116,10 @@ describe('role access e2e (route-level)', () => {
     expect(interventionResponse.status).toBe(403)
   })
 
-  test('wellness directors can update interventions but cannot access admin event mutation', async () => {
+  test('wellness directors can update interventions and access events mutations', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'wd-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: false })
-    mockRequireAdmin.mockResolvedValue({ redirect: '/wellness-director' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const update = jest.fn(() => ({
       eq: jest.fn(async () => ({ error: null })),
@@ -147,13 +147,13 @@ describe('role access e2e (route-level)', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Event', event_date: '2026-08-01', event_type: 'general' }),
     }))
-    expect(adminPostResponse.status).toBe(403)
+    expect(adminPostResponse.status).toBe(200)
   })
 
   test('admins can access admin mutations but are blocked from participant-only route', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
     const insert = jest.fn(async () => ({ error: null }))
     mockCreateServerSupabaseClient.mockReturnValue({
