@@ -29,6 +29,8 @@ describeRlsIntegration('Supabase RLS integration', () => {
   let serviceClient: SupabaseClient
   let baseEventId = ''
   let uploadBatchIds: string[] = []
+  let createdEventIds: string[] = []
+  let createdNudgeIds: string[] = []
   let identities: TestIdentity[] = []
 
   async function createIdentity(role: TestIdentity['role'], participantId?: string): Promise<TestIdentity> {
@@ -196,9 +198,16 @@ describeRlsIntegration('Supabase RLS integration', () => {
       await serviceClient.from('upload_batches').delete().in('id', uploadBatchIds)
     }
     await serviceClient.from('nudge_acknowledgements').delete().in('participant_id', [participantAId, participantBId])
+    if (createdNudgeIds.length > 0) {
+      await serviceClient.from('nudge_targets').delete().in('nudge_id', createdNudgeIds)
+      await serviceClient.from('weekly_nudges').delete().in('id', createdNudgeIds)
+    }
     await serviceClient.from('nudge_targets').delete().in('participant_id', [participantAId, participantBId])
     await serviceClient.from('weekly_nudges').delete().eq('message', `Stay hydrated ${testId}`)
     await serviceClient.from('event_rsvps').delete().eq('event_id', baseEventId)
+    if (createdEventIds.length > 0) {
+      await serviceClient.from('events').delete().in('id', createdEventIds)
+    }
     await serviceClient.from('events').delete().eq('id', baseEventId)
     await serviceClient.from('daily_wellness').delete().in('participant_id', [participantAId, participantBId])
     await serviceClient.from('participants').delete().in('id', [participantAId, participantBId])
@@ -353,16 +362,16 @@ describeRlsIntegration('Supabase RLS integration', () => {
     ])
   })
 
-  test('wellness director cannot mutate events, admin can', async () => {
+  test('wellness director can mutate events and publish targeted nudges', async () => {
     const wellnessDirector = identities.find((identity) => identity.role === 'wellness_director')
     const admin = identities.find((identity) => identity.role === 'admin')
     if (!wellnessDirector || !admin) throw new Error('leadership identities not found')
 
     const wdClient = await signIn(wellnessDirector)
-    const { error: wdInsertError } = await wdClient
+    const { data: wdEvent, error: wdInsertError } = await wdClient
       .from('events')
       .insert({
-        title: `Denied event ${testId}`,
+        title: `WD event ${testId}`,
         description: '',
         event_date: '2026-08-02',
         event_time: '',
@@ -370,7 +379,11 @@ describeRlsIntegration('Supabase RLS integration', () => {
         event_type: 'general',
         recurring: false,
       })
-    expect(wdInsertError).not.toBeNull()
+      .select('id')
+      .single()
+    expect(wdInsertError).toBeNull()
+    expect(wdEvent?.id).toBeTruthy()
+    if (wdEvent?.id) createdEventIds.push(wdEvent.id)
 
     const adminClient = await signIn(admin)
     const { data: createdEvent, error: adminInsertError } = await adminClient
@@ -389,9 +402,32 @@ describeRlsIntegration('Supabase RLS integration', () => {
 
     expect(adminInsertError).toBeNull()
     expect(createdEvent?.id).toBeTruthy()
+    if (createdEvent?.id) createdEventIds.push(createdEvent.id)
 
-    if (createdEvent?.id) {
-      await serviceClient.from('events').delete().eq('id', createdEvent.id)
-    }
+    const { data: wdNudge, error: wdNudgeError } = await wdClient
+      .rpc('upsert_nudge_with_target', {
+        p_week_of: '2026-08-11',
+        p_message: `Leadership nudge ${testId}`,
+        p_author: 'Wellness Director',
+        p_target_type: 'participant',
+        p_target_label: '',
+        p_participant_id: participantAId,
+      })
+    expect(wdNudgeError).toBeNull()
+    expect(wdNudge?.error).toBeUndefined()
+    expect(wdNudge?.nudge_id).toBeTruthy()
+    if (wdNudge?.nudge_id) createdNudgeIds.push(wdNudge.nudge_id)
+
+    const { data: nudgeTargets, error: nudgeTargetsError } = await serviceClient
+      .from('nudge_targets')
+      .select('target_type,participant_id')
+      .eq('nudge_id', wdNudge.nudge_id)
+    expect(nudgeTargetsError).toBeNull()
+    expect(nudgeTargets).toEqual([
+      expect.objectContaining({
+        target_type: 'participant',
+        participant_id: participantAId,
+      }),
+    ])
   })
 })

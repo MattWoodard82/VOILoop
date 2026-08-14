@@ -34,7 +34,9 @@ jest.mock('@/components/ui', () => {
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
 jest.mock('next/link', () => {
   const React = require('react')
-  return ({ href, children }: { href: string; children: React.ReactNode }) => React.createElement('a', { href }, children)
+  const MockLink = ({ href, children }: { href: string; children: React.ReactNode }) => React.createElement('a', { href }, children)
+  MockLink.displayName = 'MockLink'
+  return MockLink
 })
 
 const participant: ParticipantWithWellness = {

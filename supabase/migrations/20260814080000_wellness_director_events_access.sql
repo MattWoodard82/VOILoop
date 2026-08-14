@@ -38,7 +38,7 @@ declare
   v_role text;
   v_response_due_at timestamptz;
 begin
-  v_role := public.current_app_role();
+  v_role := coalesce(public.current_app_role(), '');
   if v_role not in ('admin', 'wellness_director') then
     return json_build_object('error', 'Only leadership users may publish nudges')::jsonb;
   end if;
