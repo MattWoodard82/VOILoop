@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireLeadership } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -7,8 +7,8 @@ export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const admin = await requireAdmin()
-  if ('redirect' in admin) {
+  const leadership = await requireLeadership()
+  if ('redirect' in leadership) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

@@ -1,10 +1,10 @@
 import { GET, POST, PUT } from '../route'
-import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireLeadership } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
-  requireAdmin: jest.fn(),
+  requireLeadership: jest.fn(),
 }))
 
 jest.mock('@/lib/supabase/admin', () => ({
@@ -18,14 +18,14 @@ jest.mock('@/lib/supabase/encryption', () => ({
 describe('admin events routes', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
-  const mockRequireAdmin = requireAdmin as jest.MockedFunction<typeof requireAdmin>
+  const mockRequireLeadership = requireLeadership as jest.MockedFunction<typeof requireLeadership>
 
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   test('GET returns 403 for non-admin users', async () => {
-    mockRequireAdmin.mockResolvedValue({ redirect: '/my' } as never)
+    mockRequireLeadership.mockResolvedValue({ redirect: '/my' } as never)
 
     const response = await GET()
 
@@ -33,8 +33,8 @@ describe('admin events routes', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' })
   })
 
-  test('GET returns events and nudges for admins', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+  test('GET returns events and nudges for leadership users', async () => {
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const eventsOrder = jest.fn(async () => ({
       data: [{ id: 'evt-1', title: 'Morning Run' }],
@@ -145,7 +145,7 @@ describe('admin events routes', () => {
   })
 
   test('POST validates required event fields', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const response = await POST(new Request('http://localhost/api/admin/events', {
       method: 'POST',
@@ -159,8 +159,8 @@ describe('admin events routes', () => {
     })
   })
 
-  test('POST creates an event for admins', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+  test('POST creates an event for wellness directors', async () => {
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const insert = jest.fn(async () => ({ error: null }))
     mockCreateServerSupabaseClient.mockReturnValue({
@@ -194,8 +194,8 @@ describe('admin events routes', () => {
     }))
   })
 
-  test('PUT upserts weekly nudge for admins', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+  test('PUT upserts weekly nudge for leadership users', async () => {
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
     const rpcMock = jest.fn(async () => ({ 
       data: { nudge_id: 'nudge-1' }, 
@@ -230,7 +230,7 @@ describe('admin events routes', () => {
   })
 
   test('PUT rejects missing target fields', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
     const response = await PUT(new Request('http://localhost/api/admin/events', {
       method: 'PUT',

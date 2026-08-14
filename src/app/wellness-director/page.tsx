@@ -5,6 +5,7 @@ import { AlertTriangle } from 'lucide-react'
 import { WellnessDirectorClient } from './WellnessDirectorClient'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,46 @@ export default async function WellnessDirectorPage() {
       </div>
 
       <WellnessDirectorClient participants={participants} />
+
+      <div
+        style={{
+          marginTop: 18,
+          padding: '14px 16px',
+          borderRadius: 10,
+          background: '#002244',
+          border: '1px solid #0a3560',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Events and nudges</div>
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginTop: 4 }}>
+            Publish participant-facing events, weekly nudges, and review responses from the leadership dashboard.
+          </div>
+        </div>
+        <Link
+          href="/admin/events"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#69BE28',
+            color: '#002244',
+            borderRadius: 7,
+            padding: '8px 14px',
+            fontSize: 12,
+            fontWeight: 700,
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Open events manager
+        </Link>
+      </div>
 
       {deptSuggestions.length > 0 && (
         <div style={{ marginTop: 24 }}>

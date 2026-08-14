@@ -1,21 +1,21 @@
 import { DELETE } from '../route'
-import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireLeadership } from '@/lib/supabase/server'
 
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
-  requireAdmin: jest.fn(),
+  requireLeadership: jest.fn(),
 }))
 
 describe('DELETE /api/admin/events/[id]', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
-  const mockRequireAdmin = requireAdmin as jest.MockedFunction<typeof requireAdmin>
+  const mockRequireLeadership = requireLeadership as jest.MockedFunction<typeof requireLeadership>
 
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   test('returns 403 for non-admin users', async () => {
-    mockRequireAdmin.mockResolvedValue({ redirect: '/my' } as never)
+    mockRequireLeadership.mockResolvedValue({ redirect: '/my' } as never)
 
     const response = await DELETE(new Request('http://localhost/api/admin/events/event-1'), {
       params: { id: 'event-1' },
@@ -26,7 +26,7 @@ describe('DELETE /api/admin/events/[id]', () => {
   })
 
   test('returns 400 when event id is missing', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const response = await DELETE(new Request('http://localhost/api/admin/events/%20'), {
       params: { id: '  ' },
@@ -36,8 +36,8 @@ describe('DELETE /api/admin/events/[id]', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Event id is required.' })
   })
 
-  test('deletes event for admins', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+  test('deletes event for leadership users', async () => {
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const eq = jest.fn(async () => ({ error: null }))
     mockCreateServerSupabaseClient.mockReturnValue({
@@ -61,7 +61,7 @@ describe('DELETE /api/admin/events/[id]', () => {
   })
 
   test('rejects nudge deletion for admins when kind=nudge', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
     const response = await DELETE(new Request('http://localhost/api/admin/events/nudge-1?kind=nudge'), {
       params: { id: 'nudge-1' },
@@ -74,7 +74,7 @@ describe('DELETE /api/admin/events/[id]', () => {
   })
 
   test('returns 500 when delete fails', async () => {
-    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
 
     const eq = jest.fn(async () => ({ error: { message: 'db failed' } }))
     mockCreateServerSupabaseClient.mockReturnValue({

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireLeadership } from '@/lib/supabase/server'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
@@ -40,8 +40,8 @@ function getMondayOfCurrentWeekIso(): string {
 }
 
 export async function GET() {
-  const admin = await requireAdmin()
-  if ('redirect' in admin) {
+  const leadership = await requireLeadership()
+  if ('redirect' in leadership) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -146,8 +146,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const admin = await requireAdmin()
-  if ('redirect' in admin) {
+  const leadership = await requireLeadership()
+  if ('redirect' in leadership) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -190,8 +190,8 @@ export async function POST(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const admin = await requireAdmin()
-  if ('redirect' in admin) {
+  const leadership = await requireLeadership()
+  if ('redirect' in leadership) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

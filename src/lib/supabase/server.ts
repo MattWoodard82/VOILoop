@@ -177,6 +177,19 @@ export async function requireAdmin() {
   return { session, role: access.role }
 }
 
+export async function requireLeadership() {
+  const session = await getSession()
+  if (!session) return { redirect: '/login' }
+  const access = await getUserAccess(session.user.id)
+  if (access.mustChangePassword) {
+    return { redirect: '/change-password' }
+  }
+  if (!access.role || (access.role !== 'admin' && access.role !== 'wellness_director')) {
+    return { redirect: getRedirectPathForRole(access.role) }
+  }
+  return { session, role: access.role }
+}
+
 export async function isAdmin(userId: string): Promise<boolean> {
   const access = await getUserAccess(userId)
   return access.role === 'admin'
