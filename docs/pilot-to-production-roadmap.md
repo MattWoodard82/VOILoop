@@ -301,7 +301,15 @@ The current `daily_wellness` and `workouts` tables are implicitly WHOOP-shaped (
 - `day_strain` is WHOOP-specific. Fitbit equivalent is active zone minutes or activity score — new field or different mapping
 - **Recommendation:** Add a `device_type` column and make recovery/strain fields nullable with provider-aware display logic in the UI
 
-#### 8.3.5 5. Webhook ingestion endpoint (new, recommended for Fitbit)
+#### 8.3.5 5. Fitbit integration via Terra (recommended)
+Fitbit is the best candidate for Terra because it reduces onboarding friction for new devices and offloads provider-specific OAuth, webhook, and rate-limit handling.
+- Terra provides a single OAuth widget and a normalized wearable schema, which lets VOILoop add Fitbit without building a second full direct integration stack
+- Terra also reduces the amount of Fitbit-specific onboarding work for participants and operators
+- **Tradeoffs:** vendor dependency, custom pricing, less direct control over Fitbit data freshness/sync timing, and a normalized schema that may not preserve every Fitbit- or WHOOP-specific field exactly
+- **Tradeoff summary:** use Terra to accelerate Fitbit onboarding and keep the codebase simpler, but accept that it adds a third-party layer and may require provider-aware display logic for fields that do not map cleanly
+- **Recommendation:** if we do Fitbit next, use Terra rather than a direct Fitbit API integration
+
+#### 8.3.6 6. Webhook ingestion endpoint (new, recommended for Fitbit)
 Fitbit offers a Subscription API (webhooks) that pushes a notification when new data is available for a user. This is strongly preferred over polling because:
 - Fitbit rate limit: **150 requests/hour per user token** — with 175+ users, polling all users every hour consumes 175+ API calls just for existence checks before fetching any data
 - Fitbit subscription webhooks notify on new sleep, activity, heart rate, and body data
@@ -309,20 +317,20 @@ Fitbit offers a Subscription API (webhooks) that pushes a notification when new 
 
 Webhook handler: new Next.js API route `POST /api/webhooks/fitbit` and `POST /api/webhooks/whoop` that validates the request signature and enqueues a sync job for the affected user. The actual data fetch happens asynchronously in the worker.
 
-#### 8.3.6 6. Import History and submission tracking rethink (Issue #74 dependency)
+#### 8.3.7 7. Import History and submission tracking rethink (Issue #74 dependency)
 The current `upload_batches` table tracks admin-uploaded files. With API sync, "upload" is no longer the right concept:
 - Rename or extend `upload_batches` → `sync_events` with `source_type: 'csv_upload' | 'api_sync' | 'webhook_trigger'`
 - The per-week submission tracking from Issue #74 still works — just populated by API sync events instead of file uploads
 - The Wellness Director submission visibility card ("24 of 37 submitted — 65%") becomes "24 of 37 synced this week" — same concept, different mechanism
 
-#### 8.3.7 7. Admin import UI remains needed (do not remove)
+#### 8.3.8 8. Admin import UI remains needed (nice to have)
 Even with full API integration, admin CSV upload should stay for:
 - Participants who don't want to connect their wearable account (consent is voluntary)
 - Historical backfill when a participant newly connects and you want their prior data
 - Failsafe when API is unavailable or a user's token is revoked
 - Fitbit/WHOOP export CSVs have different formats — Fitbit CSVs would need their own mapper
 
-#### 8.3.8 8. Participant onboarding flow changes
+#### 8.3.9 9. Participant onboarding flow changes
 Current: admin provisions accounts, Matt imports their data. API model:
 1. Admin provisions account (unchanged)
 2. Participant logs in for the first time → `/my` shows "Connect your WHOOP" or "Connect your Fitbit" CTA
@@ -362,52 +370,7 @@ This is a meaningful UX and trust change — participants must actively consent 
 
 ---
 
-### 8.5 Should VOILoop use Terra API as the third-party integrator?
-
-**Terra API** (tryterra.co) is a YC W21 company that provides a unified wearable data layer across WHOOP, Fitbit, Garmin, Oura, Apple Health, Google Fit, and 50+ other sources. They are HIPAA-compliant and SOC 2 certified.
-
-**Terra's model:**
-- Single OAuth widget / API integration point for all providers
-- Terra manages the per-provider OAuth flow, token refresh, and rate limit handling
-- Data delivered via webhook in a **normalized, provider-agnostic JSON schema** — one schema for Activity, Sleep, Daily summary regardless of whether the source is WHOOP or Fitbit
-- Fitbit's 150 req/hr rate limit is managed transparently by Terra; they handle retries and backoff
-- Webhook-first: data pushed to your endpoint when available; historical data via GET requests
-
-**Arguments for using Terra:**
-
-1. **Single integration = both WHOOP and Fitbit done in one sprint.** Without Terra, WHOOP and Fitbit are two separate OAuth integrations, two separate mappers, two separate token management systems, two separate webhook handlers. With Terra: one webhook endpoint, one normalized schema, one OAuth widget.
-
-2. **Fitbit's rate limit is a real operational concern at 175+ users.** Terra absorbs this complexity; you never think about it again.
-
-3. **Future device expansion is trivial.** If a future client uses Garmin, Oura, or Apple Health (via Terra's mobile SDK), adding that provider to VOILoop is a configuration change, not an engineering sprint.
-
-4. **Token refresh, revocation handling, and retry logic are already solved.** These are subtle and failure-prone to implement correctly in-house.
-
-5. **HIPAA / SOC 2 inherited posture.** For PHI-adjacent data, using a certified aggregator reduces your data-handling surface.
-
-**Arguments against Terra (direct integration instead):**
-
-1. **Vendor dependency / single point of failure.** If Terra has an outage, your data pipeline stops regardless of whether WHOOP or Fitbit are themselves operational.
-
-2. **Cost.** Terra pricing is not publicly listed (custom per contract). At 175–200 users with daily sync, costs are likely in the hundreds of dollars per month. Direct API integration costs nothing per API call.
-
-3. **Normalized schema loses WHOOP-specific fields.** WHOOP's Recovery Score, Day Strain, and Sleep Consistency are core to VOILoop's value proposition. Terra normalizes across devices, which may not preserve these proprietary WHOOP fields at full fidelity. Need to verify that Terra's `daily` schema includes WHOOP recovery score specifically.
-
-4. **Less control over data freshness and sync timing.** Terra's delivery latency depends on their infrastructure and their polling cadence of upstream providers.
-
-5. **Current codebase is WHOOP-shaped.** The existing schema and UI are built around WHOOP metrics. A normalized schema means rebuilding display logic to handle provider-conditional fields anyway — much of the abstraction benefit is already needed.
-
-**Recommendation: Direct integration for WHOOP; evaluate Terra seriously for Fitbit.**
-
-WHOOP is the core device for the current client and the product is built around WHOOP's metrics. Direct WHOOP API integration gives full field fidelity, no vendor dependency, and costs nothing. The WHOOP developer program is self-service and the API is well-documented.
-
-Fitbit is where Terra becomes compelling. Fitbit's 150 req/hr rate limit is a genuine operational burden at scale. Building direct Fitbit integration means owning token refresh, rate limit backoff, subscription management, and potentially intraday approval — all for a second-tier device that may have less data richness than WHOOP. Terra would reduce Fitbit integration to days rather than weeks.
-
-**If Terra is chosen for Fitbit:** design the ingestion layer with a provider-agnostic interface from day one so WHOOP direct and Terra-via-Fitbit both write to the same normalized tables.
-
----
-
-### 8.6 Do current tooling and framework choices matter?
+### 8.5 Do current tooling and framework choices matter?
 
 **Next.js 14 (App Router) — assessment: stay, with architectural additions**
 
