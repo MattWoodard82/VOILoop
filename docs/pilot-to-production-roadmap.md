@@ -189,31 +189,7 @@ Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, d
 
 ---
 
-## 5. Open Issues: Scope Recommendations
-
-| # | Title | Recommendation | Tier | Rationale |
-|---|---|---|---|---|
-| #4 | Pilot Azure Foundation (IaC) | **Include** | Must Have | Already scoped; Azure is the right strategic direction |
-| #8 | Enable Supabase RLS | **Include** | Must Have | PHI risk, open today |
-| #9 | Duplicate WHOOP import detection | **Include with #74** | Recommended | Bundle into self-import sprint |
-| #15 | Harden schema release pipeline | **Include** | Must Have | Required for safe multi-client DB ops |
-| #17 | Anonymized benchmarks | **Defer** | Nice to Have | Needs data volume; revisit Q2 |
-| #18 | Multi-org operating model | **Include** | Must Have | Architectural blocker for client 2 |
-| #19 | Onboarding intake v2 | **Evaluate** | TBD | Important for client 2 day-one; review spec before committing |
-| #20 | Events/nudges | **Include with #66** | Recommended | FR-5 through FR-8 in #66 covers this substantially |
-| #21 | Pulse survey v2 | **Include** | Recommended | Complete spec, foundational for client 2 |
-| New | Architecture quality & extensibility pass | **Include** | Must Have | Required refactor work to reduce pilot-era technical debt before scaling |
-| New | Large-cohort seed dataset (175 participants) | **Include** | Must Have | Required to validate dashboard UX and expose scale-driven UI changes before Client 2 launch |
-| New | User journey mapping & full UX review | **Include** | Recommended | Needed to evaluate all major pages and align UI changes with end-to-end workflows |
-| #52 | Intervention tracking log | **Include lightly** | Nice to Have | Bundle with engagement work |
-| #53 | Secure pulse submission | **Remove** | — | Already implemented |
-| #57 | Security hardening decision record | **Close/merge into #8** | — | Captures analysis; execution tracked in #8 |
-| #74 | Self-import CSV | **Include** | Must Have | Operational blocker — can't import for 200 users manually |
-| #16 | Challenges/campaigns basic | **Evaluate** | TBD | Review spec against client 2 contract scope before committing |
-
----
-
-## 6. Sequencing Recommendation
+## 5. Sequencing Recommendation
 
 ```
 Week 1–2:   RLS hardening (#8, #53) → unblocks safe client 2 data
@@ -231,7 +207,7 @@ Ongoing:    Observability, benchmarks, API direct integrations
 
 ---
 
-## 7. Cost Estimate (Azure Production Stack)
+## 6. Cost Estimate (Azure Production Stack)
 
 | Service | Est. Monthly |
 |---|---|
@@ -251,9 +227,9 @@ Current Vercel Pro + Supabase Pro: ~$45–100/mo. Delta is justified by enterpri
 
 ---
 
-## 8. Appendix A: API Ingestion — Architecture, Application Changes, and Integrator Decision
+## 7. Appendix A: API Ingestion — Architecture, Application Changes, and Integrator Decision
 
-### 8.1 The shift from manual CSV upload to automated API ingestion
+### 7.1 The shift from manual CSV upload to automated API ingestion
 
 Moving from "Matt uploads an XLSX once a week" to "data arrives automatically when participants sync their devices" is not just a backend plumbing change. It touches the data model, the import pipeline, the application surface, token management infrastructure, and the background job layer. This section documents what changes and why.
 
