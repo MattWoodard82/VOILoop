@@ -59,13 +59,20 @@ describe('role access e2e (route-level)', () => {
         if (table === 'weekly_nudges') {
           return {
             select: jest.fn(() => ({
-              lte: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: jest.fn(() => ({
-                    maybeSingle: jest.fn(async () => ({ data: null, error: null })),
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: jest.fn(async () => ({ data: [], error: null })),
                   })),
                 })),
               })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              or: jest.fn(async () => ({ data: [], error: null })),
             })),
           }
         }
