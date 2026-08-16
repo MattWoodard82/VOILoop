@@ -48,7 +48,7 @@ Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-co
 
 **Proposed minimal production stack:**
 | Component | Service | Notes |
-|---|---|---|
+| --- | --- | --- |
 | App hosting | Azure Container Apps or App Service (Linux) | Container Apps preferred for scale-to-zero |
 | Database | Azure Database for PostgreSQL Flexible | Replaces Supabase hosted Postgres; retain PG for migration simplicity |
 | Auth | Clerk | Replaces Supabase Auth |
@@ -212,7 +212,7 @@ Ongoing:    Observability, benchmarks, API direct integrations
 ## 6. Cost Estimate (Azure Production Stack)
 
 | Service | Est. Monthly |
-|---|---|
+| --- | --- |
 | Azure Container Apps (2 replicas, ~2 vCPU) | ~$30–60 |
 | Azure PostgreSQL Flexible (Standard_B2ms) | ~$60–80 |
 | Azure Entra External ID (≤50K MAU) | Free tier |
@@ -222,20 +222,6 @@ Ongoing:    Observability, benchmarks, API direct integrations
 | **Total estimate** | **~$140–210/mo** |
 
 Current Vercel Pro + Supabase Pro: ~$45–100/mo. Delta is justified by enterprise observability, security posture, and multi-tenant scale requirements.
-
----
-
-*Document version: 2026-08-05 | Author: Garrison Neely | For: Matt Woodard review*
-
----
-
-## 7. Appendix A: API Ingestion — Architecture, Application Changes, and Integrator Decision
-
-### 7.1 The shift from manual CSV upload to automated API ingestion
-
-Moving from "Matt uploads an XLSX once a week" to "data arrives automatically when participants sync their devices" is not just a backend plumbing change. It touches the data model, the import pipeline, the application surface, token management infrastructure, and the background job layer. This section documents what changes and why.
-
----
 
 ### 8.2 What the current import pipeline does (and what must change)
 
@@ -338,7 +324,7 @@ This is a meaningful UX and trust change — participants must actively consent 
 ### 8.4 WHOOP vs Fitbit: data richness comparison
 
 | Metric | WHOOP API | Fitbit API | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Recovery score | ✅ Proprietary composite (0–100) | ❌ No equivalent | WHOOP's core differentiator |
 | HRV (rmssd) | ✅ Daily | ✅ Daily (during sleep) | Both available; methodology differs slightly |
 | Resting heart rate | ✅ | ✅ | Comparable |
@@ -362,33 +348,11 @@ This is a meaningful UX and trust change — participants must actively consent 
 
 **Key Fitbit limitation:** Fitbit is a Google product. The Fitbit API has historically been deprioritized since the Google acquisition (2021). There are no signals of API deprecation, but this is a real vendor risk over a 3–5 year horizon.
 
----
-
-### 8.5 Do current tooling and framework choices matter?
-
-**Next.js 14 (App Router) — assessment: stay, with architectural additions**
-
-Next.js is the right choice for the web application layer. The App Router's server components and route handlers handle the OAuth callback, token exchange, and webhook ingestion well. What Next.js cannot do:
-
-- **Long-running sync jobs.** Vercel serverless functions max out at 60 seconds (Pro tier). Azure Container Apps has no such limit, but even there, running a 200-user sync in a route handler is wrong architecture. The sync worker should be a separate process (Azure Container Apps Job or Azure Function with timer trigger). The Next.js app triggers and monitors jobs; it does not run them.
-- **Webhook delivery timing.** Fitbit and WHOOP webhook deliveries must be acknowledged within a few seconds (200 OK). The handler should write the event to a queue (Azure Service Bus or a simple `pending_sync_events` table) and return immediately. The worker consumes the queue asynchronously.
-
-**Supabase (current) / Azure PostgreSQL (proposed) — assessment: schema changes needed, engine doesn't matter**
-
-The underlying Postgres engine is compatible with both. The schema additions described above (wearable_connections, device_type column, data_source column, sync_events) are straightforward migrations regardless of host.
-
-**TypeScript — assessment: no change needed, well-positioned**
-
-The existing mapper/validator/persistence pattern in `src/lib/whoop/` is well-structured for adding new provider modules alongside it (`src/lib/fitbit/`, `src/lib/terra/`). The `WhoopWellness` DTO shape should be generalized to a `DailyWellnessRecord` interface that both WHOOP and Fitbit mappers produce.
-
-**Key refactor:** Rename or alias the `WhoopWellness` / `WhoopWorkout` types to provider-agnostic names (`DailyWellnessRecord`, `WorkoutRecord`) so the persistence layer is source-agnostic. The WHOOP CSV mapper continues to produce these types. The new API mapper produces the same types. The upsert functions in `persistence.ts` change nothing.
-
----
 
 ### 8.7 Summary: what must be built for API ingestion
 
 | Component | Effort | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `wearable_connections` table + token encryption | 2–3 days | New migration + Key Vault integration |
 | "Connect your device" OAuth flow (participant UI) | 3–4 days | Per provider; WHOOP first |
 | Token refresh background service | 2 days | Run in Container Apps Job or Function |
@@ -438,7 +402,7 @@ Mostly passive consumers. They upload data (or in the future, sync their device)
 
 **Key moments that matter:**
 | Moment | What they need | What currently exists | Gap |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | First login | Understand why they're here, what's safe, what they'll get back | Account provisioning → password change → dashboard | No welcome context, no consent clarity, no "here's what you'll see" |
 | Onboarding intake | Trust that data is safe; quick and purposeful | Spec'd in Issue #19, not yet built | Missing entirely |
 | Connecting their device (future) | Confidence that only the right data is shared | Not yet built | Full OAuth connect flow needed |
@@ -480,7 +444,7 @@ A health professional employed by or contracted to the client organization. She 
 
 **Key moments that matter:**
 | Moment | What they need | What currently exists | Gap |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Monday morning review | Fast cohort snapshot: who submitted, who didn't, any flags | Team roster + KPI cards | No submission compliance view; no risk tiers (Issue #66, #74) |
 | Sending nudges | Target by individual or subgroup; attach a question for reply | Broadcast-only nudge | Targeted send + reply box missing (Issue #66 FR-7/8) |
 | Reviewing pulse results | Trend + context, not just this week's average | `/pulse` dashboard | No completion rate as a signal; limited WD context view |
@@ -518,7 +482,7 @@ Travis is *both* a participant and the buyer. He built his own competing prototy
 
 **Key moments that matter:**
 | Moment | What they need | What currently exists | Gap |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Monthly review | Cohort-level outcomes: engagement trends, avg recovery, program ROI | `/outcomes` page | Needs cleaner aggregate-only framing; VOI calculation explanation |
 | Renewal conversation | Before/after comparison; "here's what changed" narrative | Outcomes page exists | Needs exportable summary; narrative framing |
 | First sign-in (as participant) | Immediately understand the privacy model | No explicit welcome context | Privacy positioning not surfaced in-product |
@@ -553,7 +517,7 @@ The small team running the platform across multiple clients. At current scale th
 
 **Key moments that matter:**
 | Moment | What they need | What currently exists | Gap |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Onboarding a new client org | Create org, provision WD + admin accounts, configure settings | Manual + ad-hoc | No multi-tenant admin panel; no org onboarding checklist |
 | Weekly data ingestion | Participants submit their own data; compliance visible | Matt imports manually | Issue #74; self-service import + submission tracking |
 | Something breaks | Alert before client calls; structured runbook | RUNBOOK.md (text only) | No automated alerting; SRE baseline not built |
@@ -574,7 +538,7 @@ The small team running the platform across multiple clients. At current scale th
 Where personas collide at the same moment — these are the highest-leverage design points:
 
 | Moment | Personas | Design requirement |
-|---|---|---|
+| --- | --- | --- |
 | Weekly data sync | Participant submits → Operator confirms → WD sees compliance | Submission tracking visible to WD (Issue #74); no operator manual step |
 | Nudge cycle | WD composes → Participant receives + replies → WD reads reply | Targeted nudge + reply inbox (Issue #66 FR-6/7/8) |
 | Risk flag surfaces | WD reviews → acts on intervention → logs it | Flag reason visible; intervention log updated; snooze available (FR-15/18) |
