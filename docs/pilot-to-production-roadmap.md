@@ -19,6 +19,7 @@ The most foundational architectural change. Without it, two clients share the sa
 - Add `org_id` FK to all domain tables: challenges, pulse_surveys, interventions, participants, daily_wellness, etc.
 - All APIs and queries must be org-scoped — no global reads except for super-admin
 - Pilot-switcher UX for operators managing multiple orgs
+- Include a tenant onboarding flow to set up a new customer org end-to-end (org creation, role assignment, defaults, and first-access setup)
 - Backfill existing data to `org_id = 1` (Lyle Pearson)
 - **Blocks almost everything else. Do this first.**
 
@@ -88,24 +89,6 @@ The codebase was built rapidly for the pilot and now needs a targeted hardening 
 - Remove technical debt that would otherwise make multi-tenancy, API ingestion, and future integrations brittle
 - **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
 - **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
-
-### 2.7 7. Architecture Quality & Extensibility Pass
-The codebase was built rapidly for the pilot and now needs a targeted hardening pass before scaling to a second client and larger data volume.
-- Refactor duplicated import, mapping, and persistence patterns into provider-agnostic domain services
-- Standardize authz, validation, and error handling across server-side APIs
-- Consolidate one-off feature flags / scripts / data handling into documented, testable modules
-- Add regression coverage around import flows, role enforcement, token refresh, and dashboard queries
-- Remove technical debt that would otherwise make multi-tenancy, API ingestion, and future integrations brittle
-- **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
-- **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
-
-### 2.8 8. Self-Service WHOOP CSV Import (Issue #74)
-175–200 users means Matt cannot continue as the sole data importer. This is an operational blocker.
-- Fix Import History bug (prerequisite per issue spec)
-- Build per-participant weekly submission tracking (Submitted / Late / Missing)
-- Wellness Director aggregate + per-participant submission visibility card
-- Enable participant self-upload from `/my` dashboard
-- **LOE: 1–2 weeks split across 3 PRs as spec'd**
 
 ---
 
