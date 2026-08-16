@@ -6,6 +6,7 @@ import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
 import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } from './insights'
+import Link from 'next/link'
 
 interface Props {
   participant: Participant
@@ -191,6 +192,26 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           </div>
           <div style={{ fontSize: 12, color: '#A5ACAF', maxWidth: 560, lineHeight: 1.6 }}>
             {recoverySummary.detail}
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Link
+              href="/survey"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #0a3560',
+                background: '#001a33',
+                color: '#69BE28',
+                fontSize: 12,
+                fontWeight: 600,
+                textDecoration: 'none',
+              }}
+            >
+              Open weekly pulse survey →
+            </Link>
           </div>
         </div>
 
@@ -492,4 +513,3 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
     </div>
   )
 }
-
