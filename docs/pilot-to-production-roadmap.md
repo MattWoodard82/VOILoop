@@ -22,13 +22,13 @@ The most foundational architectural change. Without it, two clients share the sa
 - Backfill existing data to `org_id = 1` (Lyle Pearson)
 - **Blocks almost everything else. Do this first.**
 
-### 2.2 2. Supabase RLS Hardening (Issues #8, #53, #57, #4)
-Already well-documented. PHI risk is open and urgent regardless of infrastructure choice.
-- Enable RLS on all browser-accessible PHI tables
+### 2.2 2. Azure PostgreSQL RLS Hardening (Issues #8, #53, #57, #4)
+Azure PostgreSQL is the production database, so row-level security and org scoping need to be implemented directly there from the start.
+- Enable native Postgres RLS on all browser-accessible PHI tables in Azure PostgreSQL
 - Deny-by-default posture + explicit policies per role (`participant`, `wellness_director`, `admin`)
-- Route remaining high-risk browser writes through server-side API routes
-- CI guardrail: fail schema PRs that introduce new public tables without RLS
-- If Azure PostgreSQL replaces Supabase Postgres, carry this forward as native Postgres RLS + org-scoped policies, not as a Supabase-only control
+- Keep all high-risk browser writes behind server-side API routes
+- CI guardrail: fail schema PRs that introduce new public tables without RLS or org scoping
+- Validate that every table used by the app enforces `org_id`-aware access rules in the Azure database
 - **Estimated LOE: 3–5 engineering days**
 
 ### 2.3 3. Proper Identity Provider — Replace Custom Login
