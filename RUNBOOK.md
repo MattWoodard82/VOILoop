@@ -27,11 +27,9 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 
 ### Rewards rollout launch order
 
-1. Merge the rewards/rules PR with `PILOT_CHALLENGES_BASIC=false` in production.
+1. Merge the rewards/rules PR to production.
 2. Seed or confirm the rewards rows and rule text in Supabase.
-3. Set `PILOT_CHALLENGES_BASIC=true` to expose the admin rewards tools and participant rules page.
-4. Verify the participant PTO request flow and the admin approval flow.
-5. Turn the flag off again if the rollout needs to pause.
+3. Verify the participant PTO request flow and the admin approval flow.
 
 ### App + database release
 
