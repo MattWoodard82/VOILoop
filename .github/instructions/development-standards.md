@@ -64,6 +64,7 @@ If a feature introduces/updates e2e coverage, include it in CI so trunk remains 
 - Migrations must be forward-only and idempotent where practical.
 - Include explicit backfill steps when schema changes require historical data updates.
 - PRs touching schema must document deployment order and rollback approach.
+- Before writing or sharing SQL queries (debug, verification, backfill, or fix), first verify the live target schema using `information_schema.columns` and/or `information_schema.tables` so queries match production column names and relationships.
 
 ## Feature Flagging for Risky Work (Required)
 - Incomplete, risky, or experimental functionality must be behind a feature flag or otherwise non-breaking default.
