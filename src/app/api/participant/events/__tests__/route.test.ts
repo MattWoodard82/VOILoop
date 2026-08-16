@@ -100,16 +100,32 @@ describe('/api/participant/events', () => {
         if (table === 'weekly_nudges') {
           return {
             select: jest.fn(() => ({
-              lte: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: eventsLimit,
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: eventsLimit,
+                  })),
                 })),
               })),
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20', nudge_targets: [{ target_type: 'all', participant_id: null }] },
+                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
                   error: null,
                 })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              or: jest.fn(async () => ({
+                data: [{ nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null }],
+                error: null,
+              })),
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'all', target_label: '', participant_id: null }],
+                error: null,
               })),
             })),
           }
@@ -296,9 +312,19 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2099-08-11', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }] },
+                  data: { id: 'nudge-1', week_of: '2099-08-11' },
                   error: null,
                 })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
+                error: null,
               })),
             })),
           }
@@ -349,9 +375,19 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2026-07-01', nudge_targets: [{ target_type: 'participant', participant_id: 'EMP999' }] },
+                  data: { id: 'nudge-1', week_of: '2026-07-01' },
                   error: null,
                 })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'participant', participant_id: 'EMP999', target_label: '' }],
+                error: null,
               })),
             })),
           }
