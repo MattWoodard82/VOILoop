@@ -150,8 +150,13 @@ Map the end-to-end journey for participant, wellness director, executive sponsor
 - Use the 175-participant seed environment as the primary review dataset for this pass
 - **LOE: 1–2 weeks including review, synthesis, and first implementation batch**
 
-### 3.7 15. Duplicate WHOOP Import Detection (Issue #9)
-Natural companion to self-service import (#74). Prevents data integrity issues when participants upload overlapping date ranges. Bundle into the #74 implementation sprint.
+### 3.7 15. Admin import UI fallback for API sync (Issue #74 dependency)
+Keep the admin CSV import UI as a fallback even after API sync is live.
+- Participants who don't want to connect their wearable account can still be loaded manually
+- Historical backfill remains possible when a participant newly connects
+- Failsafe if the API is unavailable or a user's token is revoked
+- Fitbit/WHOOP export CSVs still need a parser path
+- **LOE: 1–2 days**
 
 ---
 
