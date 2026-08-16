@@ -90,6 +90,14 @@ The codebase was built rapidly for the pilot and now needs a targeted hardening 
 - **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
 - **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
 
+### 2.7 7. Fitbit Integration via Terra
+Fitbit should be integrated through Terra so onboarding is easier for new devices and provider-specific complexity stays out of the core app.
+- Terra provides a single OAuth widget and a normalized wearable schema, which lets VOILoop add Fitbit without building a second full direct integration stack
+- Terra also reduces the amount of Fitbit-specific onboarding work for participants and operators
+- **Tradeoffs:** vendor dependency, custom pricing, less direct control over Fitbit data freshness/sync timing, and a normalized schema that may not preserve every Fitbit- or WHOOP-specific field exactly
+- **Tradeoff summary:** use Terra to accelerate Fitbit onboarding and keep the codebase simpler, but accept that it adds a third-party layer and may require provider-aware display logic for fields that do not map cleanly
+- **Recommendation:** if we do Fitbit next, use Terra rather than a direct Fitbit API integration
+
 ---
 
 ## 3. 🟡 Recommended
@@ -289,15 +297,7 @@ The current `daily_wellness` and `workouts` tables are implicitly WHOOP-shaped (
 - `day_strain` is WHOOP-specific. Fitbit equivalent is active zone minutes or activity score — new field or different mapping
 - **Recommendation:** Add a `device_type` column and make recovery/strain fields nullable with provider-aware display logic in the UI
 
-#### 8.3.5 5. Fitbit integration via Terra (must have)
-Fitbit should be integrated through Terra so onboarding is easier for new devices and provider-specific complexity stays out of the core app.
-- Terra provides a single OAuth widget and a normalized wearable schema, which lets VOILoop add Fitbit without building a second full direct integration stack
-- Terra also reduces the amount of Fitbit-specific onboarding work for participants and operators
-- **Tradeoffs:** vendor dependency, custom pricing, less direct control over Fitbit data freshness/sync timing, and a normalized schema that may not preserve every Fitbit- or WHOOP-specific field exactly
-- **Tradeoff summary:** use Terra to accelerate Fitbit onboarding and keep the codebase simpler, but accept that it adds a third-party layer and may require provider-aware display logic for fields that do not map cleanly
-- **Recommendation:** if we do Fitbit next, use Terra rather than a direct Fitbit API integration
-
-#### 8.3.6 6. Webhook ingestion endpoint (new, recommended for Fitbit)
+#### 8.3.5 5. Webhook ingestion endpoint (new, recommended for Fitbit)
 Fitbit offers a Subscription API (webhooks) that pushes a notification when new data is available for a user. This is strongly preferred over polling because:
 - Fitbit rate limit: **150 requests/hour per user token** — with 175+ users, polling all users every hour consumes 175+ API calls just for existence checks before fetching any data
 - Fitbit subscription webhooks notify on new sleep, activity, heart rate, and body data
@@ -305,20 +305,20 @@ Fitbit offers a Subscription API (webhooks) that pushes a notification when new 
 
 Webhook handler: new Next.js API route `POST /api/webhooks/fitbit` and `POST /api/webhooks/whoop` that validates the request signature and enqueues a sync job for the affected user. The actual data fetch happens asynchronously in the worker.
 
-#### 8.3.7 7. Import History and submission tracking rethink (Issue #74 dependency)
+#### 8.3.6 6. Import History and submission tracking rethink (Issue #74 dependency)
 The current `upload_batches` table tracks admin-uploaded files. With API sync, "upload" is no longer the right concept:
 - Rename or extend `upload_batches` → `sync_events` with `source_type: 'csv_upload' | 'api_sync' | 'webhook_trigger'`
 - The per-week submission tracking from Issue #74 still works — just populated by API sync events instead of file uploads
 - The Wellness Director submission visibility card ("24 of 37 submitted — 65%") becomes "24 of 37 synced this week" — same concept, different mechanism
 
-#### 8.3.8 8. Admin import UI remains needed (nice to have)
+#### 8.3.7 7. Admin import UI remains needed (nice to have)
 Even with full API integration, admin CSV upload should stay for:
 - Participants who don't want to connect their wearable account (consent is voluntary)
 - Historical backfill when a participant newly connects and you want their prior data
 - Failsafe when API is unavailable or a user's token is revoked
 - Fitbit/WHOOP export CSVs have different formats — Fitbit CSVs would need their own mapper
 
-#### 8.3.9 9. Participant onboarding flow changes
+#### 8.3.8 8. Participant onboarding flow changes
 Current: admin provisions accounts, Matt imports their data. API model:
 1. Admin provisions account (unchanged)
 2. Participant logs in for the first time → `/my` shows "Connect your WHOOP" or "Connect your Fitbit" CTA
