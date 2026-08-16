@@ -28,6 +28,116 @@ function makePatchRequest(body: unknown): Request {
   return makeRequest('PATCH', body)
 }
 
+function createGetRouteMock({
+  cohort = null,
+  targetedRows = [],
+  nudgeRows = [],
+  events = [{ id: 'evt-1', title: 'Walk Club' }],
+  rsvps = [{ event_id: 'evt-1' }],
+  acknowledgement = null,
+}: {
+  cohort?: string | null
+  targetedRows?: Array<{ nudge_id: string; target_type?: string; target_label?: string; participant_id?: string | null }>
+  nudgeRows?: Array<{ id: string; message: string; author: string; week_of: string }>
+  events?: Array<{ id: string; title: string }>
+  rsvps?: Array<{ event_id: string }>
+  acknowledgement?: { acknowledged_at: string; response_text_encrypted: string; response_due_at: string } | null
+}) {
+  const participantsMaybeSingle = jest
+    .fn()
+    .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+    .mockResolvedValueOnce({ data: { cohort }, error: null })
+
+  return {
+    from: jest.fn((table: string) => {
+      if (table === 'participants') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: participantsMaybeSingle,
+            })),
+          })),
+        }
+      }
+      if (table === 'events') {
+        return {
+          select: jest.fn(() => ({
+            gte: jest.fn(() => ({
+              order: jest.fn(() => ({
+                limit: jest.fn(async () => ({
+                  data: events,
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+        }
+      }
+      if (table === 'weekly_nudges') {
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(() => ({
+              lte: jest.fn(() => ({
+                order: jest.fn(() => ({
+                  limit: jest.fn(async () => ({
+                    data: nudgeRows,
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          })),
+        }
+      }
+      if (table === 'nudge_targets') {
+        return {
+          select: jest.fn(() => ({
+            or: jest.fn(async () => ({
+              data: targetedRows,
+              error: null,
+            })),
+            eq: jest.fn(async () => ({
+              data: targetedRows,
+              error: null,
+            })),
+          })),
+        }
+      }
+      if (table === 'event_rsvps') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(async () => ({
+              data: rsvps,
+              error: null,
+            })),
+          })),
+        }
+      }
+      if (table === 'nudge_acknowledgements') {
+        return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: acknowledgement,
+                  error: null,
+                })),
+              })),
+            })),
+          })),
+        }
+      }
+      throw new Error(`Unexpected table ${table}`)
+    }),
+    rpc: jest.fn(async (name: string) => {
+      if (name === 'decrypt_nudge_response') {
+        return { data: 'Will do', error: null }
+      }
+      throw new Error(`Unexpected RPC ${name}`)
+    }),
+  }
+}
+
 describe('/api/participant/events', () => {
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
@@ -62,102 +172,11 @@ describe('/api/participant/events', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
-    const participantsMaybeSingle = jest
-      .fn()
-      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
-      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
-    const eventsLimit = jest.fn(async () => ({
-      data: [{ id: 'evt-1', title: 'Walk Club' }],
-      error: null,
-    }))
-    const rsvpsEq = jest.fn(async () => ({
-      data: [{ event_id: 'evt-1' }],
-      error: null,
-    }))
-
-    mockCreateServerSupabaseClient.mockReturnValue({
-      from: jest.fn((table: string) => {
-        if (table === 'participants') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                maybeSingle: participantsMaybeSingle,
-              })),
-            })),
-          }
-        }
-        if (table === 'events') {
-          return {
-            select: jest.fn(() => ({
-              gte: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: eventsLimit,
-                })),
-              })),
-            })),
-          }
-        }
-        if (table === 'weekly_nudges') {
-          return {
-            select: jest.fn(() => ({
-              in: jest.fn(() => ({
-                lte: jest.fn(() => ({
-                  order: jest.fn(() => ({
-                    limit: eventsLimit,
-                  })),
-                })),
-              })),
-              eq: jest.fn(() => ({
-                maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
-                  error: null,
-                })),
-              })),
-            })),
-          }
-        }
-        if (table === 'nudge_targets') {
-          return {
-            select: jest.fn(() => ({
-              or: jest.fn(async () => ({
-                data: [{ nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null }],
-                error: null,
-              })),
-              eq: jest.fn(async () => ({
-                data: [{ target_type: 'all', target_label: '', participant_id: null }],
-                error: null,
-              })),
-            })),
-          }
-        }
-        if (table === 'event_rsvps') {
-          return {
-            select: jest.fn(() => ({
-              eq: rsvpsEq,
-            })),
-          }
-        }
-        if (table === 'nudge_acknowledgements') {
-          return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                maybeSingle: jest.fn(async () => ({
-                  data: { acknowledged_at: '2026-07-20T12:00:00Z', response_text_encrypted: 'encrypted-response-data', response_due_at: '2026-07-22T12:00:00Z' },
-                  error: null,
-                })),
-              })),
-            })),
-          }
-        }
-        throw new Error(`Unexpected table ${table}`)
-      }),
-      rpc: jest.fn(async (name: string, params: unknown) => {
-        if (name === 'decrypt_nudge_response') {
-          return { data: 'Will do', error: null }
-        }
-        throw new Error(`Unexpected RPC ${name}`)
-      }),
-    } as never)
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [{ nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' }],
+      acknowledgement: { acknowledged_at: '2026-07-20T12:00:00Z', response_text_encrypted: 'encrypted-response-data', response_due_at: '2026-07-22T12:00:00Z' },
+    }) as never)
 
     const response = await GET()
     if (!response) throw new Error('Expected response')
@@ -166,10 +185,107 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(200)
     expect(body).toEqual({
       events: [{ id: 'evt-1', title: 'Walk Club' }],
-      nudge: null,
-      acknowledgement: null,
+      nudge: { id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' },
+      acknowledgement: {
+        acknowledged_at: '2026-07-20T12:00:00Z',
+        response_text: 'Will do',
+        response_due_at: '2026-07-22T12:00:00Z',
+      },
       rsvpEventIds: ['evt-1'],
     })
+  })
+
+  test('GET returns a nudge targeted to all participants', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [{ nudge_id: 'nudge-all', target_type: 'all', target_label: '', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-all', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' }],
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.nudge).toEqual({
+      id: 'nudge-all',
+      message: 'Hydrate',
+      author: 'Coach',
+      week_of: '2026-07-20',
+    })
+  })
+
+  test('GET returns a nudge targeted to the specific participant', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [{ nudge_id: 'nudge-participant', target_type: 'participant', target_label: '', participant_id: 'EMP123' }],
+      nudgeRows: [{ id: 'nudge-participant', message: 'Personal check-in', author: 'Coach', week_of: '2026-07-20' }],
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.nudge).toEqual({
+      id: 'nudge-participant',
+      message: 'Personal check-in',
+      author: 'Coach',
+      week_of: '2026-07-20',
+    })
+  })
+
+  test('GET returns a nudge targeted to the participant cohort subgroup', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      cohort: 'night-shift',
+      targetedRows: [{ nudge_id: 'nudge-subgroup', target_type: 'subgroup', target_label: 'night-shift', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-subgroup', message: 'Night shift reset', author: 'Coach', week_of: '2026-07-20' }],
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.nudge).toEqual({
+      id: 'nudge-subgroup',
+      message: 'Night shift reset',
+      author: 'Coach',
+      week_of: '2026-07-20',
+    })
+  })
+
+  test('GET returns null when no nudge target matches the participant', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      cohort: 'night-shift',
+      targetedRows: [{ nudge_id: 'nudge-other', target_type: 'subgroup', target_label: 'day-shift', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-other', message: 'Day shift reminder', author: 'Coach', week_of: '2026-07-20' }],
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.nudge).toBeNull()
   })
 
   test('POST inserts RSVP for participant when going=true', async () => {
