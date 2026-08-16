@@ -284,8 +284,8 @@ The current `daily_wellness` and `workouts` tables are implicitly WHOOP-shaped (
 - `day_strain` is WHOOP-specific. Fitbit equivalent is active zone minutes or activity score — new field or different mapping
 - **Recommendation:** Add a `device_type` column and make recovery/strain fields nullable with provider-aware display logic in the UI
 
-#### 8.3.5 5. Fitbit integration via Terra (recommended)
-Fitbit is the best candidate for Terra because it reduces onboarding friction for new devices and offloads provider-specific OAuth, webhook, and rate-limit handling.
+#### 8.3.5 5. Fitbit integration via Terra (must have)
+Fitbit should be integrated through Terra so onboarding is easier for new devices and provider-specific complexity stays out of the core app.
 - Terra provides a single OAuth widget and a normalized wearable schema, which lets VOILoop add Fitbit without building a second full direct integration stack
 - Terra also reduces the amount of Fitbit-specific onboarding work for participants and operators
 - **Tradeoffs:** vendor dependency, custom pricing, less direct control over Fitbit data freshness/sync timing, and a normalized schema that may not preserve every Fitbit- or WHOOP-specific field exactly
@@ -382,7 +382,7 @@ The existing mapper/validator/persistence pattern in `src/lib/whoop/` is well-st
 | "Connect your device" OAuth flow (participant UI) | 3–4 days | Per provider; WHOOP first |
 | Token refresh background service | 2 days | Run in Container Apps Job or Function |
 | WHOOP API mapper (JSON → domain DTOs) | 2–3 days | Different from CSV mapper; same output types |
-| Fitbit API mapper (or Terra normalization mapper) | 2–4 days | Depends on direct vs Terra |
+| Fitbit API mapper (via Terra normalization) | 2–4 days | Terra handles provider OAuth + normalized schema |
 | Background sync worker | 3–4 days | Scheduled Container Apps Job |
 | Webhook ingestion endpoints | 1–2 days | Per provider; quick-ack + queue pattern |
 | `sync_events` table / upload_batches extension | 1 day | Replace file-upload concept with sync concept |
