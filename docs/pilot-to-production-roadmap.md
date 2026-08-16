@@ -28,12 +28,15 @@ Already well-documented. PHI risk is open and urgent regardless of infrastructur
 - Deny-by-default posture + explicit policies per role (`participant`, `wellness_director`, `admin`)
 - Route remaining high-risk browser writes through server-side API routes
 - CI guardrail: fail schema PRs that introduce new public tables without RLS
+- If Azure PostgreSQL replaces Supabase Postgres, carry this forward as native Postgres RLS + org-scoped policies, not as a Supabase-only control
 - **Estimated LOE: 3–5 engineering days**
 
 ### 2.3 3. Proper Identity Provider — Replace Custom Login
 Current system: custom email/password with forced password change on first login. Does not scale, lacks MFA, lacks enterprise SSO.
-- **Recommendation: Azure Entra External ID (formerly B2C)** — OIDC-compliant, supports MFA, social login, and future SAML/SSO for enterprise clients. Free tier covers 50,000 MAU.
-- Alternative: Auth0 (simpler DX, higher cost at scale) or Clerk (best DX, newer vendor)
+- **Recommendation: Clerk** for the near-term product layer — faster to implement, stronger developer experience, polished hosted auth UI, better session/user management primitives, and less custom auth plumbing than Entra
+- Clerk is especially attractive if we want to move quickly while keeping the app and identity concerns simple; it reduces implementation time and support burden
+- Tradeoff: Clerk is less enterprise-IT-native than Entra External ID and may require later migration if a client demands deeper Azure-native control, SAML-first enterprise integration, or tighter Microsoft ecosystem alignment
+- Azure Entra External ID remains the stronger long-term enterprise option, but it is heavier to implement and operate
 - Replace Supabase Auth as the identity layer; Supabase continues as the data layer (service role only, no browser Supabase auth calls)
 - Benefits: MFA out-of-box, password reset/self-service, audit log, no home-rolled credential handling
 - **LOE: ~1–2 weeks including integration testing**
@@ -61,6 +64,13 @@ Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-co
 
 **Estimated LOE: 3–5 weeks** (can run parallel to RLS hardening)
 
+### 2.4.1 4a. Explicit hosted environments
+Stand up and document three hosted environments so the team has clear separation between review, validation, and production use.
+- **Production** — client-facing, real data only, locked down
+- **Staging** — production-like environment for release validation, seeded with realistic data and protected from client traffic
+- **Demo** — safe, resettable environment for walkthroughs, sales, and UX testing without risking production data or workflows
+- Each environment should have separate auth config, database, secrets, and deploy cadence
+
 ### 2.5 5. Schema Release Pipeline Hardening (Issue #15)
 Pre-requisite for safe production database operations with two clients.
 - Destructive SQL guards (auto-detect `DROP`, mass `DELETE`, risky constraint changes)
@@ -79,7 +89,17 @@ The codebase was built rapidly for the pilot and now needs a targeted hardening 
 - **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
 - **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
 
-### 2.7 7. Self-Service WHOOP CSV Import (Issue #74)
+### 2.7 7. Architecture Quality & Extensibility Pass
+The codebase was built rapidly for the pilot and now needs a targeted hardening pass before scaling to a second client and larger data volume.
+- Refactor duplicated import, mapping, and persistence patterns into provider-agnostic domain services
+- Standardize authz, validation, and error handling across server-side APIs
+- Consolidate one-off feature flags / scripts / data handling into documented, testable modules
+- Add regression coverage around import flows, role enforcement, token refresh, and dashboard queries
+- Remove technical debt that would otherwise make multi-tenancy, API ingestion, and future integrations brittle
+- **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
+- **LOE: 1–2 weeks for a focused pass, with follow-on cleanup tracked as part of the build**
+
+### 2.8 8. Self-Service WHOOP CSV Import (Issue #74)
 175–200 users means Matt cannot continue as the sole data importer. This is an operational blocker.
 - Fix Import History bug (prerequisite per issue spec)
 - Build per-participant weekly submission tracking (Submitted / Late / Missing)
@@ -92,7 +112,7 @@ The codebase was built rapidly for the pilot and now needs a targeted hardening 
 ## 3. 🟡 Recommended
 *Materially improves operations, reliability, or client value. Do within the first 60–90 days of client 2 onboarding.*
 
-### 3.1 8. SRE / Observability Foundation
+### 3.1 9. SRE / Observability Foundation
 With two clients and PHI in play, you need to know about problems before clients do.
 - **Application Insights** — trace every API call, capture exceptions
 - Structured logging: every API route logs `org_id`, `user_id`, action, duration — no PII in logs
@@ -101,23 +121,14 @@ With two clients and PHI in play, you need to know about problems before clients
 - On-call runbook and alerting to Slack/Teams for P1s
 - **LOE: 1 week to implement basics; ongoing ops discipline**
 
-### 3.2 9. Engagement Features + Wellness Director Risk Scoring (Issue #66)
-High-value, well-specified. Risk scoring is operationally necessary at 175-user scale — Heather cannot manually track this many people without it.
-- **Priority 1:** Privacy-safe leaderboard (participant-only rank, no peer names)
-- **Priority 2:** Tiered nudges + free-text reply box (targeted send by person/subgroup)
-- **Priority 3:** Rewards/Rules (turn on Performance Points feature flag + add Rules display page)
-- **Priority 4:** Personal baseline comparisons on `/my` (21-day rolling avg)
-- **WD Risk Scoring:** Engagement score (FR-13) + physiological trend flags (FR-14) + risk tiers (FR-15) + admin override/snooze (FR-18) + configurable weights (FR-19)
-- **LOE: 3–5 weeks; phase across multiple PRs**
-
-### 3.3 10. Pulse Survey v2 (Issue #21)
+### 3.2 10. Pulse Survey v2 (Issue #21)
 Complete spec exists. Employee submission flow is expected day-one by a second client.
 - Activate employee submission from `/my`
 - v2 question set with HRV/RHR context at submission time
 - Aggregate dashboard updates for new questions
 - **LOE: 1–2 weeks**
 
-### 3.4 11. Performance at 175–200 Users: Database & Query Optimization
+### 3.3 11. Performance at 175–200 Users: Database & Query Optimization
 Currently built for ~40 users. Required attention areas:
 - **Indexing audit:** Add indexes on `(org_id, employee_id)`, `(org_id, date)`, `(period_key)` on high-read tables
 - **Pagination:** All list endpoints (team roster, intervention log, import history) must paginate — no unbounded queries
@@ -126,7 +137,7 @@ Currently built for ~40 users. Required attention areas:
 - **Dashboard query budget:** Target P95 < 500ms for all dashboard loads at 200 users
 - **LOE: 1 week audit + targeted fixes**
 
-### 3.5 12. Dashboard Changes for a Larger Participant Group
+### 3.4 12. Dashboard Changes for a Larger Participant Group
 At 175–200 users, current dashboard patterns break down:
 - **Team roster:** Search + multi-column filter (risk tier, submission status, org) — scrolling 175 rows is unusable without it
 - **WD KPI cards:** Org-level aggregates + week-over-week trend delta as primary; drill-down available
@@ -138,7 +149,7 @@ At 175–200 users, current dashboard patterns break down:
 - **Unexpected UI breakpoints:** Expect row-density, filter discoverability, empty/loading states, pagination controls, sticky headers, mobile/tablet overflow, and chart legibility to change once the app is tested with a real 175-person cohort instead of a 9-person demo dataset
 - **LOE: 2–3 weeks of UI work**
 
-### 3.6 13. Large-Cohort Test Data & UX Validation
+### 3.5 13. Large-Cohort Test Data & UX Validation
 Before calling the app "ready" for Client 2, the team should be able to boot a realistic local/staging environment with **175 participants worth of seeded data** and review the main operator and participant flows against it.
 - Extend the existing seed system to generate 175 participants across multiple departments / cohorts with realistic biometric spread, participation patterns, and missing-data cases
 - Seed multiple behavioral segments on purpose: highly engaged, average, disengaged, recent enrollee, missing uploads, declining trend, red-flag participant
@@ -148,10 +159,15 @@ Before calling the app "ready" for Client 2, the team should be able to boot a r
 - **Recommendation:** treat this as required validation before finalizing the larger-group dashboard work, because several needed UI changes will only become obvious with realistic volume
 - **LOE: 2–4 days for seed generation + 2–5 days of follow-on UX fixes discovered from review**
 
-### 3.7 14. Secure Pulse Survey Submission (Issue #53)
-Resolves with the RLS hardening work; low incremental effort after #8 is done. **LOE: 1–2 days**
+### 3.6 14. User Journey Mapping & Full UX Review
+Map the end-to-end journey for participant, wellness director, executive sponsor, and operator across every major page so UX changes are driven by actual workflow friction instead of isolated page fixes.
+- Review all pages: `/my`, `/team`, `/wellness-director`, `/pulse`, `/interventions`, `/outcomes`, onboarding, import/connect flows, and admin views
+- Identify page-by-page friction, dead ends, inconsistent patterns, unclear hierarchy, and missing state handling
+- Convert the journey map into a prioritized UI/UX consistency pass with concrete page-level changes
+- Use the 175-participant seed environment as the primary review dataset for this pass
+- **LOE: 1–2 weeks including review, synthesis, and first implementation batch**
 
-### 3.8 15. Duplicate WHOOP Import Detection (Issue #9)
+### 3.7 15. Duplicate WHOOP Import Detection (Issue #9)
 Natural companion to self-service import (#74). Prevents data integrity issues when participants upload overlapping date ranges. Bundle into the #74 implementation sprint.
 
 ---
@@ -187,11 +203,11 @@ Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, d
 | #20 | Events/nudges | **Include with #66** | Recommended | FR-5 through FR-8 in #66 covers this substantially |
 | #21 | Pulse survey v2 | **Include** | Recommended | Complete spec, foundational for client 2 |
 | New | Architecture quality & extensibility pass | **Include** | Must Have | Required refactor work to reduce pilot-era technical debt before scaling |
-| New | Large-cohort seed dataset (175 participants) | **Include** | Recommended | Required to validate dashboard UX and expose scale-driven UI changes before Client 2 launch |
+| New | Large-cohort seed dataset (175 participants) | **Include** | Must Have | Required to validate dashboard UX and expose scale-driven UI changes before Client 2 launch |
+| New | User journey mapping & full UX review | **Include** | Recommended | Needed to evaluate all major pages and align UI changes with end-to-end workflows |
 | #52 | Intervention tracking log | **Include lightly** | Nice to Have | Bundle with engagement work |
-| #53 | Secure pulse submission | **Include** | Recommended | Resolves with #8; low incremental LOE |
+| #53 | Secure pulse submission | **Remove** | — | Already implemented |
 | #57 | Security hardening decision record | **Close/merge into #8** | — | Captures analysis; execution tracked in #8 |
-| #66 | Engagement + WD Risk Scoring | **Include (phase it)** | Recommended | Risk scoring operationally necessary at 175 users |
 | #74 | Self-import CSV | **Include** | Must Have | Operational blocker — can't import for 200 users manually |
 | #16 | Challenges/campaigns basic | **Evaluate** | TBD | Review spec against client 2 contract scope before committing |
 
@@ -205,11 +221,11 @@ Week 2–4:   Multi-tenancy schema + APIs (#18) → unblocks org isolation
 Week 2–6:   Azure infra + CI/CD (#4) → run parallel to above
 Week 2–4:   Architecture quality + extensibility pass → reduces pilot-era debt before bulk scale work
 Week 3–4:   Self-import + submission tracking (#74, #9)
-Week 4–5:   Identity provider migration (Azure Entra External ID)
+Week 4–5:   Identity provider migration (Clerk or Entra decision)
 Week 5–6:   Schema pipeline hardening (#15)
 Week 6–7:   Large-cohort seed dataset (175 participants) + UX review pass
 Week 7–8:   Pulse v2 (#21) + dashboard scaling changes + performance tuning
-Week 8–12:  Engagement features + WD risk scoring (#66, #20)
+Week 8–12:  New page/journey UX review + consistency pass
 Ongoing:    Observability, benchmarks, API direct integrations
 ```
 
