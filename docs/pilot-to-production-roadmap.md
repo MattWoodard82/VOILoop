@@ -49,7 +49,7 @@ Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-co
 |---|---|---|
 | App hosting | Azure Container Apps or App Service (Linux) | Container Apps preferred for scale-to-zero |
 | Database | Azure Database for PostgreSQL Flexible | Replaces Supabase hosted Postgres; retain PG for migration simplicity |
-| Auth | Azure Entra External ID | Replaces Supabase Auth |
+| Auth | Clerk | Replaces Supabase Auth |
 | Secrets | Azure Key Vault | All env vars, connection strings |
 | Observability | Azure Monitor + Application Insights | Logs, traces, alerts |
 | CDN/Edge | Azure Front Door (Basic) | For static assets + WAF |
@@ -221,7 +221,7 @@ Week 2–4:   Multi-tenancy schema + APIs (#18) → unblocks org isolation
 Week 2–6:   Azure infra + CI/CD (#4) → run parallel to above
 Week 2–4:   Architecture quality + extensibility pass → reduces pilot-era debt before bulk scale work
 Week 3–4:   Self-import + submission tracking (#74, #9)
-Week 4–5:   Identity provider migration (Clerk or Entra decision)
+Week 4–5:   Identity provider migration (Clerk)
 Week 5–6:   Schema pipeline hardening (#15)
 Week 6–7:   Large-cohort seed dataset (175 participants) + UX review pass
 Week 7–8:   Pulse v2 (#21) + dashboard scaling changes + performance tuning
