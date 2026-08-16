@@ -20,6 +20,7 @@ The most foundational architectural change. Without it, two clients share the sa
 - All APIs and queries must be org-scoped — no global reads except for super-admin
 - Pilot-switcher UX for operators managing multiple orgs
 - Include a tenant onboarding flow to set up a new customer org end-to-end (org creation, role assignment, defaults, and first-access setup)
+- Tenant onboarding should include a repeatable checklist or wizard so new customer environments can be provisioned without ad hoc setup
 - Backfill existing data to `org_id = 1` (Lyle Pearson)
 - **Blocks almost everything else. Do this first.**
 
@@ -97,6 +98,7 @@ Fitbit should be integrated through Terra so onboarding is easier for new device
 - **Tradeoffs:** vendor dependency, custom pricing, less direct control over Fitbit data freshness/sync timing, and a normalized schema that may not preserve every Fitbit- or WHOOP-specific field exactly
 - **Tradeoff summary:** use Terra to accelerate Fitbit onboarding and keep the codebase simpler, but accept that it adds a third-party layer and may require provider-aware display logic for fields that do not map cleanly
 - **Recommendation:** if we do Fitbit next, use Terra rather than a direct Fitbit API integration
+- Fitbit should still expose provider-aware onboarding copy and connection status in `/my` so participants know what they are connecting and why
 
 ---
 
@@ -178,10 +180,14 @@ Showing employees how their metrics compare to an anonymized cohort. Valuable fo
 Additional audit trail for intervention actions. Useful for compliance reporting. Bundle lightly with engagement feature work; low LOE.
 
 ### 4.3 18. WHOOP / Oura API Direct Integration
-Self-import via CSV is the right first step. Direct API sync eliminates all friction but requires OAuth, token management, and polling/webhook infrastructure. Roadmap after self-upload proves out the pattern.
+Direct API sync eliminates all friction but requires OAuth, token management, polling/webhook infrastructure, and a background sync worker. The current import pipeline is CSV/batch-file based: admin uploads through `/admin/import`, the file is parsed in a Next.js route, mappers normalize rows into WHOOP DTOs, persistence upserts to `workouts`, `daily_wellness`, and `habits`, and batch tables record the result. That model does not apply to API responses.
+
+API ingestion needs a per-participant `wearable_connections` table, encrypted access/refresh tokens, a `connect your device` onboarding flow, token refresh handling, and async sync execution. WHOOP and Fitbit both need provider-specific API-to-domain mappers, but the persistence layer should remain source-agnostic.
+
+WHOOP retains full field fidelity and is still the best direct-integration candidate. Fitbit should go through Terra instead of a direct integration because the rate limit, onboarding friction, and provider complexity make it a better fit for normalization.
 
 ### 4.4 19. Multi-Region / Disaster Recovery
-Premature at 2 clients. Define RTO/RPO targets, implement Azure backup + PITR, document recovery runbook. Full geo-redundancy waits until a client contract requires it.
+Azure PostgreSQL backup + point-in-time restore (PITR) plus a documented recovery runbook is the current DR posture. That covers recovery from data loss/corruption and manual restoration after an outage, but not multi-region active/active resilience or seamless regional failover. RTO/RPO are still to be defined.
 
 ---
 
