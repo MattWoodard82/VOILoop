@@ -3,7 +3,7 @@
 ## Overview
 
 This runbook covers local setup, admin/participant smoke testing, and rollback for the
-`PILOT_CHALLENGES_BASIC` feature (Issue #16).
+challenges feature (Issue #16).
 
 ---
 
@@ -21,7 +21,6 @@ This runbook covers local setup, admin/participant smoke testing, and rollback f
 Add to your `.env.local`:
 
 ```env
-PILOT_CHALLENGES_BASIC=true
 CRON_SECRET=local-dev-cron-secret   # optional for local dev
 ```
 
@@ -230,13 +229,8 @@ Review structured logs for these events:
 
 ## Rollback
 
-1. Set `PILOT_CHALLENGES_BASIC=false` in environment and redeploy.
-   - All challenge API routes return `404`.
-   - Challenge card is hidden from participant dashboard.
-   - Admin sidebar entry is hidden.
-
+1. Pause challenge operations by cancelling the active challenge in the admin UI or API if participants should no longer see an active campaign.
 2. Data is preserved read-only in `challenges`, `challenge_participants`, `challenge_audit_log`.
-
 3. Stop the cron schedule if using Vercel Cron (remove from `vercel.json` or disable in dashboard).
 
 ---

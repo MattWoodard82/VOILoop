@@ -55,9 +55,22 @@ async function getTargetedNudge(
   cohort: string | null,
   weekOf: string,
 ) {
+  const { data: targetedRows, error: targetedError } = await supabase
+    .from('nudge_targets')
+    .select('nudge_id, target_type, target_label, participant_id')
+    .or(`target_type.eq.all,and(target_type.eq.participant,participant_id.eq.${participantId}),and(target_type.eq.subgroup,target_label.eq.${cohort ?? ''})`)
+
+  if (targetedError) return { error: targetedError }
+
+  const targetedNudgeIds = Array.from(new Set((targetedRows ?? []).map((row) => row.nudge_id).filter(Boolean)))
+  if (!targetedNudgeIds.length) {
+    return { nudge: null }
+  }
+
   const { data, error } = await supabase
     .from('weekly_nudges')
-    .select('id, message, author, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
+    .select('id, message, author, week_of')
+    .in('id', targetedNudgeIds)
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
     .limit(10)
@@ -69,13 +82,13 @@ async function getTargetedNudge(
     message: string
     author: string
     week_of: string
-    nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> | { target_type?: string; target_label?: string; participant_id?: string | null }
   }>
 
-  const nudge = rows.find((row) => {
-    const targets = Array.isArray(row.nudge_targets) ? row.nudge_targets : [row.nudge_targets]
-    return targets.filter(Boolean).some((target) => isParticipantTarget(target?.target_type ?? 'all', target?.target_label ?? null, target?.participant_id ?? null, participantId, cohort))
-  }) ?? null
+  const nudge = rows.find((row) =>
+    targetedRows?.some((target) =>
+      target.nudge_id === row.id &&
+      isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, cohort))
+  ) ?? null
 
   return { nudge }
 }
@@ -229,18 +242,21 @@ export async function PATCH(request: Request) {
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of, nudge_targets!inner(target_type, target_label, participant_id)')
+    .select('id, week_of')
     .eq('id', nudgeId)
     .maybeSingle()
 
   if (nudgeError) return NextResponse.json({ error: nudgeError.message }, { status: 500 })
   if (!nudge) return NextResponse.json({ error: 'Nudge not found.' }, { status: 404 })
 
-  const targetRows = Array.isArray((nudge as { nudge_targets?: unknown }).nudge_targets)
-    ? (nudge as { nudge_targets: Array<{ target_type?: string; target_label?: string; participant_id?: string | null }> }).nudge_targets
-    : [((nudge as { nudge_targets?: { target_type?: string; target_label?: string; participant_id?: string | null } }).nudge_targets ?? { target_type: 'all', target_label: null, participant_id: null })]
+  const { data: targetRows, error: targetError } = await supabase
+    .from('nudge_targets')
+    .select('target_type, target_label, participant_id')
+    .eq('nudge_id', nudgeId)
 
-  if (!targetRows.some((target) => isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, participant?.cohort ?? null))) {
+  if (targetError) return NextResponse.json({ error: targetError.message }, { status: 500 })
+
+  if (!(targetRows ?? []).some((target) => isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, participant?.cohort ?? null))) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 

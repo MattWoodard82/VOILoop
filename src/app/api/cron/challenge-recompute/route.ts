@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { recomputeActiveChallengeProgress } from '@/lib/challenges/progress'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
-import { isPilotChallengesBasicEnabled } from '@/lib/feature-flags'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -19,18 +18,14 @@ export const runtime = 'nodejs'
 //
 // Vercel passes CRON_SECRET automatically; for other schedulers add the header manually.
 export async function GET(request: Request) {
-  if (!isPilotChallengesBasicEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
-
-  const cronSecret = process.env.CRON_SECRET
+  const cronSecret = process.env.CRON_SECRET?.trim()
   if (!cronSecret) {
     logger.error({ event: 'challenge_cron_recompute_misconfigured', message: 'CRON_SECRET env var is not set; rejecting request' })
     return NextResponse.json({ error: 'Service unavailable: CRON_SECRET is not configured' }, { status: 503 })
   }
 
   const authHeader = request.headers.get('authorization')
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null
   if (bearerToken !== cronSecret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }

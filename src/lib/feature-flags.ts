@@ -3,14 +3,6 @@ function isEnabled(raw: string | undefined): boolean {
   return value === '1' || value === 'true' || value === 'yes' || value === 'on'
 }
 
-export function isPilotChallengesBasicEnabled(): boolean {
-  return isEnabled(process.env.PILOT_CHALLENGES_BASIC)
-}
-
-export function isRewardsRolloutEnabled(): boolean {
-  return isPilotChallengesBasicEnabled()
-}
-
 export function isPublicErrorDiagnosticsEnabled(): boolean {
   const raw = process.env.NEXT_PUBLIC_SHOW_ERROR_DIAGNOSTICS
   if (raw == null || raw.trim() === '') return true
