@@ -1,5 +1,7 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
 import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
@@ -7,6 +9,19 @@ import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Worko
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
 import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } from './insights'
 import Link from 'next/link'
+
+function isThisWeek(dateStr: string): boolean {
+  // Server stores dates as UTC ISO strings (new Date().toISOString().slice(0,10)).
+  // Use UTC day arithmetic so week boundaries match regardless of browser timezone.
+  const now = new Date()
+  const utcDay = now.getUTCDay() // 0=Sun, 1=Mon...
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday))
+  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6, 23, 59, 59, 999))
+  // dateStr is YYYY-MM-DD; parse as UTC midnight to match server convention
+  const d = new Date(dateStr + 'T00:00:00Z')
+  return d >= monday && d <= sunday
+}
 
 interface Props {
   participant: Participant
@@ -128,10 +143,24 @@ function trendBadgeVariant(state: PersonalTrend['state']) {
 }
 
 export function MyDashboardClient({ participant, wellness, habits, workout, pulse, challenge, importBatches, insights }: Props) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [pulseDoneBanner, setPulseDoneBanner] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('pulse_done') === '1') {
+      setPulseDoneBanner(true)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('pulse_done')
+      router.replace(url.pathname + (url.search || ''))
+    }
+  }, [searchParams, router])
+
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
   const latestImport = importBatches[0] ?? null
   const recoverySummary = getRecoverySummary(latest?.recovery_score ?? null)
+  const pulseCompletedThisWeek = latestPulse ? isThisWeek(latestPulse.date) : false
 
   const trendData = [...wellness]
     .reverse()
@@ -161,6 +190,79 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
 
   return (
     <div>
+      {pulseDoneBanner && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            background: '#0d2e0a',
+            border: '1px solid #69BE28',
+            borderRadius: 10,
+            padding: '14px 20px',
+            marginBottom: 18,
+            fontSize: 14,
+            color: '#69BE28',
+            fontWeight: 600,
+          }}
+        >
+          <span>✅ This week&apos;s Pulse Survey has been completed — thank you!</span>
+          <button
+            onClick={() => setPulseDoneBanner(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#69BE28', fontSize: 18, lineHeight: 1, padding: 0 }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
+      {!pulseCompletedThisWeek && (
+        <div
+          style={{
+            background: '#001a33',
+            border: '2px solid #69BE28',
+            borderRadius: 12,
+            padding: '20px 24px',
+            marginBottom: 18,
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'space-between',
+            gap: 16,
+          }}
+        >
+          <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
+              📋 This week&apos;s Pulse Survey is ready
+            </div>
+            <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.5 }}>
+              10 questions · under 3 minutes · your responses are private and go only to your Wellness Director.
+            </div>
+          </div>
+          <Link
+            href="/survey"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '14px 28px',
+              borderRadius: 10,
+              border: 'none',
+              background: '#69BE28',
+              color: '#002244',
+              fontSize: 15,
+              fontWeight: 700,
+              textDecoration: 'none',
+              flexShrink: 0,
+            }}
+          >
+            Take the survey →
+          </Link>
+        </div>
+      )}
+
       {!latest ? (
         <Alert variant="warn">
           <strong style={{ color: '#fff' }}>Your dashboard is waiting for data.</strong> Upload a WHOOP export to populate recovery, sleep, strain, and habit insights.
@@ -193,26 +295,11 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           <div style={{ fontSize: 12, color: '#A5ACAF', maxWidth: 560, lineHeight: 1.6 }}>
             {recoverySummary.detail}
           </div>
-          <div style={{ marginTop: 12 }}>
-            <Link
-              href="/survey"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: '1px solid #0a3560',
-                background: '#001a33',
-                color: '#69BE28',
-                fontSize: 12,
-                fontWeight: 600,
-                textDecoration: 'none',
-              }}
-            >
-              Open weekly pulse survey →
-            </Link>
-          </div>
+          {pulseCompletedThisWeek && (
+            <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, background: '#0d2e0a', border: '1px solid #69BE28', fontSize: 12, color: '#69BE28', fontWeight: 600 }}>
+              ✅ Pulse Survey completed this week
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 8 }}>
