@@ -314,7 +314,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
       </div>
 <EventsNudgeCard />
       {challenge && challenge.visibility_state !== 'none' && challenge.data ? (
-        <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.status}</Badge>}>
+        <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.completed ? 'Completed' : challenge.data.status === 'active' ? 'Active' : 'Not completed'}</Badge>}>
           <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8, lineHeight: 1.5 }}>
             <strong style={{ color: '#fff' }}>{challenge.data.name}</strong>
           </div>
