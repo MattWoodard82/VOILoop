@@ -16,6 +16,7 @@ export interface Participant {
   enrolled_date: string | null
   status: string
   is_exact_data: boolean
+  cohort?: string | null
 }
 
 export interface DailyWellness {

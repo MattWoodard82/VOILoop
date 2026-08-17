@@ -43,9 +43,11 @@ function makeTableClient(tables: Record<string, any[]>) {
     const filters: Array<
       | { kind: 'eq' | 'in'; column: string; value: any }
       | { kind: 'or-not-null'; columns: string[] }
+      | { kind: 'gte'; column: string; value: any }
     > = []
     const orders: Array<{ column: string; ascending: boolean }> = []
     let limitCount: number | null = null
+    let rangeBounds: { from: number; to: number } | null = null
 
     const builder: any = {
       select: jest.fn(() => builder),
@@ -59,6 +61,10 @@ function makeTableClient(tables: Record<string, any[]>) {
       }),
       in: jest.fn((column: string, value: any[]) => {
         filters.push({ kind: 'in', column, value })
+        return builder
+      }),
+      gte: jest.fn((column: string, value: any) => {
+        filters.push({ kind: 'gte', column, value })
         return builder
       }),
       or: jest.fn((expression: string) => {
@@ -78,12 +84,19 @@ function makeTableClient(tables: Record<string, any[]>) {
         limitCount = count
         return builder
       }),
+      range: jest.fn((from: number, to: number) => {
+        rangeBounds = { from, to }
+        return builder
+      }),
       single: jest.fn(async () => {
         const resultRows = runQuery(rows, filters, orders, limitCount)
         return { data: resultRows[0] ?? null, error: null }
       }),
       then: (resolve: (value: QueryResult<any[]>) => void, reject: (reason: unknown) => void) => {
-        const resultRows = runQuery(rows, filters, orders, limitCount)
+        let resultRows = runQuery(rows, filters, orders, limitCount)
+        if (rangeBounds) {
+          resultRows = resultRows.slice(rangeBounds.from, rangeBounds.to + 1)
+        }
         return Promise.resolve({ data: resultRows, error: null }).then(resolve, reject)
       },
     }
@@ -99,6 +112,7 @@ function runQuery(
   filters: Array<
     | { kind: 'eq' | 'in'; column: string; value: any }
     | { kind: 'or-not-null'; columns: string[] }
+    | { kind: 'gte'; column: string; value: any }
   >,
   orders: Array<{ column: string; ascending: boolean }>,
   limitCount: number | null
@@ -112,6 +126,10 @@ function runQuery(
     }
     if (filter.kind === 'eq') {
       result = result.filter((row) => row[filter.column] === filter.value)
+      continue
+    }
+    if (filter.kind === 'gte') {
+      result = result.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined && row[filter.column] >= filter.value)
       continue
     }
     result = result.filter((row) => filter.value.includes(row[filter.column]))
@@ -612,6 +630,219 @@ describe('getTeamDashboard', () => {
     expect(participantById.P1.override_expires_at).toBe('2026-08-12T00:00:00Z')
     expect(participantById.P2.override_state).toBeNull()
     expect(participantById.P2.override_expires_at).toBeNull()
+
+    jest.useRealTimers()
+  })
+
+  test('computes distinct, non-flattened engagement scores driven by real participant-scoped data', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Hana', last_name: 'High', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+      {
+        id: 'P2', first_name: 'Leo', last_name: 'Low', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    // P1: a daily_wellness row (valid recovery + sleep) for every day of the trailing
+    // 21-day window (2026-07-28..2026-08-17), so submission consistency and device-wear
+    // consistency both resolve to 100%. P2 has none.
+    const dailyWellness: any[] = []
+    for (let i = 0; i < 21; i++) {
+      const date = new Date('2026-07-28T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + i)
+      dailyWellness.push({
+        id: `w-p1-${i}`, participant_id: 'P1', date: date.toISOString().slice(0, 10),
+        recovery_score: 70, hrv_ms: 60, sleep_perf: 80, sleep_hrs: 7,
+      })
+    }
+
+    // P1: one pulse survey in each of the last 3 calendar weeks (100% completion).
+    const pulseSurveys = [
+      { id: 'pulse-p1-w0', participant_id: 'P1', date: '2026-08-17', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w1', participant_id: 'P1', date: '2026-08-12', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w2', participant_id: 'P1', date: '2026-08-03', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    ]
+
+    // P1: historical baseline of ~1 workout every 6 days (10 over the 60 days before the
+    // trailing window), then 7 workouts within the trailing 21 days — well above baseline,
+    // so the ratio-vs-baseline formula clamps at 100. P2 has zero workouts (no baseline).
+    const workouts: any[] = []
+    for (let i = 0; i < 10; i++) {
+      const date = new Date('2026-05-29T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + i * 6)
+      workouts.push({ id: `wo-baseline-${i}`, participant_id: 'P1', date: date.toISOString().slice(0, 10), start_time: `${date.toISOString().slice(0, 10)}T08:00:00Z`, activity: 'Run', duration_min: 30, strain: 8 })
+    }
+    for (let i = 0; i < 7; i++) {
+      const date = new Date('2026-07-28T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + i * 3)
+      workouts.push({ id: `wo-current-${i}`, participant_id: 'P1', date: date.toISOString().slice(0, 10), start_time: `${date.toISOString().slice(0, 10)}T08:00:00Z`, activity: 'Run', duration_min: 30, strain: 8 })
+    }
+
+    // Three weekly nudges targeting 'all' participants within the trailing 21 days.
+    // P1 acknowledges every one; P2 acknowledges none.
+    const weeklyNudges = [
+      { id: 'nudge-1', week_of: '2026-08-03' },
+      { id: 'nudge-2', week_of: '2026-08-10' },
+      { id: 'nudge-3', week_of: '2026-08-17' },
+    ]
+    const nudgeTargets = weeklyNudges.map((n) => ({ nudge_id: n.id, target_type: 'all', target_label: '', participant_id: null }))
+    const nudgeAcknowledgements = weeklyNudges.map((n) => ({ nudge_id: n.id, participant_id: 'P1' }))
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts,
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+        weekly_nudges: weeklyNudges,
+        nudge_targets: nudgeTargets,
+        nudge_acknowledgements: nudgeAcknowledgements,
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participantById = Object.fromEntries(dashboard.participants.map((participant) => [participant.id, participant]))
+
+    expect(participantById.P1.engagement_score_components).toEqual({
+      submission_consistency: 100,
+      device_wear_consistency: 100,
+      pulse_completion: 100,
+      nudge_response: 100,
+      workout_volume: 100,
+    })
+    expect(participantById.P1.engagement_score).toBe(100)
+
+    expect(participantById.P2.engagement_score_components).toEqual({
+      submission_consistency: 0,
+      device_wear_consistency: 0,
+      pulse_completion: 0,
+      nudge_response: 0,
+      workout_volume: 0,
+    })
+    expect(participantById.P2.engagement_score).toBe(0)
+
+    // Regression guard: the two participants must not collapse to the same
+    // (or any other fixed/constant) score once real per-participant data varies.
+    expect(participantById.P1.engagement_score).not.toBe(participantById.P2.engagement_score)
+
+    jest.useRealTimers()
+  })
+
+  test('pulse completion is computed per participant across the last 3 weeks, not diluted by another participant\u2019s row volume', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Steady', last_name: 'Submitter', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+      {
+        id: 'P2', first_name: 'Bursty', last_name: 'Submitter', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    // P1 submits once in each of the last 3 weeks (100% weekly completion).
+    const pulseSurveys = [
+      { id: 'pulse-p1-w0', participant_id: 'P1', date: '2026-08-17', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w1', participant_id: 'P1', date: '2026-08-12', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w2', participant_id: 'P1', date: '2026-08-03', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    ]
+    // P2 submits many times, but all crammed into a single week (2026-08-10..16) —
+    // a much larger row count than P1's, yet only 1 of the last 3 weeks is covered.
+    for (let i = 0; i < 20; i++) {
+      const date = new Date('2026-08-10T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + (i % 7))
+      pulseSurveys.push({
+        id: `pulse-p2-${i}`, participant_id: 'P2', date: date.toISOString().slice(0, 10),
+        confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4,
+        stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes',
+        whoop_reviewed: 'yes_once', health_flag: null,
+      })
+    }
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participantById = Object.fromEntries(dashboard.participants.map((participant) => [participant.id, participant]))
+
+    // P1's 3-row, one-per-week pattern yields full credit despite P2 having ~7x more rows.
+    expect(participantById.P1.engagement_score_components?.pulse_completion).toBe(100)
+    // P2's 20 rows squeezed into a single week only earn credit for that one week.
+    expect(participantById.P2.engagement_score_components?.pulse_completion).toBe(33)
+
+    jest.useRealTimers()
+  })
+
+  test('workout volume compares the trailing 21 days against the participant\u2019s own historical baseline, not a flat count cap', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Below', last_name: 'Baseline', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    // Historical baseline: 1 workout every 3 days for 60 days before the trailing window
+    // (20 workouts / 60 days -> ~7 per 21-day window).
+    const workouts: any[] = []
+    for (let i = 0; i < 20; i++) {
+      const date = new Date('2026-05-29T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + i * 3)
+      workouts.push({ id: `wo-baseline-${i}`, participant_id: 'P1', date: date.toISOString().slice(0, 10), start_time: `${date.toISOString().slice(0, 10)}T08:00:00Z`, activity: 'Run', duration_min: 30, strain: 8 })
+    }
+    // Current trailing 21 days: only 3 workouts logged (well below the ~7/21d baseline
+    // rate), old formula (count/3 * 100) would have scored this a flat 100.
+    for (let i = 0; i < 3; i++) {
+      const date = new Date('2026-07-28T00:00:00Z')
+      date.setUTCDate(date.getUTCDate() + i * 7)
+      workouts.push({ id: `wo-current-${i}`, participant_id: 'P1', date: date.toISOString().slice(0, 10), start_time: `${date.toISOString().slice(0, 10)}T08:00:00Z`, activity: 'Run', duration_min: 30, strain: 8 })
+    }
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts,
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const workoutVolume = dashboard.participants[0].engagement_score_components?.workout_volume ?? 0
+
+    expect(workoutVolume).toBeGreaterThan(0)
+    expect(workoutVolume).toBeLessThan(100)
 
     jest.useRealTimers()
   })
