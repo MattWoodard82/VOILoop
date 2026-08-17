@@ -11,16 +11,15 @@ import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } 
 import Link from 'next/link'
 
 function isThisWeek(dateStr: string): boolean {
+  // Server stores dates as UTC ISO strings (new Date().toISOString().slice(0,10)).
+  // Use UTC day arithmetic so week boundaries match regardless of browser timezone.
   const now = new Date()
-  const day = now.getDay() // 0=Sun, 1=Mon...
-  const diffToMonday = (day === 0 ? -6 : 1 - day)
-  const monday = new Date(now)
-  monday.setDate(now.getDate() + diffToMonday)
-  monday.setHours(0, 0, 0, 0)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(23, 59, 59, 999)
-  const d = new Date(dateStr)
+  const utcDay = now.getUTCDay() // 0=Sun, 1=Mon...
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday))
+  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6, 23, 59, 59, 999))
+  // dateStr is YYYY-MM-DD; parse as UTC midnight to match server convention
+  const d = new Date(dateStr + 'T00:00:00Z')
   return d >= monday && d <= sunday
 }
 
@@ -229,11 +228,12 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
             marginBottom: 18,
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             justifyContent: 'space-between',
-            gap: 20,
+            gap: 16,
           }}
         >
-          <div>
+          <div style={{ minWidth: 0, flex: '1 1 200px' }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
               📋 This week&apos;s Pulse Survey is ready
             </div>
@@ -255,7 +255,6 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
               fontSize: 15,
               fontWeight: 700,
               textDecoration: 'none',
-              whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
           >
