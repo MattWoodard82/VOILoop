@@ -460,6 +460,29 @@ export async function updateIntervention(id: string, updates: Partial<Interventi
   if (error) throw error
 }
 
+// PostgREST/Supabase caps unbounded result sets (commonly 1,000 rows). Page through
+// results so a large team's trailing-window history queries below can't silently
+// truncate to an ascending-ordered prefix and drop the most recent (and most
+// relevant) days once a team crosses that row-count threshold.
+const HISTORY_PAGE_SIZE = 1000
+
+async function fetchAllPages<T>(
+  buildPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const rows: T[] = []
+  let from = 0
+  // Bounded by page size shrinking below a full page, so this always terminates.
+  for (;;) {
+    const { data, error } = await buildPage(from, from + HISTORY_PAGE_SIZE - 1)
+    if (error) throw error
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < HISTORY_PAGE_SIZE) break
+    from += HISTORY_PAGE_SIZE
+  }
+  return rows
+}
+
 // Fetches full daily_wellness history (not just the latest row) for a set of
 // participants since a given date, used for windowed engagement components.
 export async function getWellnessHistoryForParticipants(
@@ -468,14 +491,15 @@ export async function getWellnessHistoryForParticipants(
   supabase = getQueryClient(),
 ): Promise<DailyWellness[]> {
   if (participantIds.length === 0) return []
-  const { data, error } = await supabase
-    .from('daily_wellness')
-    .select('*')
-    .in('participant_id', participantIds)
-    .gte('date', sinceDate)
-    .order('date', { ascending: true })
-  if (error) throw error
-  return data ?? []
+  return fetchAllPages<DailyWellness>((from, to) =>
+    supabase
+      .from('daily_wellness')
+      .select('*')
+      .in('participant_id', participantIds)
+      .gte('date', sinceDate)
+      .order('date', { ascending: true })
+      .range(from, to)
+  )
 }
 
 // Fetches full pulse_surveys history (not just the latest date's snapshot) for a
@@ -486,14 +510,15 @@ export async function getPulseHistoryForParticipants(
   supabase = getQueryClient(),
 ): Promise<PulseSurvey[]> {
   if (participantIds.length === 0) return []
-  const { data, error } = await supabase
-    .from('pulse_surveys')
-    .select('*')
-    .in('participant_id', participantIds)
-    .gte('date', sinceDate)
-    .order('date', { ascending: true })
-  if (error) throw error
-  return data ?? []
+  return fetchAllPages<PulseSurvey>((from, to) =>
+    supabase
+      .from('pulse_surveys')
+      .select('*')
+      .in('participant_id', participantIds)
+      .gte('date', sinceDate)
+      .order('date', { ascending: true })
+      .range(from, to)
+  )
 }
 
 // Fetches the nudge/target/acknowledgement data needed to compute nudge response
@@ -540,9 +565,17 @@ export async function getTeamDashboard(): Promise<{
   // 28-day lookback comfortably covers both the trailing-21-day windows (device wear,
   // nudge response, workout volume) and the "last 3 calendar weeks" windows
   // (submission consistency, pulse completion) regardless of where "today" falls
-  // within its own Monday-Sunday week.
+  // within its own Monday-Sunday week. This is an intentionally wide *fetch* margin;
+  // the actual window boundaries are enforced precisely downstream by
+  // computeWeeklyConsistency/computeDeviceWearConsistency, so over-fetching here is
+  // harmless (extra rows are filtered out by those functions).
   const historySinceDate = toDateKey(new Date(now.getTime() - 28 * MS_PER_DAY))
-  const nudgeSinceDate = toDateKey(new Date(now.getTime() - 21 * MS_PER_DAY))
+  // Trailing 21-day window is inclusive of today, so the cutoff is 20 days back
+  // (matching computeDeviceWearConsistency/computeWorkoutVolumeVsBaseline's
+  // `windowDays - 1` convention) - unlike historySinceDate above, this value is used
+  // directly as the query's hard boundary with no further downstream trimming, so an
+  // off-by-one here would leak an extra day's nudges into the result.
+  const nudgeSinceDate = toDateKey(new Date(now.getTime() - 20 * MS_PER_DAY))
   const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData] = await Promise.all([
     getLatestWellness(undefined, participantIds, supabase),
     getLatestWorkouts(undefined, supabase),
@@ -579,7 +612,7 @@ export async function getTeamDashboard(): Promise<{
     // insufficient data to measure it.
     const submissionConsistency = computeWeeklyConsistency(
       wellnessRows, recentWeeks, enrolledDate,
-      (row) => row.recovery_score != null || row.hrv_ms != null,
+      (row) => hasMeaningfulWellnessData(row),
     )
     const deviceWearConsistency = computeDeviceWearConsistency(wellnessRows, 21, now, enrolledDate)
     const pulseCompletion = computeWeeklyConsistency(pulseRows, recentWeeks, enrolledDate, () => true)

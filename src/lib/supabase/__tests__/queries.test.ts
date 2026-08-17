@@ -47,6 +47,7 @@ function makeTableClient(tables: Record<string, any[]>) {
     > = []
     const orders: Array<{ column: string; ascending: boolean }> = []
     let limitCount: number | null = null
+    let rangeBounds: { from: number; to: number } | null = null
 
     const builder: any = {
       select: jest.fn(() => builder),
@@ -83,12 +84,19 @@ function makeTableClient(tables: Record<string, any[]>) {
         limitCount = count
         return builder
       }),
+      range: jest.fn((from: number, to: number) => {
+        rangeBounds = { from, to }
+        return builder
+      }),
       single: jest.fn(async () => {
         const resultRows = runQuery(rows, filters, orders, limitCount)
         return { data: resultRows[0] ?? null, error: null }
       }),
       then: (resolve: (value: QueryResult<any[]>) => void, reject: (reason: unknown) => void) => {
-        const resultRows = runQuery(rows, filters, orders, limitCount)
+        let resultRows = runQuery(rows, filters, orders, limitCount)
+        if (rangeBounds) {
+          resultRows = resultRows.slice(rangeBounds.from, rangeBounds.to + 1)
+        }
         return Promise.resolve({ data: resultRows, error: null }).then(resolve, reject)
       },
     }

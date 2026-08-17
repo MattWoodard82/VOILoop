@@ -39,6 +39,34 @@ describe('admin wellness director config route', () => {
     })
   })
 
+  test('GET normalizes a persisted legacy weights row back to FR-13 defaults', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { id: 'current', weights: { recovery: 40, hrv: 20, sleep: 20, debt: 20 } },
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.config.weights).toEqual({
+      submission_consistency: 25,
+      device_wear_consistency: 20,
+      pulse_completion: 20,
+      nudge_response: 15,
+      workout_volume: 20,
+    })
+  })
+
   test('PUT persists valid weights', async () => {
     mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
     const weights = {
