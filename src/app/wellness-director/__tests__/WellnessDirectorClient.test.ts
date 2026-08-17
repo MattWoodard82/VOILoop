@@ -84,6 +84,15 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('improving')
   })
 
+  test('shows the five FR-13 engagement component labels in the breakdown', () => {
+    const markup = selectedMarkup([participant])
+    expect(markup).toContain('WHOOP/CSV submission consistency')
+    expect(markup).toContain('Device-wear consistency')
+    expect(markup).toContain('Pulse survey completion')
+    expect(markup).toContain('Nudge response rate')
+    expect(markup).toContain('Workout volume vs. baseline')
+  })
+
   test('shows snooze and dismiss controls for the selected participant', () => {
     const markup = selectedMarkup([participant])
     expect(markup).toContain('Snooze')

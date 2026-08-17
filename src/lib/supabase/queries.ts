@@ -28,6 +28,149 @@ export function avg(nums: (number | null)[]): number {
   return Math.round(valid.reduce((a, b) => a + b, 0) / valid.length)
 }
 
+// --- Engagement score windowing helpers (GH issue #66 / FR-13) -----------------
+// Date-only, UTC-anchored math so window boundaries don't drift with server timezone.
+const MS_PER_DAY = 86400000
+
+function startOfDayUTC(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
+}
+
+function toDateKey(date: Date): string {
+  return date.toISOString().slice(0, 10)
+}
+
+// DECISION-1 (issue #66): week-over-week is a fixed Monday-Sunday calendar week, not rolling 7 days.
+function getMondayOfWeek(date: Date): Date {
+  const d = startOfDayUTC(date)
+  const day = d.getUTCDay() // 0 = Sunday ... 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  d.setUTCDate(d.getUTCDate() + diffToMonday)
+  return d
+}
+
+interface WeekWindow { start: Date; end: Date }
+
+function getRecentCalendarWeeks(referenceDate: Date, count: number): WeekWindow[] {
+  const currentMonday = getMondayOfWeek(referenceDate)
+  const weeks: WeekWindow[] = []
+  for (let i = 0; i < count; i++) {
+    const start = new Date(currentMonday)
+    start.setUTCDate(start.getUTCDate() - i * 7)
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 6)
+    weeks.push({ start, end })
+  }
+  return weeks
+}
+
+function dateKeyInWindow(dateStr: string, window: WeekWindow): boolean {
+  const key = dateStr.slice(0, 10)
+  return key >= toDateKey(window.start) && key <= toDateKey(window.end)
+}
+
+// Weekly consistency (submission consistency / pulse completion): % of the last N
+// calendar weeks with at least one matching row, truncated to weeks that occurred
+// on/after the participant's enrollment so pre-enrollment weeks don't count as misses.
+function computeWeeklyConsistency<T extends { date: string }>(
+  rows: T[],
+  weeks: WeekWindow[],
+  enrolledDate: Date | null,
+  matches: (row: T) => boolean,
+): number | null {
+  const validWeeks = weeks.filter((week) => !enrolledDate || week.end >= enrolledDate)
+  if (validWeeks.length === 0) return null
+  const weeksWithSubmission = validWeeks.filter((week) => rows.some((row) => matches(row) && dateKeyInWindow(row.date, week))).length
+  return Math.round((weeksWithSubmission / validWeeks.length) * 100)
+}
+
+// Device-wear consistency: % of days in the trailing window (bounded by enrollment)
+// with a daily_wellness row that has BOTH a valid recovery score and valid sleep data.
+function computeDeviceWearConsistency(
+  rows: DailyWellness[],
+  windowDays: number,
+  referenceDate: Date,
+  enrolledDate: Date | null,
+): number | null {
+  const windowStart = new Date(referenceDate)
+  windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
+  const effectiveStart = enrolledDate && enrolledDate > windowStart ? enrolledDate : windowStart
+  const totalDays = Math.floor((startOfDayUTC(referenceDate).getTime() - startOfDayUTC(effectiveStart).getTime()) / MS_PER_DAY) + 1
+  if (totalDays <= 0) return null
+
+  const byDate = new Map(rows.map((row) => [row.date.slice(0, 10), row]))
+  let validDays = 0
+  for (let i = 0; i < totalDays; i++) {
+    const day = new Date(effectiveStart)
+    day.setUTCDate(day.getUTCDate() + i)
+    const row = byDate.get(toDateKey(day))
+    if (row && row.recovery_score != null && (row.sleep_perf != null || row.sleep_hrs != null)) {
+      validDays++
+    }
+  }
+  return Math.round((validDays / totalDays) * 100)
+}
+
+// Workout volume vs. own historical average: compares the trailing window's workout
+// count against the participant's own pre-window average rate (normalized to the
+// same window length). Returns null when there isn't enough prior history to form a
+// baseline, rather than defaulting to a flat/constant score.
+function computeWorkoutVolumeVsBaseline(
+  workouts: Workout[],
+  windowDays: number,
+  referenceDate: Date,
+): number | null {
+  const windowStart = new Date(referenceDate)
+  windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
+  const windowStartKey = toDateKey(windowStart)
+
+  const currentCount = workouts.filter((w) => w.date.slice(0, 10) >= windowStartKey).length
+  const historical = workouts.filter((w) => w.date.slice(0, 10) < windowStartKey)
+  if (historical.length === 0) return null
+
+  const earliestDate = historical.reduce((min, w) => (w.date < min ? w.date : min), historical[0].date)
+  const historicalDays = Math.max(1, Math.floor((windowStart.getTime() - new Date(`${earliestDate.slice(0, 10)}T00:00:00Z`).getTime()) / MS_PER_DAY))
+  const historicalAvgPerWindow = (historical.length / historicalDays) * windowDays
+  if (historicalAvgPerWindow <= 0) return null
+
+  const ratio = currentCount / historicalAvgPerWindow
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)))
+}
+
+interface NudgeRecord { id: string; week_of: string }
+interface NudgeTargetRecord { nudge_id: string; target_type: string; target_label: string | null; participant_id: string | null }
+interface NudgeAcknowledgementRecord { nudge_id: string; participant_id: string }
+
+// Nudge response rate (trailing 21d): % of nudges targeted at this participant
+// (directly, via 'all', or via matching cohort subgroup) that they acknowledged,
+// per DECISION-2 (acknowledge/receipt click within the response window).
+function computeNudgeResponseRate(
+  participant: Pick<Participant, 'id' | 'cohort'>,
+  nudges: NudgeRecord[],
+  targets: NudgeTargetRecord[],
+  acknowledgements: NudgeAcknowledgementRecord[],
+): number | null {
+  const nudgeIdsInWindow = new Set(nudges.map((n) => n.id))
+  const targetedNudgeIds = new Set<string>()
+  for (const target of targets) {
+    if (!nudgeIdsInWindow.has(target.nudge_id)) continue
+    if (target.target_type === 'all') {
+      targetedNudgeIds.add(target.nudge_id)
+    } else if (target.target_type === 'participant' && target.participant_id === participant.id) {
+      targetedNudgeIds.add(target.nudge_id)
+    } else if (target.target_type === 'subgroup' && participant.cohort && target.target_label === participant.cohort) {
+      targetedNudgeIds.add(target.nudge_id)
+    }
+  }
+  if (targetedNudgeIds.size === 0) return null
+
+  const ackNudgeIds = new Set(
+    acknowledgements.filter((ack) => ack.participant_id === participant.id).map((ack) => ack.nudge_id),
+  )
+  const respondedCount = Array.from(targetedNudgeIds).filter((id) => ackNudgeIds.has(id)).length
+  return Math.round((respondedCount / targetedNudgeIds.size) * 100)
+}
+
 const WELLNESS_METRIC_FIELDS: Array<keyof DailyWellness> = [
   'recovery_score',
   'hrv_ms',
@@ -317,6 +460,73 @@ export async function updateIntervention(id: string, updates: Partial<Interventi
   if (error) throw error
 }
 
+// Fetches full daily_wellness history (not just the latest row) for a set of
+// participants since a given date, used for windowed engagement components.
+export async function getWellnessHistoryForParticipants(
+  participantIds: string[],
+  sinceDate: string,
+  supabase = getQueryClient(),
+): Promise<DailyWellness[]> {
+  if (participantIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('daily_wellness')
+    .select('*')
+    .in('participant_id', participantIds)
+    .gte('date', sinceDate)
+    .order('date', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+// Fetches full pulse_surveys history (not just the latest date's snapshot) for a
+// set of participants since a given date, used for pulse completion consistency.
+export async function getPulseHistoryForParticipants(
+  participantIds: string[],
+  sinceDate: string,
+  supabase = getQueryClient(),
+): Promise<PulseSurvey[]> {
+  if (participantIds.length === 0) return []
+  const { data, error } = await supabase
+    .from('pulse_surveys')
+    .select('*')
+    .in('participant_id', participantIds)
+    .gte('date', sinceDate)
+    .order('date', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
+// Fetches the nudge/target/acknowledgement data needed to compute nudge response
+// rate (trailing 21d) for a set of participants, per DECISION-2 in issue #66.
+export async function getNudgeEngagementData(
+  sinceDate: string,
+  supabase = getQueryClient(),
+): Promise<{ nudges: NudgeRecord[]; targets: NudgeTargetRecord[]; acknowledgements: NudgeAcknowledgementRecord[] }> {
+  const { data: nudges, error: nudgeError } = await supabase
+    .from('weekly_nudges')
+    .select('id, week_of')
+    .gte('week_of', sinceDate)
+  if (nudgeError) throw nudgeError
+
+  const nudgeIds = (nudges ?? []).map((nudge: NudgeRecord) => nudge.id)
+  if (nudgeIds.length === 0) return { nudges: nudges ?? [], targets: [], acknowledgements: [] }
+
+  const [{ data: targets, error: targetError }, { data: acknowledgements, error: ackError }] = await Promise.all([
+    supabase
+      .from('nudge_targets')
+      .select('nudge_id, target_type, target_label, participant_id')
+      .in('nudge_id', nudgeIds),
+    supabase
+      .from('nudge_acknowledgements')
+      .select('nudge_id, participant_id')
+      .in('nudge_id', nudgeIds),
+  ])
+  if (targetError) throw targetError
+  if (ackError) throw ackError
+
+  return { nudges: nudges ?? [], targets: targets ?? [], acknowledgements: acknowledgements ?? [] }
+}
+
 export async function getTeamDashboard(): Promise<{
   participants: ParticipantWithWellness[]
   stats: TeamStats
@@ -326,13 +536,23 @@ export async function getTeamDashboard(): Promise<{
   const privilegedSupabase = getPrivilegedQueryClient()
   const participants = await getParticipants(supabase)
   const participantIds = participants.map((participant) => participant.id)
-  const [wellness, workouts, habits, pulse, interventions, riskFlags] = await Promise.all([
+  const now = new Date()
+  // 28-day lookback comfortably covers both the trailing-21-day windows (device wear,
+  // nudge response, workout volume) and the "last 3 calendar weeks" windows
+  // (submission consistency, pulse completion) regardless of where "today" falls
+  // within its own Monday-Sunday week.
+  const historySinceDate = toDateKey(new Date(now.getTime() - 28 * MS_PER_DAY))
+  const nudgeSinceDate = toDateKey(new Date(now.getTime() - 21 * MS_PER_DAY))
+  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData] = await Promise.all([
     getLatestWellness(undefined, participantIds, supabase),
     getLatestWorkouts(undefined, supabase),
     getLatestHabits(undefined, supabase),
     getLatestPulse(supabase),
     getInterventions(undefined, supabase),
     getRiskFlagsForParticipantGroup(participantIds, privilegedSupabase),
+    getWellnessHistoryForParticipants(participantIds, historySinceDate, supabase),
+    getPulseHistoryForParticipants(participantIds, historySinceDate, supabase),
+    getNudgeEngagementData(nudgeSinceDate, supabase),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
@@ -342,23 +562,29 @@ export async function getTeamDashboard(): Promise<{
   }, {})
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const recentWeeks = getRecentCalendarWeeks(now, 3)
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
-    const enrolledDays = emp.enrolled_date ? Math.floor((Date.now() - new Date(emp.enrolled_date).getTime()) / 86400000) : null
-    const recentWellness = wellness.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date)).slice(-21)
-    const recentPulse = pulse.filter((row) => row.participant_id === emp.id)
-    const recentWorkouts = workouts.filter((row) => row.participant_id === emp.id)
-    const recentHabits = habits.filter((row) => row.participant_id === emp.id)
-    const submissionConsistency = recentWellness.length > 0
-      ? Math.round((recentWellness.filter((row) => row.recovery_score != null).length / recentWellness.length) * 100)
-      : null
-    const deviceWearConsistency = recentWellness.length > 0
-      ? Math.round((recentWellness.filter((row) => row.hrv_ms != null || row.resting_hr != null || row.sleep_perf != null).length / recentWellness.length) * 100)
-      : null
-    const pulseCompletion = pulse.length > 0 ? Math.round((recentPulse.length / Math.max(1, pulse.length)) * 100) : null
-    const nudgeResponse = recentHabits.length > 0 ? Math.round((recentHabits.filter((row) => row.notes != null).length / recentHabits.length) * 100) : null
-    const workoutVolume = recentWorkouts.length > 0 ? Math.min(100, Math.round((recentWorkouts.length / 3) * 100)) : null
+    const enrolledDate = emp.enrolled_date ? startOfDayUTC(new Date(emp.enrolled_date)) : null
+    const enrolledDays = enrolledDate != null ? Math.floor((startOfDayUTC(now).getTime() - enrolledDate.getTime()) / MS_PER_DAY) : null
+    // Participant-scoped history (not just the single latest row) so windowed
+    // components reflect real variation instead of a single-point snapshot.
+    const wellnessRows = wellnessHistory.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date))
+    const pulseRows = pulseHistory.filter((row) => row.participant_id === emp.id)
+    const workoutRows = workouts.filter((row) => row.participant_id === emp.id)
+
+    // FR-13 component formulas (GH issue #66): each is participant-scoped, uses its
+    // own defined window, and returns null (not a flattened default) when there's
+    // insufficient data to measure it.
+    const submissionConsistency = computeWeeklyConsistency(
+      wellnessRows, recentWeeks, enrolledDate,
+      (row) => row.recovery_score != null || row.hrv_ms != null,
+    )
+    const deviceWearConsistency = computeDeviceWearConsistency(wellnessRows, 21, now, enrolledDate)
+    const pulseCompletion = computeWeeklyConsistency(pulseRows, recentWeeks, enrolledDate, () => true)
+    const nudgeResponse = computeNudgeResponseRate(emp, nudgeData.nudges, nudgeData.targets, nudgeData.acknowledgements)
+    const workoutVolume = computeWorkoutVolumeVsBaseline(workoutRows, 21, now)
     const engagementComponents: Record<string, number> = {
       submission_consistency: submissionConsistency ?? 0,
       device_wear_consistency: deviceWearConsistency ?? 0,
@@ -375,13 +601,14 @@ export async function getTeamDashboard(): Promise<{
     ].reduce((sum, part) => sum + part, 0)
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
-      const earlier = rows.slice(0, Math.max(1, rows.length - 7))
-      const later = rows.slice(-7)
+      const last21 = rows.slice(-21)
+      const earlier = last21.slice(0, Math.max(1, last21.length - 7))
+      const later = last21.slice(-7)
       return avg(later.map((row) => typeof row[field] === 'number' ? row[field] as number : null)) - avg(earlier.map((row) => typeof row[field] === 'number' ? row[field] as number : null))
     }
-    const recoveryDelta = trendCompare(recentWellness, 'recovery_score')
-    const hrvDelta = trendCompare(recentWellness, 'hrv_ms')
-    const sleepDelta = trendCompare(recentWellness, 'sleep_perf')
+    const recoveryDelta = trendCompare(wellnessRows, 'recovery_score')
+    const hrvDelta = trendCompare(wellnessRows, 'hrv_ms')
+    const sleepDelta = trendCompare(wellnessRows, 'sleep_perf')
     const decliningCount = [recoveryDelta, hrvDelta, sleepDelta].filter((delta) => delta < 0).length
     const physiologicalTrend: ParticipantWithWellness['physiological_trend'] = decliningCount >= 2 ? 'declining' : recoveryDelta > 0 && hrvDelta > 0 && sleepDelta > 0 ? 'improving' : 'steady'
     const physiologicalMetrics = [

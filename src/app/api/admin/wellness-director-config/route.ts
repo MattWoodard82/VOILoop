@@ -4,10 +4,11 @@ import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 
 const DEFAULT_WEIGHTS = {
-  recovery: 35,
-  hrv: 15,
-  sleep: 25,
-  debt: 25,
+  submission_consistency: 25,
+  device_wear_consistency: 20,
+  pulse_completion: 20,
+  nudge_response: 15,
+  workout_volume: 20,
 }
 
 export async function GET() {
@@ -32,16 +33,17 @@ export async function PUT(request: Request) {
 
   const body = await request.json().catch(() => null)
   const weights = body?.weights
-  const recovery = Number(weights?.recovery)
-  const hrv = Number(weights?.hrv)
-  const sleep = Number(weights?.sleep)
-  const debt = Number(weights?.debt)
+  const submissionConsistency = Number(weights?.submission_consistency)
+  const deviceWearConsistency = Number(weights?.device_wear_consistency)
+  const pulseCompletion = Number(weights?.pulse_completion)
+  const nudgeResponse = Number(weights?.nudge_response)
+  const workoutVolume = Number(weights?.workout_volume)
 
-  if (![recovery, hrv, sleep, debt].every((value) => Number.isFinite(value))) {
+  if (![submissionConsistency, deviceWearConsistency, pulseCompletion, nudgeResponse, workoutVolume].every((value) => Number.isFinite(value))) {
     return NextResponse.json({ error: 'Invalid weights' }, { status: 400 })
   }
 
-  const total = recovery + hrv + sleep + debt
+  const total = submissionConsistency + deviceWearConsistency + pulseCompletion + nudgeResponse + workoutVolume
   if (total !== 100) {
     return NextResponse.json({ error: 'Weights must sum to 100' }, { status: 400 })
   }
@@ -51,7 +53,13 @@ export async function PUT(request: Request) {
     .from('wellness_director_config')
     .upsert({
       id: 'current',
-      weights: { recovery, hrv, sleep, debt },
+      weights: {
+        submission_consistency: submissionConsistency,
+        device_wear_consistency: deviceWearConsistency,
+        pulse_completion: pulseCompletion,
+        nudge_response: nudgeResponse,
+        workout_volume: workoutVolume,
+      },
     }, { onConflict: 'id' })
     .select('*')
     .single()
