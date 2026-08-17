@@ -38,6 +38,15 @@ export function WellnessDirectorClient({ participants }: Props) {
   }, [])
 
   const departments = useMemo(() => ['All', ...Array.from(new Set(participants.map((e) => e.department))).sort()], [participants])
+  const filterSelectStyle = useMemo(() => ({
+    border: '1px solid var(--navy-border)',
+    borderRadius: 6,
+    padding: '6px 10px',
+    fontSize: 11,
+    background: 'var(--navy-dark)',
+    color: '#fff',
+    fontFamily: 'var(--font-inter), system-ui, sans-serif',
+  }), [])
 
   const filtered = useMemo(() => {
     let result = [...participants]
@@ -90,10 +99,14 @@ export function WellnessDirectorClient({ participants }: Props) {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select value={deptFilter} onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}>
+        <select
+          value={deptFilter}
+          onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}
+          style={filterSelectStyle}
+        >
           {departments.map((d) => <option key={d}>{d}</option>)}
         </select>
-        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)}>
+        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} style={filterSelectStyle}>
           <option value="All">All participants</option>
           {participants.filter((e) => deptFilter === 'All' || e.department === deptFilter).map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
         </select>
