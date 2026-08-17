@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 // ── Question definitions ─────────────────────────────────────────────────────
 type QuestionType = 'boolean' | 'scale5' | 'multiselect' | 'choice' | 'text'
@@ -126,7 +127,8 @@ function scale5Color(val: number, isStress?: boolean) {
 }
 
 export default function SurveyPage() {
-  const [step, setStep] = useState<'intro' | 'survey' | 'done'>('intro')
+  const router = useRouter()
+  const [step, setStep] = useState<'intro' | 'survey'>('intro')
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>({})
   const [currentQ, setCurrentQ] = useState(0)
   const [submitting, setSubmitting] = useState(false)
@@ -196,7 +198,8 @@ export default function SurveyPage() {
         return
       }
 
-      setStep('done')
+      setStep('intro')
+      router.push('/my?pulse_done=1')
     } catch {
       setSubmitError('Unable to submit your survey right now.')
     } finally {
@@ -270,28 +273,6 @@ export default function SurveyPage() {
             </button>
             <div style={{ marginTop: 16, padding: '10px 12px', background: '#001a33', borderRadius: 8, fontSize: 11, color: '#A5ACAF', lineHeight: 1.5 }}>
               🔒 Your answers are private. They are never shared with your manager or HR leadership. Leadership only sees group averages.
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // ── DONE ──────────────────────────────────────────────────────────────────
-  if (step === 'done') {
-    return (
-      <div style={pageStyle}>
-        <div style={{ ...cardStyle, maxWidth: 560 }}>
-          <div style={{ background: '#001a33', padding: '20px 24px', borderBottom: '1px solid #0a3560', textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 8 }}>✅</div>
-            <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 4 }}>Thank you!</div>
-            <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
-              Your responses have been saved for this week.
-            </div>
-          </div>
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ padding: '12px 14px', background: '#001a33', borderRadius: 8, fontSize: 11, color: '#A5ACAF', lineHeight: 1.6 }}>
-              🔒 These responses are private — only your Wellness Director can see your individual answers. Leadership sees group averages only.
             </div>
           </div>
         </div>
