@@ -568,21 +568,18 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
                 <div key={batch.id} style={{ padding: '10px 0', borderBottom: '1px solid #0a3560' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {batch.file_name}
+                      Your workout, sleep, and recovery data
                     </div>
                     <Badge variant={statusVariant(batch.status)}>{statusLabel(batch.status)}</Badge>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, color: '#A5ACAF' }}>
                     <span>{formatDate(batch.completed_at ?? batch.started_at)}</span>
                     <span>
-                      {batch.rows_inserted} inserted · {batch.rows_updated} updated · {batch.rows_failed} failed
+                      ✓ Your data was received
                     </span>
                   </div>
                 </div>
               ))}
-              <div style={{ marginTop: 12, fontSize: 11, color: '#A5ACAF', lineHeight: 1.6 }}>
-                Re-uploading the same workbook is safe. VOILoop upserts existing records instead of duplicating them.
-              </div>
             </>
           ) : (
             <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
