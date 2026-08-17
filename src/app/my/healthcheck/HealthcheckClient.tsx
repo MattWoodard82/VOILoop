@@ -186,11 +186,11 @@ async function runPrivacyAndAccessDiagnostics() {
   })
 
   const requiredWeightKeys = [
-    'login_frequency_weight',
-    'pulse_survey_completion_weight',
-    'data_submission_weight',
-    'intervention_follow_up_weight',
-    'trend_consistency_weight',
+    'submission_consistency',
+    'device_wear_consistency',
+    'pulse_completion',
+    'nudge_response',
+    'workout_volume',
   ]
   const weights = (configBody.config as { weights?: Record<string, unknown> } | undefined)?.weights ?? {}
   const weightKeysPresent = requiredWeightKeys.every((key) => key in weights)

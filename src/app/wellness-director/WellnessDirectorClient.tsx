@@ -15,10 +15,30 @@ function overrideLabel(state?: ParticipantWithWellness['override_state']) {
   return 'Active'
 }
 
+// Labels for the five FR-13 (GH issue #66) engagement score components, shared by
+// the score breakdown card and the weight editor so both stay in sync.
+const ENGAGEMENT_COMPONENT_LABELS: Record<string, string> = {
+  submission_consistency: 'WHOOP/CSV submission consistency',
+  device_wear_consistency: 'Device-wear consistency',
+  pulse_completion: 'Pulse survey completion',
+  nudge_response: 'Nudge response rate',
+  workout_volume: 'Workout volume vs. baseline',
+}
+
+function engagementComponentLabel(key: string) {
+  return ENGAGEMENT_COMPONENT_LABELS[key] ?? key
+}
+
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
-  const [weights, setWeights] = useState({ recovery: 35, hrv: 15, sleep: 25, debt: 25 })
+  const [weights, setWeights] = useState({
+    submission_consistency: 25,
+    device_wear_consistency: 20,
+    pulse_completion: 20,
+    nudge_response: 15,
+    workout_volume: 20,
+  })
   const [overrides, setOverrides] = useState<Record<string, ParticipantWithWellness['override_state']>>({})
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
@@ -117,7 +137,7 @@ export function WellnessDirectorClient({ participants }: Props) {
           <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
         </Card>
         <Card title="Score breakdown">
-          {selected?.engagement_score_components ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={key} value={value} color="#69BE28" />) : <div>No participant selected.</div>}
+          {selected?.engagement_score_components ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />) : <div>No participant selected.</div>}
         </Card>
         <Card title="Physiological trend">
           {selected ? (
@@ -173,10 +193,10 @@ export function WellnessDirectorClient({ participants }: Props) {
         <Card title="Engagement-score weights">
           {Object.entries(weights).map(([key, value]) => (
             <div key={key}>
-              <label htmlFor={key}>{key}</label>
+              <label htmlFor={key}>{engagementComponentLabel(key)}</label>
               <input
                 id={key}
-                aria-label={key}
+                aria-label={engagementComponentLabel(key)}
                 type="range"
                 min={0}
                 max={100}
