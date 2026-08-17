@@ -149,7 +149,15 @@ Map the end-to-end journey for participant, wellness director, executive sponsor
 - Convert the journey map into a prioritized UI/UX consistency pass with concrete page-level changes
 - Use the 175-participant seed environment as the primary review dataset for this pass
 
-### 3.7 Admin import UI fallback for API sync (Issue #74 dependency)
+### 3.7 Mobile-Responsive Web UI
+Make the product work cleanly for participants and wellness directors on phones, tablets, and laptops without requiring a separate app.
+- Responsive layouts for `/my`, `/team`, `/pulse`, `/interventions`, and `/wellness-director` across breakpoints
+- Touch-first interaction patterns for quick daily check-ins, nudge review, and participant status triage
+- Prioritize readability and actionability on smaller screens while preserving desktop reporting depth
+- Ensure all core flows are usable without zooming or horizontal scrolling on common mobile devices
+- Include mobile QA against realistic data before client 2 launch, because many operational flows will break on small screens even when desktop looks fine
+
+### 3.8 Admin import UI fallback for API sync (Issue #74 dependency)
 Keep the admin CSV import UI as a fallback even after API sync is live.
 - Participants who don't want to connect their wearable account can still be loaded manually
 - Historical backfill remains possible when a participant newly connects
@@ -174,7 +182,15 @@ API ingestion needs a per-participant `wearable_connections` table, encrypted ac
 
 WHOOP retains full field fidelity and is still the best direct-integration candidate. Fitbit should go through Terra instead of a direct integration because the rate limit, onboarding friction, and provider complexity make it a better fit for normalization.
 
-### 4.4 Multi-Region / Disaster Recovery
+### 4.4 Mobile-Native UI
+A dedicated mobile app would provide a more polished experience for participants, but it is not necessary for client 2 success.
+- Native iOS/Android app for daily check-ins, wearable sync, nudges, and quick access to personal trends
+- Better push notifications and deeper device/hardware integration than a responsive web app can provide
+- Stronger personalization and in-app engagement hooks if we later need a more consumer-grade experience
+- Tradeoff: significantly higher product and maintenance cost, separate release cycles, and more app-store and device support work
+- Recommendation: defer this until after the responsive web experience is stable and we know whether participant engagement demands a native app
+
+### 4.5 Multi-Region / Disaster Recovery
 Azure PostgreSQL backup + point-in-time restore (PITR) plus a documented recovery runbook is the current DR posture. That covers recovery from data loss/corruption and manual restoration after an outage, but not multi-region active/active resilience or seamless regional failover. RTO/RPO are still to be defined.
 
 ---
