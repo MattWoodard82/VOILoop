@@ -722,11 +722,15 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(500)
     expect(body).toMatchObject({
       error: 'Unable to save nudge acknowledgement.',
-      detail: expect.stringContaining('permission denied for function upsert_nudge_acknowledgement'),
+      detail: 'HTTP: 500',
       code: '42501',
     })
-    expect(body.detail).toContain('role participant cannot execute function')
-    expect(body.detail).toContain('grant execute on function')
-    expect(body.detail).toContain('HTTP: 500')
+    // Raw Postgres error text (function/role/schema names) must never reach the
+    // client — it's logged server-side only, keyed by requestId, for support/debugging.
+    expect(body.detail).not.toContain('permission denied')
+    expect(body.detail).not.toContain('role participant')
+    expect(body.detail).not.toContain('grant execute')
+    expect(typeof body.requestId).toBe('string')
+    expect(body.requestId.length).toBeGreaterThan(0)
   })
 })

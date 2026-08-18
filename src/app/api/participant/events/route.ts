@@ -47,7 +47,7 @@ interface StructuredErrorPayload {
   error: string
   detail: string
   code?: string
-  requestId?: string
+  requestId: string
 }
 
 function asString(value: unknown): string | null {
@@ -56,23 +56,28 @@ function asString(value: unknown): string | null {
   return trimmed.length ? trimmed : null
 }
 
+function generateRequestId(): string {
+  return `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+}
+
+// Builds the client-facing error payload for a failed acknowledgement save.
+// IMPORTANT: raw Postgres/Supabase error fields (message/details/hint) can leak
+// function names, roles, and schema details and must never be sent to the
+// client — log the raw source at the call site instead, and correlate with
+// the requestId returned here.
 function buildStructuredAckError(
   summary: string,
   status: number,
-  source: { message?: unknown; details?: unknown; hint?: unknown; code?: unknown } | null | undefined,
+  code: unknown,
+  requestId: string,
 ): StructuredErrorPayload {
-  const detailParts = [
-    asString(source?.message),
-    asString(source?.details),
-    asString(source?.hint),
-    `HTTP: ${status}`,
-  ].filter((entry): entry is string => Boolean(entry))
   const payload: StructuredErrorPayload = {
     error: summary,
-    detail: detailParts.join(' | '),
+    detail: `HTTP: ${status}`,
+    requestId,
   }
-  const code = asString(source?.code)
-  if (code) payload.code = code
+  const codeStr = asString(code)
+  if (codeStr) payload.code = codeStr
   return payload
 }
 
@@ -302,7 +307,11 @@ export async function PATCH(request: Request) {
     })
 
   if (error) {
+    const requestId = generateRequestId()
+    // Raw Postgres/Supabase error details stay server-side only (see
+    // buildStructuredAckError); correlate with the client via requestId.
     console.error('[participant/events PATCH] upsert_nudge_acknowledgement RPC error', {
+      requestId,
       nudgeId,
       participantId,
       code: error.code,
@@ -311,25 +320,19 @@ export async function PATCH(request: Request) {
       hint: error.hint,
     })
     return NextResponse.json(
-      buildStructuredAckError('Unable to save nudge acknowledgement.', 500, error),
+      buildStructuredAckError('Unable to save nudge acknowledgement.', 500, error.code, requestId),
       { status: 500 },
     )
   }
   if (data?.error) {
+    const requestId = asString(data.requestId) ?? generateRequestId()
     console.error('[participant/events PATCH] upsert_nudge_acknowledgement returned error payload', {
+      requestId,
       nudgeId,
       participantId,
       data,
     })
-    const payload = buildStructuredAckError('Unable to save nudge acknowledgement.', 500, {
-      message: data.error,
-      details: data.detail,
-      code: data.code,
-      hint: data.hint,
-    })
-    if (typeof data.requestId === 'string' && data.requestId.trim().length > 0) {
-      payload.requestId = data.requestId.trim()
-    }
+    const payload = buildStructuredAckError('Unable to save nudge acknowledgement.', 500, data.code, requestId)
     return NextResponse.json(payload, { status: 500 })
   }
   return NextResponse.json({ ok: true })

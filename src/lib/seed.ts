@@ -415,13 +415,26 @@ async function seed() {
     nudgeId = inserted.id
   }
 
-  const { error: nudgeTargetErr } = await supabase
+  // nudge_targets' unique constraint includes nullable participant_id, and
+  // Postgres treats NULL as distinct from NULL in a plain unique constraint, so
+  // upsert-by-onConflict never matches the existing 'all' target row and every
+  // reseed would insert a duplicate. Look the row up explicitly first instead.
+  const { data: existingTarget, error: existingTargetErr } = await supabase
     .from('nudge_targets')
-    .upsert(
-      { nudge_id: nudgeId, target_type: 'all', target_label: '', participant_id: null },
-      { onConflict: 'nudge_id,target_type,target_label,participant_id' },
-    )
-  if (nudgeTargetErr) { console.error('Weekly nudge target:', nudgeTargetErr); process.exit(1) }
+    .select('id')
+    .eq('nudge_id', nudgeId)
+    .eq('target_type', 'all')
+    .eq('target_label', '')
+    .is('participant_id', null)
+    .maybeSingle()
+  if (existingTargetErr) { console.error('Weekly nudge target lookup:', existingTargetErr); process.exit(1) }
+
+  if (!existingTarget) {
+    const { error: nudgeTargetErr } = await supabase
+      .from('nudge_targets')
+      .insert({ nudge_id: nudgeId, target_type: 'all', target_label: '', participant_id: null })
+    if (nudgeTargetErr) { console.error('Weekly nudge target:', nudgeTargetErr); process.exit(1) }
+  }
   console.log('✅ Weekly nudge seeded')
 
   console.log('\n🎉 VOILoop database seeded successfully!')
