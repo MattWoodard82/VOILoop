@@ -7,6 +7,7 @@ import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
+import { WellnessDirectorCard } from '@/components/WellnessDirectorCard'
 import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } from './insights'
 import Link from 'next/link'
 
@@ -317,6 +318,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
         </div>
       </div>
+<WellnessDirectorCard name="Heather" />
 <EventsNudgeCard />
       {challenge && challenge.visibility_state !== 'none' && challenge.data ? (
         <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.completed ? 'Completed' : challenge.data.status === 'active' ? 'Active' : 'Not completed'}</Badge>}>
