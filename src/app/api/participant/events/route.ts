@@ -43,10 +43,37 @@ function isParticipantTarget(targetType: string, targetLabel: string | null, par
   return false
 }
 
-function getResponseDueAt(weekOf: string) {
-  const dueAt = new Date(`${weekOf}T00:00:00Z`)
-  dueAt.setHours(dueAt.getHours() + 48)
-  return dueAt
+interface StructuredErrorPayload {
+  error: string
+  detail: string
+  code?: string
+  requestId?: string
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
+function buildStructuredAckError(
+  summary: string,
+  status: number,
+  source: { message?: unknown; details?: unknown; hint?: unknown; code?: unknown } | null | undefined,
+): StructuredErrorPayload {
+  const detailParts = [
+    asString(source?.message),
+    asString(source?.details),
+    asString(source?.hint),
+    `HTTP: ${status}`,
+  ].filter((entry): entry is string => Boolean(entry))
+  const payload: StructuredErrorPayload = {
+    error: summary,
+    detail: detailParts.join(' | '),
+  }
+  const code = asString(source?.code)
+  if (code) payload.code = code
+  return payload
 }
 
 async function getTargetedNudge(
@@ -242,7 +269,7 @@ export async function PATCH(request: Request) {
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of')
+    .select('id, week_of, response_due_at')
     .eq('id', nudgeId)
     .maybeSingle()
 
@@ -260,7 +287,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 
-  const responseDueAt = getResponseDueAt(nudge.week_of)
+  const responseDueAt = new Date(nudge.response_due_at)
   if (responseDueAt.getTime() < Date.now()) {
     return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
   }
@@ -274,7 +301,36 @@ export async function PATCH(request: Request) {
       p_encryption_key: getDbEncryptionKey(),
     })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (data?.error) return NextResponse.json({ error: data.error }, { status: 500 })
+  if (error) {
+    console.error('[participant/events PATCH] upsert_nudge_acknowledgement RPC error', {
+      nudgeId,
+      participantId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    })
+    return NextResponse.json(
+      buildStructuredAckError('Unable to save nudge acknowledgement.', 500, error),
+      { status: 500 },
+    )
+  }
+  if (data?.error) {
+    console.error('[participant/events PATCH] upsert_nudge_acknowledgement returned error payload', {
+      nudgeId,
+      participantId,
+      data,
+    })
+    const payload = buildStructuredAckError('Unable to save nudge acknowledgement.', 500, {
+      message: data.error,
+      details: data.detail,
+      code: data.code,
+      hint: data.hint,
+    })
+    if (typeof data.requestId === 'string' && data.requestId.trim().length > 0) {
+      payload.requestId = data.requestId.trim()
+    }
+    return NextResponse.json(payload, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }

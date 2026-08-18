@@ -428,7 +428,7 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  data: { id: 'nudge-1', week_of: '2099-08-11' },
+                  data: { id: 'nudge-1', week_of: '2099-08-11', response_due_at: '2099-08-13T00:00:00Z' },
                   error: null,
                 })),
               })),
@@ -466,6 +466,134 @@ describe('/api/participant/events', () => {
       p_response_text: 'Will do',
       p_encryption_key: 'staging-placeholder-key-only-for-demo',
     })
+  })
+
+  test('PATCH trusts weekly_nudges.response_due_at rather than deriving a window from week_of', async () => {
+    // Regression test: week_of here is far in the past (long past any week_of + 48h
+    // window), but response_due_at is explicitly still open. Prior to the fix, the
+    // route recomputed a 48h window from week_of and would wrongly reject this with
+    // "Response window has closed." even though the persisted response_due_at
+    // (e.g. seeded far-future for pilot testing) says it's still open.
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
+    const rpcUpsert = jest.fn(async () => ({ data: { id: 'ack-1', acknowledged_at: '2026-08-07T12:00:00Z' }, error: null }))
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'weekly_nudges') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  // week_of is long past its own +48h window, but response_due_at is
+                  // explicitly still open — the persisted value must win.
+                  data: { id: 'nudge-1', week_of: '2026-06-09', response_due_at: '2099-12-31T23:59:00Z' },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'all', participant_id: null, target_label: '' }],
+                error: null,
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string) => {
+        if (name === 'upsert_nudge_acknowledgement') {
+          return rpcUpsert()
+        }
+        throw new Error(`Unexpected RPC ${name}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(200)
+    expect(rpcUpsert).toHaveBeenCalled()
+  })
+
+  test('PATCH rejects when weekly_nudges.response_due_at has actually passed', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
+    const rpcUpsert = jest.fn(async () => ({ data: { id: 'ack-1' }, error: null }))
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'weekly_nudges') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { id: 'nudge-1', week_of: '2026-06-09', response_due_at: '2026-06-11T00:00:00Z' },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'all', participant_id: null, target_label: '' }],
+                error: null,
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string) => {
+        if (name === 'upsert_nudge_acknowledgement') {
+          return rpcUpsert()
+        }
+        throw new Error(`Unexpected RPC ${name}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({ error: 'Response window has closed.' })
+    expect(rpcUpsert).not.toHaveBeenCalled()
   })
 
   test('PATCH rejects acknowledgements for untargeted nudges', async () => {
@@ -525,5 +653,80 @@ describe('/api/participant/events', () => {
     expect(response.status).toBe(403)
     await expect(response.json()).resolves.toMatchObject({ error: 'Nudge not targeted to this participant.' })
     expect(rpcUpsert).not.toHaveBeenCalled()
+  })
+
+  test('PATCH returns structured error payload when acknowledgement upsert RPC fails', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const participantsMaybeSingle = jest
+      .fn()
+      .mockResolvedValueOnce({ data: { id: 'EMP123' }, error: null })
+      .mockResolvedValueOnce({ data: { cohort: null }, error: null })
+
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: participantsMaybeSingle,
+              })),
+            })),
+          }
+        }
+        if (table === 'weekly_nudges') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { id: 'nudge-1', week_of: '2099-08-11', response_due_at: '2099-08-13T00:00:00Z' },
+                  error: null,
+                })),
+              })),
+            })),
+          }
+        }
+        if (table === 'nudge_targets') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(async () => ({
+                data: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
+                error: null,
+              })),
+            })),
+          }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+      rpc: jest.fn(async (name: string) => {
+        if (name === 'upsert_nudge_acknowledgement') {
+          return {
+            data: null,
+            error: {
+              message: 'permission denied for function upsert_nudge_acknowledgement',
+              details: 'role participant cannot execute function',
+              hint: 'grant execute on function',
+              code: '42501',
+            },
+          }
+        }
+        throw new Error(`Unexpected RPC ${name}`)
+      }),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({ nudgeId: 'nudge-1', responseText: 'Will do' }))
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toMatchObject({
+      error: 'Unable to save nudge acknowledgement.',
+      detail: expect.stringContaining('permission denied for function upsert_nudge_acknowledgement'),
+      code: '42501',
+    })
+    expect(body.detail).toContain('role participant cannot execute function')
+    expect(body.detail).toContain('grant execute on function')
+    expect(body.detail).toContain('HTTP: 500')
   })
 })

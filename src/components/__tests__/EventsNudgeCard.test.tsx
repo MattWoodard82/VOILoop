@@ -1,5 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 const mockUseEffect = jest.fn()
 const mockUseState = jest.fn()
@@ -12,6 +13,10 @@ jest.mock('react', () => {
     useState: (initialValue: unknown) => mockUseState(initialValue),
   }
 })
+
+jest.mock('@/lib/frontend-error', () => ({
+  parseFrontendError: jest.fn(),
+}))
 
 describe('EventsNudgeCard', () => {
   beforeEach(() => {
