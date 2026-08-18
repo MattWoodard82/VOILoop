@@ -1,6 +1,7 @@
 'use client'
 import { cn } from '@/lib/utils'
 import type { ReactNode } from 'react'
+import { InfoTooltip } from './InfoTooltip'
 
 // ─── KPI Card ────────────────────────────────────────────────────────────────
 interface KpiCardProps {
@@ -9,14 +10,16 @@ interface KpiCardProps {
   delta?: string
   deltaDir?: 'up' | 'down' | 'neutral'
   color?: string
+  tooltipKey?: string
 }
-export function KpiCard({ label, value, delta, deltaDir = 'neutral', color }: KpiCardProps) {
+export function KpiCard({ label, value, delta, deltaDir = 'neutral', color, tooltipKey }: KpiCardProps) {
   const deltaColor = deltaDir === 'up' ? '#69BE28' : deltaDir === 'down' ? '#ff6b6b' : '#A5ACAF'
   return (
     <div className="kpi-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
         {color && <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />}
         <div className="sec-label">{label}</div>
+        {tooltipKey && <InfoTooltip metricKey={tooltipKey} />}
       </div>
       <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1, marginBottom: 6, color: color ?? '#fff', letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
         {value}
