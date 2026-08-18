@@ -1,5 +1,5 @@
 'use client'
-
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from 'recharts'
@@ -93,13 +93,18 @@ function statusLabel(status: ImportBatch['status']) {
 function MetricRow({
   label,
   value,
+  tooltipKey,
 }: {
   label: string
   value: string
+  tooltipKey?: string
 }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderBottom: '1px solid #0a3560', fontSize: 12 }}>
-      <span style={{ color: '#A5ACAF' }}>{label}</span>
+      <span style={{ color: '#A5ACAF' }}>
+        {label}
+        {tooltipKey && <InfoTooltip metricKey={tooltipKey} />}
+      </span>
       <strong style={{ color: '#fff', textAlign: 'right' }}>{value}</strong>
     </div>
   )
@@ -354,6 +359,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           color={recoveryColor(latest?.recovery_score ?? null)}
           delta={latest?.date ? `Updated ${formatDate(latest.date)}` : 'Waiting for upload'}
           deltaDir="neutral"
+          tooltipKey="recoveryScore"
         />
         <KpiCard
           label="Sleep performance"
@@ -361,6 +367,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           color={sleepColor(latest?.sleep_perf ?? null)}
           delta={latest?.sleep_debt != null ? `${latest.sleep_debt} hrs sleep debt` : 'No sleep debt data'}
           deltaDir={(latest?.sleep_debt ?? 0) > 1 ? 'down' : 'neutral'}
+          tooltipKey="sleepDuration"
         />
         <KpiCard
           label="HRV"
@@ -368,6 +375,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           color="#69BE28"
           delta={latest?.resting_hr != null ? `Resting HR ${latest.resting_hr} bpm` : 'No HR data'}
           deltaDir="neutral"
+          tooltipKey="hrv"
         />
         <KpiCard
           label="Day strain"
@@ -375,6 +383,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           color={(latest?.day_strain ?? 0) > 14 ? '#ff6b6b' : (latest?.day_strain ?? 0) > 10 ? '#FFA500' : '#69BE28'}
           delta={workout?.activity ? `Latest workout: ${workout.activity}` : 'No workout logged'}
           deltaDir="neutral"
+          tooltipKey="dailyStrain"
         />
       </div>
 
@@ -528,9 +537,11 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
 
                   return (
                     <div key={item.label} style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
-                      <div style={{ fontSize: 10, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                        {item.label}
-                      </div>
+                     <div style={{ fontSize: 10, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+  {item.label}
+  {item.label === 'Mental Wellbeing' && <InfoTooltip metricKey="mentalWellbeing" />}
+  {item.label === 'Stress Level' && <InfoTooltip metricKey="stressScore" />}
+</div>
                       <div style={{ fontSize: 22, fontWeight: 700, color }}>
                         {numericValue ?? '—'}
                         <span style={{ fontSize: 10, color: '#A5ACAF', marginLeft: 2 }}>/5</span>
