@@ -43,10 +43,42 @@ function isParticipantTarget(targetType: string, targetLabel: string | null, par
   return false
 }
 
-function getResponseDueAt(weekOf: string) {
-  const dueAt = new Date(`${weekOf}T00:00:00Z`)
-  dueAt.setHours(dueAt.getHours() + 48)
-  return dueAt
+interface StructuredErrorPayload {
+  error: string
+  detail: string
+  code?: string
+  requestId: string
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed.length ? trimmed : null
+}
+
+function generateRequestId(): string {
+  return `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+}
+
+// Builds the client-facing error payload for a failed acknowledgement save.
+// IMPORTANT: raw Postgres/Supabase error fields (message/details/hint) can leak
+// function names, roles, and schema details and must never be sent to the
+// client — log the raw source at the call site instead, and correlate with
+// the requestId returned here.
+function buildStructuredAckError(
+  summary: string,
+  status: number,
+  code: unknown,
+  requestId: string,
+): StructuredErrorPayload {
+  const payload: StructuredErrorPayload = {
+    error: summary,
+    detail: `HTTP: ${status}`,
+    requestId,
+  }
+  const codeStr = asString(code)
+  if (codeStr) payload.code = codeStr
+  return payload
 }
 
 async function getTargetedNudge(
@@ -242,7 +274,7 @@ export async function PATCH(request: Request) {
 
   const { data: nudge, error: nudgeError } = await supabase
     .from('weekly_nudges')
-    .select('id, week_of')
+    .select('id, week_of, response_due_at')
     .eq('id', nudgeId)
     .maybeSingle()
 
@@ -260,7 +292,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 
-  const responseDueAt = getResponseDueAt(nudge.week_of)
+  const responseDueAt = new Date(nudge.response_due_at)
   if (responseDueAt.getTime() < Date.now()) {
     return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
   }
@@ -274,7 +306,34 @@ export async function PATCH(request: Request) {
       p_encryption_key: getDbEncryptionKey(),
     })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (data?.error) return NextResponse.json({ error: data.error }, { status: 500 })
+  if (error) {
+    const requestId = generateRequestId()
+    // Raw Postgres/Supabase error details stay server-side only (see
+    // buildStructuredAckError); correlate with the client via requestId.
+    console.error('[participant/events PATCH] upsert_nudge_acknowledgement RPC error', {
+      requestId,
+      nudgeId,
+      participantId,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    })
+    return NextResponse.json(
+      buildStructuredAckError('Unable to save nudge acknowledgement.', 500, error.code, requestId),
+      { status: 500 },
+    )
+  }
+  if (data?.error) {
+    const requestId = asString(data.requestId) ?? generateRequestId()
+    console.error('[participant/events PATCH] upsert_nudge_acknowledgement returned error payload', {
+      requestId,
+      nudgeId,
+      participantId,
+      data,
+    })
+    const payload = buildStructuredAckError('Unable to save nudge acknowledgement.', 500, data.code, requestId)
+    return NextResponse.json(payload, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }

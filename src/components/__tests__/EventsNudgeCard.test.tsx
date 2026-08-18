@@ -1,5 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 const mockUseEffect = jest.fn()
 const mockUseState = jest.fn()
@@ -12,6 +13,36 @@ jest.mock('react', () => {
     useState: (initialValue: unknown) => mockUseState(initialValue),
   }
 })
+
+jest.mock('@/lib/frontend-error', () => ({
+  parseFrontendError: jest.fn(),
+}))
+
+const mockParseFrontendError = parseFrontendError as jest.Mock
+
+// The component's state and event handlers are plain closures created each
+// render, so we can invoke a handler directly by calling the component
+// function ourselves and walking the returned element tree for the onClick
+// prop we want — no DOM/testing-library needed given this project's
+// testEnvironment: 'node' Jest setup (see other tests in this file).
+function findElementByOnClickName(node: unknown, name: string): { props: { onClick: () => unknown } } | null {
+  if (!node || typeof node !== 'object') return null
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findElementByOnClickName(child, name)
+      if (found) return found
+    }
+    return null
+  }
+  const element = node as { props?: { onClick?: unknown; children?: unknown } }
+  if (element.props) {
+    if (typeof element.props.onClick === 'function' && element.props.onClick.name === name) {
+      return element as { props: { onClick: () => unknown } }
+    }
+    return findElementByOnClickName(element.props.children, name)
+  }
+  return null
+}
 
 describe('EventsNudgeCard', () => {
   beforeEach(() => {
@@ -70,5 +101,50 @@ describe('EventsNudgeCard', () => {
     expect(markup).toContain('Bring water')
     expect(markup).toContain('✓ Going')
     expect(markup).toContain('Weekly')
+  })
+
+  test('submitAcknowledgement shows the parsed structured error message when the PATCH fails', async () => {
+    const setError = jest.fn()
+    const setAckSubmitting = jest.fn()
+
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([{ id: 'nudge-1', message: 'Hydrate today', author: 'Coach', week_of: '2099-08-04' }, jest.fn()]) // nudge
+      .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // rsvps
+      .mockReturnValueOnce([false, jest.fn()]) // loading
+      .mockReturnValueOnce(['', setError]) // error
+      .mockReturnValueOnce([true, jest.fn()]) // showAckModal
+      .mockReturnValueOnce(['Will do', jest.fn()]) // ackText
+      .mockReturnValueOnce([false, setAckSubmitting]) // ackSubmitting
+
+    mockParseFrontendError.mockResolvedValue({
+      message: 'Unable to save nudge acknowledgement.',
+      detail: 'HTTP: 500',
+    })
+
+    const failedResponse = { ok: false, status: 500 }
+    const fetchMock = jest.fn().mockResolvedValue(failedResponse)
+    const originalFetch = global.fetch
+    global.fetch = fetchMock as unknown as typeof global.fetch
+
+    try {
+      const { EventsNudgeCard } = await import('../EventsNudgeCard')
+      const element = EventsNudgeCard() as unknown
+      const sendButton = findElementByOnClickName(element, 'submitAcknowledgement')
+      expect(sendButton).not.toBeNull()
+
+      await sendButton!.props.onClick()
+
+      expect(fetchMock).toHaveBeenCalledWith('/api/participant/events', expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ nudgeId: 'nudge-1', responseText: 'Will do' }),
+      }))
+      expect(mockParseFrontendError).toHaveBeenCalledWith(failedResponse, 'Nudge acknowledgement failed.')
+      expect(setError).toHaveBeenCalledWith('Unable to save nudge acknowledgement.. Detail: HTTP: 500')
+      expect(setAckSubmitting).toHaveBeenCalledWith(false)
+    } finally {
+      global.fetch = originalFetch
+    }
   })
 })

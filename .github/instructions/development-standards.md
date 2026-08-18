@@ -65,6 +65,7 @@ If a feature introduces/updates e2e coverage, include it in CI so trunk remains 
 - Include explicit backfill steps when schema changes require historical data updates.
 - PRs touching schema must document deployment order and rollback approach.
 - Before writing or sharing SQL queries (debug, verification, backfill, or fix), first verify the live target schema using `information_schema.columns` and/or `information_schema.tables` so queries match production column names and relationships.
+- Whenever a new migration file is committed under `supabase/migrations/`, run local migrations immediately in the dev environment before validation (`npx supabase migration up`, or `npx supabase db reset` when a full local reset is required).
 
 ## Feature Flagging for Risky Work (Required)
 - Incomplete, risky, or experimental functionality must be behind a feature flag or otherwise non-breaking default.

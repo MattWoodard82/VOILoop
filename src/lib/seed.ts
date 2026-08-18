@@ -375,16 +375,66 @@ async function seed() {
   console.log('✅ Events seeded')
 
   // ── Weekly nudge ──────────────────────────────────────────────────────────
-  const nudge = {
-    week_of: WEEK_OF,
+  // NOTE: weekly_nudges no longer has a unique constraint on week_of (dropped in
+  // 20260811040000_harden_nudge_history_and_access.sql to preserve nudge history
+  // across republishes/targeting), so this can't be a plain upsert keyed on
+  // week_of. Find-or-update the most recent row for WEEK_OF instead, then insert
+  // a matching nudge_targets row (target_type='all') so participants actually
+  // see the seeded nudge — the app resolves visibility via nudge_targets, not
+  // weekly_nudges alone.
+  const nudgeFields = {
     message: 'Great work this week, team. Remember: small consistent habits compound over time. Even 10 minutes of movement today counts. You\'ve got this. 💪',
     author: 'Heather Simpson',
     response_due_at: '2099-12-31T23:59:00Z', // far future — always open for pilot testing
   }
-  const { error: nudgeErr } = await supabase
+
+  const { data: existingNudge, error: existingNudgeErr } = await supabase
     .from('weekly_nudges')
-    .upsert(nudge, { onConflict: 'week_of' })
-  if (nudgeErr) { console.error('Weekly nudge:', nudgeErr); process.exit(1) }
+    .select('id')
+    .eq('week_of', WEEK_OF)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existingNudgeErr) { console.error('Weekly nudge lookup:', existingNudgeErr); process.exit(1) }
+
+  let nudgeId: string
+  if (existingNudge) {
+    const { error: updateErr } = await supabase
+      .from('weekly_nudges')
+      .update(nudgeFields)
+      .eq('id', existingNudge.id)
+    if (updateErr) { console.error('Weekly nudge update:', updateErr); process.exit(1) }
+    nudgeId = existingNudge.id
+  } else {
+    const { data: inserted, error: insertErr } = await supabase
+      .from('weekly_nudges')
+      .insert({ week_of: WEEK_OF, ...nudgeFields })
+      .select('id')
+      .single()
+    if (insertErr) { console.error('Weekly nudge insert:', insertErr); process.exit(1) }
+    nudgeId = inserted.id
+  }
+
+  // nudge_targets' unique constraint includes nullable participant_id, and
+  // Postgres treats NULL as distinct from NULL in a plain unique constraint, so
+  // upsert-by-onConflict never matches the existing 'all' target row and every
+  // reseed would insert a duplicate. Look the row up explicitly first instead.
+  const { data: existingTarget, error: existingTargetErr } = await supabase
+    .from('nudge_targets')
+    .select('id')
+    .eq('nudge_id', nudgeId)
+    .eq('target_type', 'all')
+    .eq('target_label', '')
+    .is('participant_id', null)
+    .maybeSingle()
+  if (existingTargetErr) { console.error('Weekly nudge target lookup:', existingTargetErr); process.exit(1) }
+
+  if (!existingTarget) {
+    const { error: nudgeTargetErr } = await supabase
+      .from('nudge_targets')
+      .insert({ nudge_id: nudgeId, target_type: 'all', target_label: '', participant_id: null })
+    if (nudgeTargetErr) { console.error('Weekly nudge target:', nudgeTargetErr); process.exit(1) }
+  }
   console.log('✅ Weekly nudge seeded')
 
   console.log('\n🎉 VOILoop database seeded successfully!')

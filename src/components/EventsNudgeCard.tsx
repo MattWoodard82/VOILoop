@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { parseFrontendError } from '@/lib/frontend-error'
 
 interface Event {
   id: string
@@ -142,8 +143,8 @@ export function EventsNudgeCard() {
       body: JSON.stringify({ nudgeId: nudge.id, responseText: ackText.trim() }),
     })
     if (!response.ok) {
-      const payload = await response.json().catch(() => null) as { error?: string } | null
-      setError(`Nudge acknowledgement failed. Detail: ${payload?.error ?? 'Request failed.'}`)
+      const parsed = await parseFrontendError(response, 'Nudge acknowledgement failed.')
+      setError(`${parsed.message}. Detail: ${parsed.detail}`)
       setAckSubmitting(false)
       return
     }
