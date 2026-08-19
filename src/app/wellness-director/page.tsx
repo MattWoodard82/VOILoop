@@ -17,7 +17,8 @@ export default async function WellnessDirectorPage() {
   const { participants, stats, interventions } = await getTeamDashboard()
   const highRisk = participants.filter(e => e.risk_level === 'High')
 
-  // Build department intervention summary from live data
+  // Build a live department summary from logged intervention records. Computed
+  // recommendations driven by team risk patterns are coming soon.
   const deptMap: Record<string, { priority: string; triggers: string[]; actions: string[] }> = {}
 
   interventions.forEach(i => {
@@ -105,7 +106,10 @@ export default async function WellnessDirectorPage() {
 
       {deptSuggestions.length > 0 && (
         <div style={{ marginTop: 24 }}>
-          <div className="sec-label" style={{ marginBottom: 12 }}>Suggested interventions by department</div>
+          <div className="sec-label" style={{ marginBottom: 6 }}>Department intervention summary</div>
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 12 }}>
+            Live summary of logged intervention records by department. Computed, data-driven recommendations are coming soon.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
             {deptSuggestions.map(([dept, info]) => (
               <div key={dept} style={{
@@ -124,14 +128,22 @@ export default async function WellnessDirectorPage() {
                 </div>
                 {info.triggers.length > 0 && (
                   <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>
-                    Triggered by: {info.triggers.join(', ')}
+                    Logged triggers: {info.triggers.join(', ')}
                   </div>
                 )}
+                <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 4 }}>
+                  Logged interventions
+                </div>
                 {info.actions.map((action, i) => (
                   <div key={i} style={{ fontSize: 12, color: '#ccc', padding: '5px 0', borderTop: i === 0 ? '1px solid #0a3560' : '1px solid #0a356066' }}>
                     → {action}
                   </div>
                 ))}
+                {info.actions.length === 0 && (
+                  <div style={{ fontSize: 12, color: '#ccc', padding: '5px 0', borderTop: '1px solid #0a3560' }}>
+                    No logged interventions yet.
+                  </div>
+                )}
               </div>
             ))}
           </div>
