@@ -75,7 +75,14 @@ export function WellnessDirectorClient({ participants }: Props) {
     return result
   }, [participants, deptFilter, personFilter])
 
-  const selected = personFilter !== 'All' ? filtered[0] ?? null : deptFilter !== 'All' ? filtered[0] ?? null : participants[0] ?? null
+  const scopedParticipants = useMemo(
+    () => participants.filter((e) => deptFilter === 'All' || e.department === deptFilter),
+    [participants, deptFilter],
+  )
+  const hasExplicitParticipantSelection = personFilter !== 'All'
+  const selected = hasExplicitParticipantSelection
+    ? scopedParticipants.find((participant) => participant.id === personFilter) ?? null
+    : null
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
@@ -137,7 +144,9 @@ export function WellnessDirectorClient({ participants }: Props) {
           <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
         </Card>
         <Card title="Score breakdown">
-          {selected?.engagement_score_components ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />) : <div>No participant selected.</div>}
+          {selected?.engagement_score_components
+            ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />)
+            : <div>{hasExplicitParticipantSelection ? 'No score breakdown available for the selected participant.' : 'Choose a participant to view score breakdown.'}</div>}
         </Card>
         <Card title="Physiological trend">
           {selected ? (
@@ -157,7 +166,7 @@ export function WellnessDirectorClient({ participants }: Props) {
               )}
               <div>{selected.risk_trigger_reasons && selected.risk_trigger_reasons.length > 0 ? selected.risk_trigger_reasons.join(' · ') : selected.baseline_state === 'building' ? 'Baseline still forming' : 'No triggers'}</div>
             </>
-          ) : null}
+          ) : <div>Choose a participant to view risk tier.</div>}
         </Card>
       </div>
 
