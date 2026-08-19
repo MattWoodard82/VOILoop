@@ -1,6 +1,6 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getInterventions, getParticipants } from '@/lib/supabase/queries'
-import { KpiCard, Card, TimelineItem } from '@/components/ui'
+import { KpiCard, Card } from '@/components/ui'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { InterventionCreateClient } from './InterventionCreateClient'
@@ -39,8 +39,8 @@ export default async function InterventionsPage() {
   return (
     <DashboardShell title="Intervention Tracking">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Triggered interventions" value={pending.length + inProgress.length} color="#ff6b6b" delta={`${interventions.length} total records`} deltaDir="neutral" />
-        <KpiCard label="Pending action" value={pending.length} color="#FFA500" delta={pending.length > 0 ? 'Wellness Director review needed' : 'No pending records'} deltaDir="neutral" />
+        <KpiCard label="Triggered interventions" value={pending.length + inProgress.length} color="#ff6b6b" delta={`${interventions.length} manually logged records`} deltaDir="neutral" />
+        <KpiCard label="Pending action" value={pending.length} color="#FFA500" delta={pending.length > 0 ? 'Manual review queue' : 'No pending records'} deltaDir="neutral" />
         <KpiCard label="In progress" value={inProgress.length} color="#A5ACAF" delta={monitoring.length > 0 ? `${monitoring.length} in monitoring` : 'No monitoring records'} deltaDir="neutral" />
         <KpiCard label="Resolved interventions" value={resolved.length} color="#69BE28" delta={`${Math.max(interventions.length - resolved.length, 0)} still open`} deltaDir="neutral" />
       </div>
@@ -63,32 +63,9 @@ export default async function InterventionsPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
         <Card title="Recommended actions">
-          {pending.slice(0, 2).map((int, i, arr) => {
-            const emp = empMap[int.participant_id]
-            return (
-              <TimelineItem
-                key={int.id}
-                color="#ff6b6b"
-                title={emp ? `${emp.first_name} ${emp.last_name} — immediate review.` : 'Review required.'}
-                body={int.notes ?? ''}
-                meta={`Urgent · ${int.department}`}
-                isLast={i === arr.length - 1 && inProgress.length === 0}
-              />
-            )
-          })}
-          {inProgress.map((int, i) => {
-            const emp = empMap[int.participant_id]
-            return (
-              <TimelineItem
-                key={int.id}
-                color="#FFA500"
-                title={emp ? `${emp.first_name} ${emp.last_name} — monitoring.` : 'Monitoring.'}
-                body={int.notes ?? ''}
-                meta={`In progress · ${int.department}`}
-                isLast={i === inProgress.length - 1}
-              />
-            )
-          })}
+          <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6 }}>
+            Coming soon. Intervention logging is manual today, and this dashboard does not yet generate recommendation cards from live data.
+          </div>
         </Card>
 
         <Card title="Status breakdown">
