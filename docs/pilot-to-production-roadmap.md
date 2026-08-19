@@ -175,7 +175,17 @@ Add an in-product feedback path so participants, wellness directors, execs, and 
 - Support internal review rules so low-signal submissions can be filtered or labeled before they become engineering work
 - Keep the UX lightweight so feedback collection improves visibility without becoming a support burden
 
-### 3.9 Admin import UI fallback for API sync (Issue #74): 20-40 hours
+### 3.9 Executive Dashboard (Issue #101): 25-40 hours
+Provide leadership with a single executive-facing dashboard that surfaces team health and activity outcomes from WHOOP-based reporting.
+- Add an executive dashboard entry point in site navigation or the reporting area
+- Create a dashboard overview page that links to and summarizes both report areas (Team Health Score and Team Activity Strain)
+- Present top-level KPI cards and concise narrative summaries appropriate for leadership audiences
+- Ensure dashboard supports the same reporting period context and consistent styling as underlying reports
+- Coordinate with child report implementations (Team Health Score report and Team Activity Strain report)
+- Ensure dashboard is accessible and discoverable by executive sponsors and authorized admin roles
+- Support export/print-friendly presentation where needed for stakeholder reporting
+
+### 3.10 Admin import UI fallback for API sync (Issue #74): 20-40 hours
 Keep the admin CSV import UI as a fallback even after API sync is live.
 - Participants who don't want to connect their wearable account can still be loaded manually
 - Historical backfill remains possible when a participant newly connects
