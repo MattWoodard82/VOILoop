@@ -96,6 +96,11 @@ describe('role access e2e (route-level)', () => {
         }
         if (table === 'interventions') {
           return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { date_actioned: null }, error: null })),
+              })),
+            })),
             update: jest.fn(() => ({
               eq: jest.fn(async () => ({ error: null })),
             })),
@@ -133,7 +138,14 @@ describe('role access e2e (route-level)', () => {
     }))
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
-        if (table === 'interventions') return { update }
+        if (table === 'interventions') return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(async () => ({ data: { date_actioned: null }, error: null })),
+            })),
+          })),
+          update,
+        }
         if (table === 'events') return { insert: jest.fn(async () => ({ error: null })) }
         throw new Error(`Unexpected table ${table}`)
       }),

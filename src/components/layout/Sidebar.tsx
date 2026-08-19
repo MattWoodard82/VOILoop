@@ -46,6 +46,7 @@ export function Sidebar({ initialRole = null }: { initialRole?: NavRole }) {
   const pathname = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState('')
+  const [role, setRole] = useState<NavRole>(initialRole)
   const [signingOut, setSigningOut] = useState(false)
   const [hydratedIdentity, setHydratedIdentity] = useState(false)
 
@@ -85,7 +86,7 @@ export function Sidebar({ initialRole = null }: { initialRole?: NavRole }) {
     return source.slice(0, 2).toUpperCase()
   }, [email])
 
-  const nav = useMemo(() => getNavigationForRole(initialRole, pathname), [initialRole, pathname])
+  const nav = useMemo(() => getNavigationForRole(role, pathname), [role, pathname])
 
   const handleSignOut = async () => {
     setSigningOut(true)

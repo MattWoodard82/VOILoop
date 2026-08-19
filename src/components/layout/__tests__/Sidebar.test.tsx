@@ -1,3 +1,7 @@
+jest.mock('@/components/ui', () => ({
+  SkeletonBlock: () => null,
+}))
+
 import { getNavigationForRole } from '../Sidebar'
 
 describe('Sidebar navigation guards', () => {

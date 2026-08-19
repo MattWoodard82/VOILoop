@@ -220,98 +220,61 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div>Choose a participant to review baseline status and overrides.</div>
           )}
         </Card>
-        <Card title="Engagement-score weights">
-<<<<<<< HEAD
-          {!configLoaded ? (
-            <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} style={{ display: 'grid', gap: 6 }}>
-                  <SkeletonBlock width="48%" height={10} radius={999} />
-                  <SkeletonBlock width="100%" height={20} radius={999} />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {Object.entries(weights).map(([key, value]) => (
-                <div key={key}>
-                  <label htmlFor={key}>{engagementComponentLabel(key)}</label>
-                  <input
-                    id={key}
-                    aria-label={engagementComponentLabel(key)}
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={value}
-                    onChange={(e) => {
-                      const next = { ...weights, [key]: Number(e.target.value) }
-                      const total = Object.values(next).reduce((sum, item) => sum + item, 0)
-                      if (total === 100) {
-                        setWeights(next)
-                        persistWeights(next).catch(() => setConfigStatus('idle'))
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-            </>
-          )}
-          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : !configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
-=======
-{!configLoaded ? (
-  <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
-    {Array.from({ length: 5 }).map((_, index) => (
-      <div key={index} style={{ display: 'grid', gap: 6 }}>
-        <SkeletonBlock width="48%" height={10} radius={999} />
-        <SkeletonBlock width="100%" height={20} radius={999} />
-      </div>
-    ))}
-  </div>
-) : (
-  <>
-    {Object.entries(weights).map(([key, value]) => (
-      <div key={key} style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6, alignItems: 'center' }}>
-          <label htmlFor={key} style={{ color: '#fff', fontSize: 12 }}>{engagementComponentLabel(key)}</label>
-          <span style={{ color: '#A5ACAF', fontSize: 11 }}>{value}%</span>
-        </div>
-        <input
-          id={key}
-          aria-label={engagementComponentLabel(key)}
-          className="range-control"
-          type="range"
-          min={0}
-          max={100}
-          value={value}
-          onChange={(e) => {
-            const next = { ...weights, [key]: Number(e.target.value) }
-            setWeights(next)
-            setConfigStatus('dirty')
-          }}
-        />
-      </div>
-    ))}
-    <div style={{ color: weightsValid ? '#69BE28' : '#FFA500', fontSize: 11, marginTop: 4 }}>
-      Total: {weightTotal}% {weightsValid ? '— ready to save' : '— must total 100% before saving'}
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-      <button
-        className="btn-primary"
-        type="button"
-        disabled={!weightsValid || configStatus === 'saving'}
-        onClick={() => persistWeights(weights).catch(() => undefined)}
-        style={{ opacity: !weightsValid || configStatus === 'saving' ? 0.6 : 1 }}
-      >
-        {configStatus === 'saving' ? 'Saving…' : 'Save weights'}
-      </button>
-      <div style={{ color: '#A5ACAF', fontSize: 11 }}>
-        {configStatus === 'saved' ? 'Saved' : configStatus === 'dirty' ? 'Unsaved changes' : ''}
-      </div>
-    </div>
-  </>
-)}
-<div>{!configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
-        </Card>
+       <Card title="Engagement-score weights">
+         {!configLoaded ? (
+           <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
+             {Array.from({ length: 5 }).map((_, index) => (
+               <div key={index} style={{ display: 'grid', gap: 6 }}>
+                 <SkeletonBlock width="48%" height={10} radius={999} />
+                 <SkeletonBlock width="100%" height={20} radius={999} />
+               </div>
+             ))}
+           </div>
+         ) : (
+           <>
+             {Object.entries(weights).map(([key, value]) => (
+               <div key={key} style={{ marginBottom: 12 }}>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6, alignItems: 'center' }}>
+                   <label htmlFor={key} style={{ color: '#fff', fontSize: 12 }}>{engagementComponentLabel(key)}</label>
+                   <span style={{ color: '#A5ACAF', fontSize: 11 }}>{value}%</span>
+                 </div>
+                 <input
+                   id={key}
+                   aria-label={engagementComponentLabel(key)}
+                   className="range-control"
+                   type="range"
+                   min={0}
+                   max={100}
+                   value={value}
+                   onChange={(e) => {
+                     const next = { ...weights, [key]: Number(e.target.value) }
+                     setWeights(next)
+                     setConfigStatus('dirty')
+                   }}
+                 />
+               </div>
+             ))}
+             <div style={{ color: weightsValid ? '#69BE28' : '#FFA500', fontSize: 11, marginTop: 4 }}>
+               Total: {weightTotal}% {weightsValid ? '— ready to save' : '— must total 100% before saving'}
+             </div>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+               <button
+                 className="btn-primary"
+                 type="button"
+                 disabled={!weightsValid || configStatus === 'saving'}
+                 onClick={() => persistWeights(weights).catch(() => undefined)}
+                 style={{ opacity: !weightsValid || configStatus === 'saving' ? 0.6 : 1 }}
+               >
+                 {configStatus === 'saving' ? 'Saving…' : 'Save weights'}
+               </button>
+               <div style={{ color: '#A5ACAF', fontSize: 11 }}>
+                 {configStatus === 'saved' ? 'Saved' : configStatus === 'dirty' ? 'Unsaved changes' : ''}
+               </div>
+             </div>
+           </>
+         )}
+         <div>{!configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
+       </Card>
       </div>
     </>
   )

@@ -13,10 +13,6 @@ interface InterventionUpdatePayload {
   wdNotes?: string
 }
 
-interface InterventionLifecycleRow {
-  date_actioned: string | null
-}
-
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
@@ -49,27 +45,26 @@ export async function PATCH(
   }
 
   const supabase = createServerSupabaseClient()
-  const { data: currentIntervention, error: currentInterventionError } = await supabase
+
+  // Fetch the existing record to preserve date_actioned across updates
+  const { data: existing, error: fetchError } = await supabase
     .from('interventions')
     .select('date_actioned')
     .eq('id', interventionId)
-    .maybeSingle<InterventionLifecycleRow>()
+    .maybeSingle()
 
-  if (currentInterventionError) {
-    return NextResponse.json({ error: currentInterventionError.message }, { status: 500 })
-  }
-
-  if (!currentIntervention) {
-    return NextResponse.json({ error: 'Intervention not found.' }, { status: 404 })
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 })
   }
 
   const today = new Date().toISOString().split('T')[0]
-  const shouldSetDateActioned = currentIntervention.date_actioned === null && ACTIONED_STATUSES.has(status)
+  const existingDateActioned = existing?.date_actioned ?? null
+  const shouldSetDateActioned = existingDateActioned === null && ACTIONED_STATUSES.has(status)
   const updateRecord = {
     outcome: status,
     notes: payload.notes ?? null,
     wd_notes: payload.wdNotes ?? null,
-    date_actioned: shouldSetDateActioned ? today : currentIntervention.date_actioned,
+    date_actioned: shouldSetDateActioned ? today : existingDateActioned,
     date_resolved: status === 'Resolved' ? today : null,
   }
 
