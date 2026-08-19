@@ -136,4 +136,49 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Open events manager')
     expect(markup).toContain('href="/admin/events"')
   })
+
+  test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+      },
+      interventions: [
+        {
+          id: 'int-1',
+          participant_id: 'P1',
+          date_triggered: '2026-08-07',
+          department: 'Ops',
+          trigger_metric: 'Recovery Score',
+          trigger_value: '38',
+          intervention_type: '1:1 Wellness Check-in',
+          assigned_to: 'Wellness Director',
+          date_actioned: null,
+          date_resolved: null,
+          outcome: 'Pending',
+          notes: 'Immediate review',
+          wd_notes: null,
+        },
+      ],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).toContain('Department intervention summary')
+    expect(markup).toContain('Live summary of logged intervention records by department. Computed, data-driven recommendations are coming soon.')
+    expect(markup).toContain('Logged triggers: Recovery Score')
+    expect(markup).toContain('Logged interventions')
+    expect(markup).not.toContain('Suggested interventions by department')
+  })
 })
