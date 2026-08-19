@@ -163,17 +163,13 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('aria-label="snooze days"')
   })
 
-    test('renders editable weights UI with save gating feedback', () => {
-      const markup = selectedMarkup([participant])
-      expect(markup).toContain('Save weights')
-      expect(markup).toContain('Total: 100%')
-      expect(markup).toContain('ready to save')
-      expect(markup).toContain('class="range-control"')
-    })
-
-    expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
-    })
+  test('renders editable weights UI with save gating feedback', () => {
+    const markup = selectedMarkup([participant])
+    expect(markup).toContain('Save weights')
+    expect(markup).toContain('Total: 100%')
+    expect(markup).toContain('ready to save')
+    expect(markup).toContain('class="range-control"')
+  })
 
   test('prompts for participant selection when all participants are selected', () => {
     const markup = renderWithFilterState([participant, { ...participant, id: 'P2', first_name: 'Bea' }], {
@@ -264,7 +260,7 @@ describe('WellnessDirectorClient', () => {
 
     expect(markup).toContain('Events and nudges')
     expect(markup).toContain('Open events manager')
-    expect(markup).toContain('href="/admin/events"')
+    expect(markup).toContain('href="/wellness-director/events"')
   })
 
   test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
