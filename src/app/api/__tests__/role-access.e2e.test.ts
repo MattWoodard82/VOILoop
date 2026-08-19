@@ -157,6 +157,16 @@ describe('role access e2e (route-level)', () => {
     expect(adminPostResponse.status).toBe(200)
   })
 
+  test('wellness directors are still blocked from participant-only events route after leadership route move', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'wd-2' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: false })
+
+    const response = await getParticipantEvents()
+    if (!response) throw new Error('Expected participant route response')
+
+    expect(response.status).toBe(403)
+  })
+
   test('admins can access admin mutations but are blocked from participant-only route', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })

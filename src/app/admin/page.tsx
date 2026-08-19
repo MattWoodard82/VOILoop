@@ -92,7 +92,7 @@ export default async function AdminPage() {
             Manage participant-facing events and weekly nudges.
           </div>
           <Link
-            href="/admin/events"
+            href="/wellness-director/events"
             style={{
               display: 'inline-flex',
               alignItems: 'center',

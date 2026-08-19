@@ -84,7 +84,7 @@ export default async function WellnessDirectorPage() {
           </div>
         </div>
         <Link
-          href="/admin/events"
+          href="/wellness-director/events"
           style={{
             display: 'inline-flex',
             alignItems: 'center',

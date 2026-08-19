@@ -110,7 +110,7 @@ describe('WellnessDirectorClient', () => {
     expect(markup).not.toContain('"value":0')
   })
 
-  test('wellness director page links to the events manager for leadership users', async () => {
+  test('wellness director page links to the canonical events manager route for leadership users', async () => {
     ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
       session: { user: { id: 'wd-1' } },
       role: 'wellness_director',
@@ -134,6 +134,6 @@ describe('WellnessDirectorClient', () => {
 
     expect(markup).toContain('Events and nudges')
     expect(markup).toContain('Open events manager')
-    expect(markup).toContain('href="/admin/events"')
+    expect(markup).toContain('href="/wellness-director/events"')
   })
 })

@@ -16,7 +16,7 @@ const LEADERSHIP_NAV = [
   { label: 'Programs', items: [
     { href: '/interventions', label: 'Interventions', icon: Target },
     { href: '/outcomes', label: 'Outcomes', icon: TrendingUp },
-    { href: '/admin/events', label: 'Events and Nudges', icon: MessageSquare },
+    { href: '/wellness-director/events', label: 'Events and Nudges', icon: MessageSquare },
   ]},
 ]
 
