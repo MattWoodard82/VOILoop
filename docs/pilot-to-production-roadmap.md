@@ -21,6 +21,7 @@ The most foundational architectural change. Without it, two clients share the sa
 - Pilot-switcher UX for operators managing multiple orgs
 - Include a tenant onboarding flow to set up a new customer org end-to-end (org creation, role assignment, defaults, and first-access setup)
 - Tenant onboarding should include a repeatable checklist or wizard so new customer environments can be provisioned without ad hoc setup
+- Tenant onboarding should support Wellness Director profile photo upload as part of org setup, so the WD experience is complete at launch
 - Backfill existing data to `org_id = 1`
 
 ### 2.2 Azure PostgreSQL RLS Hardening (Issues #57): 20-30 hours
@@ -52,6 +53,7 @@ Move from Vercel + manual Supabase CLI deploys to a durable, observable, cost-co
 | Secrets | Azure Key Vault | All env vars, connection strings |
 | Observability | Azure Monitor + Application Insights | Logs, traces, alerts |
 | CDN/Edge | Azure Front Door (Basic) | For static assets + WAF |
+| Object/File storage | Azure Blob Storage | WD profile photos and other future user-uploaded assets |
 | IaC | Bicep or Terraform | Codify everything |
 
 **CI/CD pipeline (GitHub Actions → Azure):**
@@ -85,7 +87,16 @@ The codebase was built rapidly for the pilot and now needs a targeted hardening 
 - Remove technical debt that would otherwise make multi-tenancy, API ingestion, and future integrations brittle
 - **This is not cosmetic cleanup; it is required foundation work for long-term extensibility.**
 
-### 2.7 Fitbit Integration via Terra: 60-100 hours
+### 2.7 Group Management: 45-65 hours
+Support customer-defined participant groups so reporting, interventions, and program operations can be organized around real-world cohorts like departments, teams, or locations.
+- Add group management primitives so admins and operators can create, edit, archive, and assign participants to groups within an organization
+- Support group-aware filtering and reporting flows so wellness directors can review performance and engagement by cohort instead of only at full-org level
+- Update participant CSV upload flows to support pre-defined group membership assignment during import
+- Provide a downloadable blank group-membership template that admins can fill in and upload back to the system
+- Keep this separate from the V2 onboarding wizard; this should be an operational management workflow, not a dependency of onboarding completion
+- Ensure group membership is scoped by org and designed to support future dashboard segmentation, nudges, and reporting
+
+### 2.8 Fitbit Integration via Terra: 60-100 hours
 Fitbit should be integrated through Terra so onboarding is easier for new devices and provider-specific complexity stays out of the core app.
 - Terra provides a single OAuth widget and a normalized wearable schema, which lets VOILoop add Fitbit without building a second full direct integration stack
 - Terra also reduces the amount of Fitbit-specific onboarding work for participants and operators
@@ -156,7 +167,15 @@ Make the product work cleanly for participants and wellness directors on phones,
 - Ensure all core flows are usable without zooming or horizontal scrolling on common mobile devices
 - Include mobile QA against realistic data before client 2 launch, because many operational flows will break on small screens even when desktop looks fine
 
-### 3.8 Admin import UI fallback for API sync (Issue #74): 20-40 hours
+### 3.8 Feedback System with GitHub Issue Traceability: 10-20 hours
+Add an in-product feedback path so participants, wellness directors, execs, and admins can report issues or suggestions without leaving the application.
+- Capture feedback in-context from the product so users can submit bugs, friction points, and feature requests at the moment they encounter them
+- **Recommendation:** route submitted feedback into GitHub Issues automatically when possible so the team can triage, discuss, prioritize, and trace resolution in the existing delivery workflow
+- Include enough structured metadata with each submission to make it actionable: user role, org, page/surface, environment, timestamp, and optional screenshot or freeform note
+- Support internal review rules so low-signal submissions can be filtered or labeled before they become engineering work
+- Keep the UX lightweight so feedback collection improves visibility without becoming a support burden
+
+### 3.9 Admin import UI fallback for API sync (Issue #74): 20-40 hours
 Keep the admin CSV import UI as a fallback even after API sync is live.
 - Participants who don't want to connect their wearable account can still be loaded manually
 - Historical backfill remains possible when a participant newly connects
@@ -182,7 +201,15 @@ A dedicated mobile app would provide a more polished experience for participants
 - Tradeoff: significantly higher product and maintenance cost, separate release cycles, and more app-store and device support work
 - Recommendation: defer this until after the responsive web experience is stable and we know whether participant engagement demands a native app
 
-### 4.4 Multi-Region / Disaster Recovery: 30-50 hours
+### 4.4 Role-Based Tutorial / Guided Walkthrough System: 20-35 hours
+Add lightweight in-product tutorials so participants, wellness directors, execs, and admins can understand the parts of the system that matter to them without live handholding.
+- Provide role-specific guided walkthroughs for the most important first-run and low-frequency workflows
+- Cover key surfaces like participant onboarding, `/my`, dashboard interpretation, org operations, and reporting flows
+- **Recommendation:** use a common product-tour framework such as **Intro.js** to accelerate implementation with proven out-of-the-box step overlays, targeting, and progression patterns
+- Allow tutorials to be replayed on demand so users can revisit guidance after onboarding
+- Keep the content role-aware and intentionally lightweight so it helps adoption without turning into documentation sprawl
+
+### 4.5 Multi-Region / Disaster Recovery: 30-50 hours
 Azure PostgreSQL backup + point-in-time restore (PITR) plus a documented recovery runbook is the current DR posture. That covers recovery from data loss/corruption and manual restoration after an outage, but not multi-region active/active resilience or seamless regional failover. RTO/RPO are still to be defined.
 
 ---
@@ -195,11 +222,13 @@ Azure PostgreSQL backup + point-in-time restore (PITR) plus a documented recover
 | Azure PostgreSQL Flexible (Standard_B2ms) | ~$60–80 |
 | Azure Entra External ID (≤50K MAU) | Free tier |
 | Azure Key Vault | ~$5 |
+| Azure Blob Storage | ~$5–15 |
 | Application Insights + Log Analytics | ~$10–30 (depends on ingestion volume) |
 | Azure Front Door (Basic) | ~$35 |
-| **Total estimate** | **~$140–210/mo** |
+| Terra | Custom / vendor-priced | Fitbit integration platform; exact pricing to confirm with Terra |
+| **Total estimate (excluding Terra)** | **~$145–225/mo** |
 
-Current Vercel Pro + Supabase Pro: ~$45–100/mo. Delta is justified by enterprise observability, security posture, and multi-tenant scale requirements.
+Current Vercel Pro + Supabase Pro: ~$45–100/mo. Delta is justified by enterprise observability, security posture, and multi-tenant scale requirements. Terra should be treated as an additional vendor cost on top of the Azure stack because pricing is custom and not yet confirmed.
 
 ---
 
