@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { Card, LoadingNotice, SkeletonBlock, SkeletonText } from '@/components/ui'
 
 interface Event {
   id: string
@@ -70,6 +71,7 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', event_date: '', event_time: '',
@@ -116,10 +118,12 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
   }
 
   const loadData = async () => {
+    setLoading(true)
     const response = await fetch('/api/admin/events', { cache: 'no-store' })
     if (!response.ok) {
       const message = await parseErrorMessage(response, 'Unable to load events and nudges.')
       setError(`Unable to load events: ${message}`)
+      setLoading(false)
       return
     }
     const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; acknowledgements?: Acknowledgement[] }
@@ -127,6 +131,7 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
     setNudges(payload.nudges ?? [])
     setAcknowledgements(payload.acknowledgements ?? [])
     setError('')
+    setLoading(false)
   }
 
   const saveEvent = async () => {
@@ -291,10 +296,24 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
 
           <div style={s.card}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 12 }}>Upcoming events · {events.length} scheduled</div>
-            {events.length === 0 && (
+            {loading ? (
+              <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                    <SkeletonBlock width={24} height={24} radius={8} />
+                    <div style={{ flex: 1, display: 'grid', gap: 8 }}>
+                      <SkeletonBlock width="34%" height={12} radius={999} />
+                      <SkeletonBlock width="58%" height={10} radius={999} />
+                      <SkeletonBlock width="84%" height={10} radius={999} />
+                    </div>
+                    <SkeletonBlock width={70} height={24} radius={6} />
+                  </div>
+                ))}
+              </div>
+            ) : events.length === 0 && (
               <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No upcoming events. Create one above.</div>
             )}
-            {events.map(event => (
+            {!loading && events.map(event => (
               <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '1px solid #0a3560' }}>
                 <div style={{ fontSize: 20 }}>{({ outdoor: '🥾', fitness: '🧘', race: '🏆', general: '📅' } as Record<string, string>)[event.event_type] ?? '📅'}</div>
                 <div style={{ flex: 1 }}>
@@ -391,7 +410,19 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
 
           <div style={s.card}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 12 }}>Previous nudges</div>
-            {nudges.map(n => (
+            {loading ? (
+              <div style={{ display: 'grid', gap: 12, minHeight: 140 }}>
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} style={{ display: 'grid', gap: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <SkeletonBlock width="28%" height={10} radius={999} />
+                      <SkeletonBlock width="18%" height={10} radius={999} />
+                    </div>
+                    <SkeletonText lines={2} lastLineWidth="72%" />
+                  </div>
+                ))}
+              </div>
+            ) : nudges.map(n => (
               <div key={n.id} style={{ padding: '10px 0', borderBottom: '1px solid #0a3560' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <div style={{ fontSize: 10, color: '#69BE28', fontWeight: 600 }}>Week of {n.week_of}</div>
@@ -410,7 +441,19 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
           <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 14 }}>
             Participant reflections submitted for this week&apos;s nudge. Responses are decrypted for wellness director review only.
           </div>
-          {acknowledgements.length === 0 ? (
+          {loading ? (
+            <div style={{ display: 'grid', gap: 12, minHeight: 160 }}>
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} style={{ display: 'grid', gap: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <SkeletonBlock width="24%" height={12} radius={999} />
+                    <SkeletonBlock width="20%" height={10} radius={999} />
+                  </div>
+                  <SkeletonText lines={2} lastLineWidth="88%" />
+                </div>
+              ))}
+            </div>
+          ) : acknowledgements.length === 0 ? (
             <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No responses yet for the most recent nudge.</div>
           ) : acknowledgements.map((ack, index) => (
             <div key={`${ack.participant_id}-${ack.acknowledged_at}`} style={{ padding: '12px 0', borderBottom: index < acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>

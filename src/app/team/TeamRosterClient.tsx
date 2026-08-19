@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import type { LeaderboardMetric, ParticipantRankContext } from '@/types'
-import { Card, Badge, ScorePill } from '@/components/ui'
+import { Card, Badge, ScorePill, LoadingNotice, SkeletonBlock } from '@/components/ui'
 
 const METRICS: Array<{ key: LeaderboardMetric; label: string; helper: string }> = [
   { key: 'recovery', label: 'Recovery', helper: 'Recovery score percentile' },
@@ -73,23 +73,42 @@ export function TeamRosterClient({ participantContext }: { participantContext: P
         ))}
       </div>
 
-      <div style={{ display: 'grid', gap: 10 }}>
+      <div style={{ display: 'grid', gap: 10, minHeight: 140, position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <strong>{context.metric_label}</strong>
-          <Badge variant={context.cohort_band === 'top' ? 'green' : context.cohort_band === 'middle' ? 'amber' : 'red'}>
-            {context.percentile_label}
-          </Badge>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {loadingMetric === metric ? <LoadingNotice>Loading…</LoadingNotice> : null}
+            <Badge variant={context.cohort_band === 'top' ? 'green' : context.cohort_band === 'middle' ? 'amber' : 'red'}>
+              {context.percentile_label}
+            </Badge>
+          </div>
         </div>
-        <div style={{ fontSize: 13, color: '#A5ACAF' }}>{context.metric_description}</div>
+        <div style={{ fontSize: 13, color: '#A5ACAF' }}>
+          {loadingMetric === metric ? <SkeletonBlock width="75%" height={12} radius={999} /> : context.metric_description}
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {context.metric === 'recovery' ? <ScorePill value={context.participant_value} /> : <ScorePill value={Math.min(100, context.participant_value)} />}
-          <div><strong>Rank</strong><div>{context.participant_rank} of {context.cohort_size}</div></div>
-          <div><strong>Context</strong><div>{context.comparison_text}</div></div>
+          <div>
+            {loadingMetric === metric
+              ? <SkeletonBlock width={56} height={24} radius={999} />
+              : context.metric === 'recovery'
+                ? <ScorePill value={context.participant_value} />
+                : <ScorePill value={Math.min(100, context.participant_value)} />}
+          </div>
+          <div>
+            <strong>Rank</strong>
+            <div>{loadingMetric === metric ? <SkeletonBlock width="65%" height={12} radius={999} style={{ marginTop: 6 }} /> : `${context.participant_rank} of ${context.cohort_size}`}</div>
+          </div>
+          <div>
+            <strong>Context</strong>
+            <div>{loadingMetric === metric ? <SkeletonBlock width="90%" height={12} radius={999} style={{ marginTop: 6 }} /> : context.comparison_text}</div>
+          </div>
         </div>
         <div style={{ fontSize: 11, color: valueColor }}>
           {loadingMetric === metric ? 'Loading…' : context.metric_value_label}
         </div>
-        <div style={{ fontSize: 11, color: '#A5ACAF' }}>{context.safe_context_note}</div>
+        <div style={{ fontSize: 11, color: '#A5ACAF' }}>
+          {loadingMetric === metric ? <SkeletonBlock width="80%" height={10} radius={999} /> : context.safe_context_note}
+        </div>
       </div>
     </Card>
   )
