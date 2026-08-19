@@ -1,14 +1,20 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
+import type { InterventionStatus } from '@/types'
 
 export const runtime = 'nodejs'
 
-const VALID_STATUSES = new Set(['Pending', 'In Progress', 'Monitoring', 'Resolved'])
+const VALID_STATUSES = new Set<InterventionStatus>(['Pending', 'In Progress', 'Monitoring', 'Resolved'])
+const ACTIONED_STATUSES = new Set<InterventionStatus>(['In Progress', 'Monitoring', 'Resolved'])
 
 interface InterventionUpdatePayload {
   status?: string
   notes?: string
   wdNotes?: string
+}
+
+interface InterventionLifecycleRow {
+  date_actioned: string | null
 }
 
 export async function PATCH(
@@ -37,17 +43,34 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const status = (payload.status ?? '').trim()
+  const status = (payload.status ?? '').trim() as InterventionStatus
   if (!VALID_STATUSES.has(status)) {
     return NextResponse.json({ error: 'Invalid intervention status.' }, { status: 400 })
   }
 
   const supabase = createServerSupabaseClient()
+  const { data: currentIntervention, error: currentInterventionError } = await supabase
+    .from('interventions')
+    .select('date_actioned')
+    .eq('id', interventionId)
+    .maybeSingle<InterventionLifecycleRow>()
+
+  if (currentInterventionError) {
+    return NextResponse.json({ error: currentInterventionError.message }, { status: 500 })
+  }
+
+  if (!currentIntervention) {
+    return NextResponse.json({ error: 'Intervention not found.' }, { status: 404 })
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const shouldSetDateActioned = currentIntervention.date_actioned === null && ACTIONED_STATUSES.has(status)
   const updateRecord = {
     outcome: status,
     notes: payload.notes ?? null,
     wd_notes: payload.wdNotes ?? null,
-    date_resolved: status === 'Resolved' ? new Date().toISOString().split('T')[0] : null,
+    date_actioned: shouldSetDateActioned ? today : currentIntervention.date_actioned,
+    date_resolved: status === 'Resolved' ? today : null,
   }
 
   const { error } = await supabase
