@@ -39,6 +39,8 @@ jest.mock('next/link', () => {
   return MockLink
 })
 
+const originalUseState = React.useState
+
 const participant: ParticipantWithWellness = {
   id: 'P1',
   first_name: 'Alex',
@@ -72,20 +74,47 @@ const participant: ParticipantWithWellness = {
 
 const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
 
+function renderWithFilterState(
+  participants: ParticipantWithWellness[],
+  {
+    deptFilter = 'All',
+    personFilter = 'All',
+  }: {
+    deptFilter?: string
+    personFilter?: string
+  } = {},
+) {
+  const useStateSpy = jest.spyOn(React, 'useState')
+  useStateSpy
+    .mockImplementationOnce(() => [deptFilter, jest.fn()])
+    .mockImplementationOnce(() => [personFilter, jest.fn()])
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+
+  try {
+    return selectedMarkup(participants)
+  } finally {
+    useStateSpy.mockRestore()
+  }
+}
+
 describe('WellnessDirectorClient', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
   test('renders explainability and baseline state', () => {
-    const markup = selectedMarkup([participant])
+    const markup = renderWithFilterState([participant], { personFilter: 'P1' })
     expect(markup).toContain('Engagement score')
     expect(markup).toContain('Baseline building (13 days remaining)')
     expect(markup).toContain('improving')
   })
 
   test('shows the five FR-13 engagement component labels in the breakdown', () => {
-    const markup = selectedMarkup([participant])
+    const markup = renderWithFilterState([participant], { personFilter: 'P1' })
     expect(markup).toContain('WHOOP/CSV submission consistency')
     expect(markup).toContain('Device-wear consistency')
     expect(markup).toContain('Pulse survey completion')
@@ -94,20 +123,83 @@ describe('WellnessDirectorClient', () => {
   })
 
   test('shows snooze and dismiss controls for the selected participant', () => {
-    const markup = selectedMarkup([participant])
+    const markup = renderWithFilterState([participant], { personFilter: 'P1' })
     expect(markup).toContain('Snooze')
     expect(markup).toContain('Dismiss')
   })
 
-  test('scope changes still leave selected participant within the filtered set', () => {
-    const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
+  test('shows the multi-participant chart while detail cards require a participant selection', () => {
+    const markup = renderWithFilterState([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }], {
+      deptFilter: 'All',
+      personFilter: 'All',
+    })
     expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
+  })
+
+  test('prompts for participant selection when all participants are selected', () => {
+    const markup = renderWithFilterState([participant, { ...participant, id: 'P2', first_name: 'Bea' }], {
+      deptFilter: 'All',
+      personFilter: 'All',
+    })
+    expect(markup).toContain('Choose a participant to view score breakdown.')
+    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
+  })
+
+  test('prompts for participant selection when a department is selected but participant scope remains all', () => {
+    const erParticipant = { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' } as ParticipantWithWellness
+    const markup = renderWithFilterState([participant, erParticipant], {
+      deptFilter: 'ER',
+      personFilter: 'All',
+    })
+    expect(markup).toContain('Choose a participant to view score breakdown.')
+    expect(markup).toContain('Choose a participant to view risk tier.')
+  })
+
+  test('shows selected participant breakdown when an explicit participant is chosen', () => {
+    const secondParticipant = {
+      ...participant,
+      id: 'P2',
+      first_name: 'Bea',
+      department: 'ER',
+      engagement_score_components: {
+        submission_consistency: 90,
+        device_wear_consistency: 80,
+        pulse_completion: 70,
+        nudge_response: 60,
+        workout_volume: 50,
+      },
+    } as ParticipantWithWellness
+    const markup = renderWithFilterState([participant, secondParticipant], {
+      deptFilter: 'ER',
+      personFilter: 'P2',
+    })
+    expect(markup).toContain('WHOOP/CSV submission consistency:90')
+    expect(markup).toContain('Device-wear consistency:80')
+    expect(markup).not.toContain('Choose a participant to view score breakdown.')
   })
 
   test('omits missing engagement scores from the chart', () => {
     const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
     expect(markup).not.toContain('"value":0')
+  })
+
+  test('shows a selected-participant empty state when components are unavailable', () => {
+    const markup = renderWithFilterState([{ ...participant, engagement_score_components: null } as ParticipantWithWellness], {
+      deptFilter: 'All',
+      personFilter: 'P1',
+    })
+    expect(markup).toContain('No score breakdown available for the selected participant.')
+  })
+
+  test('shows empty-state guidance when the explicit participant is outside the current department scope', () => {
+    const erParticipant = { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' } as ParticipantWithWellness
+    const markup = renderWithFilterState([participant, erParticipant], {
+      deptFilter: 'ER',
+      personFilter: 'P1',
+    })
+    expect(markup).toContain('No score breakdown available for the selected participant.')
+    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
   })
 
   test('wellness director page links to the events manager for leadership users', async () => {
