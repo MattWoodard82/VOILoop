@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import type { ParticipantWithWellness } from '@/types'
-import { Card, Badge, BarRow } from '@/components/ui'
+import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 
@@ -43,6 +43,7 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
   const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [configLoaded, setConfigLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -52,8 +53,11 @@ export function WellnessDirectorClient({ participants }: Props) {
         if (cancelled) return
         const config = data?.config?.weights
         if (config) setWeights(config)
+        setConfigLoaded(true)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setConfigLoaded(true)
+      })
     return () => { cancelled = true }
   }, [])
 
@@ -134,10 +138,16 @@ export function WellnessDirectorClient({ participants }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
         <Card title="Engagement score" badge={<Badge variant="wolf">weighted</Badge>}>
-          <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
+          {configLoaded ? (
+            <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
+          ) : (
+            <ChartSkeleton height={210} />
+          )}
         </Card>
         <Card title="Score breakdown">
-          {selected?.engagement_score_components ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />) : <div>No participant selected.</div>}
+          {!configLoaded ? (
+            <TableSkeleton columns={2} rows={5} />
+          ) : selected?.engagement_score_components ? Object.entries(selected.engagement_score_components).map(([key, value]) => <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />) : <div>No participant selected.</div>}
         </Card>
         <Card title="Physiological trend">
           {selected ? (
@@ -191,28 +201,41 @@ export function WellnessDirectorClient({ participants }: Props) {
           )}
         </Card>
         <Card title="Engagement-score weights">
-          {Object.entries(weights).map(([key, value]) => (
-            <div key={key}>
-              <label htmlFor={key}>{engagementComponentLabel(key)}</label>
-              <input
-                id={key}
-                aria-label={engagementComponentLabel(key)}
-                type="range"
-                min={0}
-                max={100}
-                value={value}
-                onChange={(e) => {
-                  const next = { ...weights, [key]: Number(e.target.value) }
-                  const total = Object.values(next).reduce((sum, item) => sum + item, 0)
-                  if (total === 100) {
-                    setWeights(next)
-                    persistWeights(next).catch(() => setConfigStatus('idle'))
-                  }
-                }}
-              />
+          {!configLoaded ? (
+            <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} style={{ display: 'grid', gap: 6 }}>
+                  <SkeletonBlock width="48%" height={10} radius={999} />
+                  <SkeletonBlock width="100%" height={20} radius={999} />
+                </div>
+              ))}
             </div>
-          ))}
-          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}</div>
+          ) : (
+            <>
+              {Object.entries(weights).map(([key, value]) => (
+                <div key={key}>
+                  <label htmlFor={key}>{engagementComponentLabel(key)}</label>
+                  <input
+                    id={key}
+                    aria-label={engagementComponentLabel(key)}
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={value}
+                    onChange={(e) => {
+                      const next = { ...weights, [key]: Number(e.target.value) }
+                      const total = Object.values(next).reduce((sum, item) => sum + item, 0)
+                      if (total === 100) {
+                        setWeights(next)
+                        persistWeights(next).catch(() => setConfigStatus('idle'))
+                      }
+                    }}
+                  />
+                </div>
+              ))}
+            </>
+          )}
+          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : !configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
         </Card>
       </div>
     </>

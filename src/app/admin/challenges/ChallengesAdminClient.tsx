@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Alert, Badge, Card } from '@/components/ui'
+import { Alert, Badge, Card, SkeletonBlock, TableSkeleton } from '@/components/ui'
 import { parseFrontendError } from '@/lib/frontend-error'
 
 // Maps API error codes to human-readable messages
@@ -63,6 +63,8 @@ export function ChallengesAdminClient() {
   const [participantStatus, setParticipantStatus] = useState<'all' | 'completed' | 'incomplete'>('all')
   const [editName, setEditName] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [participantsLoading, setParticipantsLoading] = useState(false)
 
   // Confirmation modal state
   const [activateModal, setActivateModal] = useState<Challenge | null>(null)
@@ -128,26 +130,32 @@ export function ChallengesAdminClient() {
   }
 
   const loadDetail = async (challengeId: string) => {
+    setDetailLoading(true)
     const response = await fetch(`/api/admin/challenges/${challengeId}`, { cache: 'no-store' })
     if (!response.ok) {
       await setErrorFromResponse(response, 'Failed to load challenge details')
+      setDetailLoading(false)
       return
     }
     const payload = await response.json()
     setDetail(payload as ChallengeDetail)
     setEditName(payload.challenge.name ?? '')
     setEditDescription(payload.challenge.description ?? '')
+    setDetailLoading(false)
   }
 
   const loadParticipants = async (challengeId: string, status: 'all' | 'completed' | 'incomplete') => {
+    setParticipantsLoading(true)
     const query = status === 'all' ? '' : `?status=${status}`
     const response = await fetch(`/api/admin/challenges/${challengeId}/participants${query}`, { cache: 'no-store' })
     if (!response.ok) {
       await setErrorFromResponse(response, 'Failed to load participants')
+      setParticipantsLoading(false)
       return
     }
     const payload = await response.json()
     setParticipants(payload.participants ?? [])
+    setParticipantsLoading(false)
   }
 
   const updateChallenge = async () => {
@@ -307,7 +315,7 @@ export function ChallengesAdminClient() {
         badge={activeChallenge ? <Badge variant="green">Active: {activeChallenge.name}</Badge> : <Badge>No active challenge</Badge>}
       >
         {loading ? (
-          <div style={{ fontSize: 12, color: '#A5ACAF' }}>Loading…</div>
+          <TableSkeleton columns={5} rows={4} />
         ) : !challenges.length ? (
           <div style={{ fontSize: 12, color: '#A5ACAF' }}>No challenges yet.</div>
         ) : (
@@ -366,23 +374,36 @@ export function ChallengesAdminClient() {
         <Card title="Selected challenge details" badge={<Badge variant="wolf">{detail.challenge.status}</Badge>}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ display: 'grid', gap: 8 }}>
-              <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
-                Name
-                <input value={editName} onChange={(event) => setEditName(event.target.value)} style={inputStyle} />
-              </label>
-              <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
-                Description
-                <textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} />
-              </label>
-              <div style={{ fontSize: 11, color: '#A5ACAF' }}>
-                {detail.challenge.status === 'active'
-                  ? 'Active challenge: only name/description are editable.'
-                  : detail.challenge.status === 'draft'
-                    ? 'Draft challenge: full rule editing will be expanded in the next slice.'
-                    : 'Terminal challenge: read-only.'}
-              </div>
-              {(detail.challenge.status === 'draft' || detail.challenge.status === 'active') && (
-                <button type="button" onClick={updateChallenge} style={buttonStyle}>Save metadata</button>
+              {detailLoading ? (
+                <div style={{ display: 'grid', gap: 10, minHeight: 180 }}>
+                  <SkeletonBlock width="28%" height={10} radius={999} />
+                  <SkeletonBlock width="100%" height={36} radius={8} />
+                  <SkeletonBlock width="24%" height={10} radius={999} />
+                  <SkeletonBlock width="100%" height={90} radius={8} />
+                  <SkeletonBlock width="80%" height={10} radius={999} />
+                  <SkeletonBlock width={112} height={30} radius={8} />
+                </div>
+              ) : (
+                <>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
+                    Name
+                    <input value={editName} onChange={(event) => setEditName(event.target.value)} style={inputStyle} />
+                  </label>
+                  <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
+                    Description
+                    <textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} />
+                  </label>
+                  <div style={{ fontSize: 11, color: '#A5ACAF' }}>
+                    {detail.challenge.status === 'active'
+                      ? 'Active challenge: only name/description are editable.'
+                      : detail.challenge.status === 'draft'
+                        ? 'Draft challenge: full rule editing will be expanded in the next slice.'
+                        : 'Terminal challenge: read-only.'}
+                  </div>
+                  {(detail.challenge.status === 'draft' || detail.challenge.status === 'active') && (
+                    <button type="button" onClick={updateChallenge} style={buttonStyle}>Save metadata</button>
+                  )}
+                </>
               )}
             </div>
             <div>
@@ -397,22 +418,28 @@ export function ChallengesAdminClient() {
                 <button type="button" style={buttonStyle} onClick={() => setParticipantStatus('incomplete')}>Incomplete</button>
               </div>
               <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #0a3560', borderRadius: 8 }}>
-                <table className="data-table" style={{ marginBottom: 0 }}>
-                  <thead><tr><th>Participant</th><th>Eligible</th><th>Progress</th><th>Completed</th></tr></thead>
-                  <tbody>
-                    {participants.map((participant) => (
-                      <tr key={participant.participant_id}>
-                        <td>{participant.participant_id}</td>
-                        <td>{participant.is_eligible ? 'Yes' : 'No'}</td>
-                        <td>{participant.progress_value}</td>
-                        <td>{participant.completed ? 'Yes' : 'No'}</td>
-                      </tr>
-                    ))}
-                    {!participants.length && (
-                      <tr><td colSpan={4} style={{ color: '#A5ACAF' }}>No participants for this filter.</td></tr>
-                    )}
-                  </tbody>
-                </table>
+                {participantsLoading ? (
+                  <div style={{ padding: 12 }}>
+                    <TableSkeleton columns={4} rows={5} />
+                  </div>
+                ) : (
+                  <table className="data-table" style={{ marginBottom: 0 }}>
+                    <thead><tr><th>Participant</th><th>Eligible</th><th>Progress</th><th>Completed</th></tr></thead>
+                    <tbody>
+                      {participants.map((participant) => (
+                        <tr key={participant.participant_id}>
+                          <td>{participant.participant_id}</td>
+                          <td>{participant.is_eligible ? 'Yes' : 'No'}</td>
+                          <td>{participant.progress_value}</td>
+                          <td>{participant.completed ? 'Yes' : 'No'}</td>
+                        </tr>
+                      ))}
+                      {!participants.length && (
+                        <tr><td colSpan={4} style={{ color: '#A5ACAF' }}>No participants for this filter.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>

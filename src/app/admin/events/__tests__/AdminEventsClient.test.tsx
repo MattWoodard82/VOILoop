@@ -14,6 +14,15 @@ jest.mock('react', () => {
     useState: (initialValue: unknown) => mockUseState(initialValue),
   }
 })
+jest.mock('@/components/ui', () => {
+  const React = require('react')
+  return {
+    Card: ({ title, badge, children }: { title?: React.ReactNode; badge?: React.ReactNode; children: React.ReactNode }) => React.createElement('section', null, title, badge, children),
+    LoadingNotice: ({ children }: { children?: React.ReactNode }) => React.createElement('span', null, children ?? 'Loading…'),
+    SkeletonBlock: () => React.createElement('div', { className: 'skeleton-block' }),
+    SkeletonText: () => React.createElement('div', { className: 'skeleton-block' }),
+  }
+})
 
 describe('AdminEventsClient', () => {
   beforeEach(() => {
@@ -44,6 +53,7 @@ describe('AdminEventsClient', () => {
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
       .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce([{ title: '', description: '', event_date: '', event_time: '', location: '', event_type: 'general', recurring: false, recurrence: '' }, jest.fn()]) // newEvent
       .mockReturnValueOnce(['', jest.fn()]) // nudgeMsg
       .mockReturnValueOnce(['Heather Simpson', jest.fn()]) // nudgeAuthor
@@ -57,5 +67,29 @@ describe('AdminEventsClient', () => {
     expect(markup).toContain('RSVPs · 2')
     expect(markup).toContain('Jane Doe, John Smith')
     expect(markup).toContain('Morning Run')
+  })
+
+  test('renders loading skeletons instead of empty panels on first load', async () => {
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([[], jest.fn()]) // nudges
+      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
+      .mockReturnValueOnce(['events', jest.fn()]) // tab
+      .mockReturnValueOnce([false, jest.fn()]) // saving
+      .mockReturnValueOnce([false, jest.fn()]) // saved
+      .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([true, jest.fn()]) // loading
+      .mockReturnValueOnce([{ title: '', description: '', event_date: '', event_time: '', location: '', event_type: 'general', recurring: false, recurrence: '' }, jest.fn()]) // newEvent
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeMsg
+      .mockReturnValueOnce(['Heather Simpson', jest.fn()]) // nudgeAuthor
+      .mockReturnValueOnce(['all', jest.fn()]) // nudgeTargetType
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeTargetLabel
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeParticipantId
+
+    const { AdminEventsClient } = await import('../AdminEventsClient')
+    const markup = renderToStaticMarkup(React.createElement(AdminEventsClient, { participants: [], role: 'admin' }))
+
+    expect(markup).toContain('Upcoming events')
+    expect(markup).toContain('skeleton-block')
   })
 })

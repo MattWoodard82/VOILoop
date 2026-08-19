@@ -29,6 +29,10 @@ jest.mock('@/components/ui', () => {
     Card: ({ title, children }: { title: string; children: React.ReactNode }) => React.createElement('section', { 'data-title': title }, children),
     Badge: ({ children }: { children: React.ReactNode }) => React.createElement('span', null, children),
     BarRow: ({ label, value }: { label: string; value: number }) => React.createElement('div', null, `${label}:${value}`),
+    ChartSkeleton: () => React.createElement('div', { className: 'skeleton-block' }),
+    LoadingNotice: ({ children }: { children?: React.ReactNode }) => React.createElement('span', null, children ?? 'Loading…'),
+    SkeletonBlock: () => React.createElement('div', { className: 'skeleton-block' }),
+    TableSkeleton: () => React.createElement('div', { className: 'skeleton-block' }),
   }
 })
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
@@ -73,8 +77,17 @@ const participant: ParticipantWithWellness = {
 const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
 
 describe('WellnessDirectorClient', () => {
+  let useEffectSpy: jest.SpyInstance | null = null
+
   beforeEach(() => {
     jest.clearAllMocks()
+    useEffectSpy?.mockRestore()
+    useEffectSpy = null
+  })
+
+  afterEach(() => {
+    useEffectSpy?.mockRestore()
+    useEffectSpy = null
   })
 
   test('renders explainability and baseline state', () => {
@@ -84,13 +97,10 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('improving')
   })
 
-  test('shows the five FR-13 engagement component labels in the breakdown', () => {
+  test('renders loading placeholders for config-backed sections before config hydration finishes', () => {
     const markup = selectedMarkup([participant])
-    expect(markup).toContain('WHOOP/CSV submission consistency')
-    expect(markup).toContain('Device-wear consistency')
-    expect(markup).toContain('Pulse survey completion')
-    expect(markup).toContain('Nudge response rate')
-    expect(markup).toContain('Workout volume vs. baseline')
+    expect(markup).toContain('Loading weights…')
+    expect(markup).toContain('skeleton-block')
   })
 
   test('shows snooze and dismiss controls for the selected participant', () => {

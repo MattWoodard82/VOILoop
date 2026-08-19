@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { SkeletonBlock } from '@/components/ui'
 
 type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 
@@ -40,6 +41,7 @@ export function Sidebar() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<NavRole>(null)
   const [signingOut, setSigningOut] = useState(false)
+  const [hydratedIdentity, setHydratedIdentity] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -60,6 +62,7 @@ export function Sidebar() {
 
       if (mounted) {
         setRole((access?.role as NavRole | undefined) ?? null)
+        setHydratedIdentity(true)
       }
     }
 
@@ -139,9 +142,13 @@ export function Sidebar() {
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {email || 'Signed in'}
-            </div>
+            {hydratedIdentity ? (
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {email || 'Signed in'}
+              </div>
+            ) : (
+              <SkeletonBlock width={112} height={12} radius={999} />
+            )}
           </div>
         </div>
         <button
