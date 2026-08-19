@@ -440,6 +440,24 @@ export async function getInterventions(status?: string, supabase = getQueryClien
   return data ?? []
 }
 
+export async function getRecentlyResolvedInterventions(
+  limit = 10,
+  supabase = getQueryClient(),
+): Promise<Intervention[]> {
+  const normalizedLimit = Math.max(1, limit)
+  const { data, error } = await supabase
+    .from('interventions')
+    .select('*')
+    .eq('outcome', 'Resolved')
+    .order('date_resolved', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(normalizedLimit)
+
+  if (error) throw error
+
+  return (data ?? []).filter((intervention) => intervention.date_resolved)
+}
+
 export async function createIntervention(intervention: Omit<Intervention, 'id'>): Promise<Intervention> {
   const supabase = getQueryClient()
   const { data, error } = await supabase
