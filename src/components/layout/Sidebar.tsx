@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { SkeletonBlock } from '@/components/ui'
 
-type NavRole = 'admin' | 'wellness_director' | 'participant' | null
+export type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 
 const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
@@ -35,11 +35,17 @@ const PARTICIPANT_NAV = [
   ]},
 ]
 
-export function Sidebar() {
+export function getNavigationForRole(role: NavRole, _pathname: string) {
+  if (role === 'admin') return ADMIN_NAV
+  if (role === 'wellness_director') return LEADERSHIP_NAV
+  if (role === 'participant') return PARTICIPANT_NAV
+  return []
+}
+
+export function Sidebar({ initialRole = null }: { initialRole?: NavRole }) {
   const pathname = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<NavRole>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [hydratedIdentity, setHydratedIdentity] = useState(false)
 
@@ -79,12 +85,7 @@ export function Sidebar() {
     return source.slice(0, 2).toUpperCase()
   }, [email])
 
-  const nav = useMemo(() => {
-    if (role === 'admin') return ADMIN_NAV
-    if (role === 'wellness_director') return LEADERSHIP_NAV
-    if (role === 'participant') return PARTICIPANT_NAV
-    return pathname.startsWith('/my') || pathname.startsWith('/admin/import') ? PARTICIPANT_NAV : LEADERSHIP_NAV
-  }, [pathname, role])
+  const nav = useMemo(() => getNavigationForRole(initialRole, pathname), [initialRole, pathname])
 
   const handleSignOut = async () => {
     setSigningOut(true)

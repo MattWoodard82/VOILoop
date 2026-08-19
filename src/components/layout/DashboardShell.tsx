@@ -1,5 +1,6 @@
-import { Sidebar } from '@/components/layout/Sidebar'
+import { Sidebar, type NavRole } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
+import { getRoleAndSession } from '@/lib/supabase/server'
 
 interface DashboardShellProps {
   title: string
@@ -10,7 +11,7 @@ interface DashboardShellProps {
   children: React.ReactNode
 }
 
-export function DashboardShell({
+export async function DashboardShell({
   title,
   period,
   showPeriodFilter,
@@ -18,9 +19,11 @@ export function DashboardShell({
   showSignOut,
   children,
 }: DashboardShellProps) {
+  const { role } = await getRoleAndSession()
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar />
+      <Sidebar initialRole={(role as NavRole | null) ?? null} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <Topbar
           title={title}
