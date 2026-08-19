@@ -163,3 +163,30 @@ body {
   color: var(--wolf);
   font-family: var(--font-inter), sans-serif;
 }
+
+.form-control-dark {
+  width: 100%;
+  border: 1px solid var(--navy-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--navy-dark);
+  color: #fff;
+  font-family: var(--font-inter), sans-serif;
+  box-sizing: border-box;
+}
+
+.form-control-dark::placeholder {
+  color: var(--wolf);
+}
+
+.form-control-dark:disabled {
+  color: var(--wolf);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.range-control {
+  width: 100%;
+  accent-color: var(--green);
+}

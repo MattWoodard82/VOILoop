@@ -29,20 +29,30 @@ function engagementComponentLabel(key: string) {
   return ENGAGEMENT_COMPONENT_LABELS[key] ?? key
 }
 
+type WeightsState = {
+  submission_consistency: number
+  device_wear_consistency: number
+  pulse_completion: number
+  nudge_response: number
+  workout_volume: number
+}
+
+const DEFAULT_WEIGHTS: WeightsState = {
+  submission_consistency: 25,
+  device_wear_consistency: 20,
+  pulse_completion: 20,
+  nudge_response: 15,
+  workout_volume: 20,
+}
+
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
-  const [weights, setWeights] = useState({
-    submission_consistency: 25,
-    device_wear_consistency: 20,
-    pulse_completion: 20,
-    nudge_response: 15,
-    workout_volume: 20,
-  })
+  const [weights, setWeights] = useState<WeightsState>(DEFAULT_WEIGHTS)
   const [overrides, setOverrides] = useState<Record<string, ParticipantWithWellness['override_state']>>({})
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
-  const [configStatus, setConfigStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [configStatus, setConfigStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle')
 
   useEffect(() => {
     let cancelled = false
@@ -51,23 +61,16 @@ export function WellnessDirectorClient({ participants }: Props) {
       .then((data) => {
         if (cancelled) return
         const config = data?.config?.weights
-        if (config) setWeights(config)
+        if (config) {
+          setWeights(config)
+          setConfigStatus('idle')
+        }
       })
       .catch(() => {})
     return () => { cancelled = true }
   }, [])
 
   const departments = useMemo(() => ['All', ...Array.from(new Set(participants.map((e) => e.department))).sort()], [participants])
-  const filterSelectStyle = useMemo(() => ({
-    border: '1px solid var(--navy-border)',
-    borderRadius: 6,
-    padding: '6px 10px',
-    fontSize: 11,
-    background: 'var(--navy-dark)',
-    color: '#fff',
-    fontFamily: 'var(--font-inter), system-ui, sans-serif',
-  }), [])
-
   const filtered = useMemo(() => {
     let result = [...participants]
     if (deptFilter !== 'All') result = result.filter((e) => e.department === deptFilter)
@@ -76,6 +79,8 @@ export function WellnessDirectorClient({ participants }: Props) {
   }, [participants, deptFilter, personFilter])
 
   const selected = personFilter !== 'All' ? filtered[0] ?? null : deptFilter !== 'All' ? filtered[0] ?? null : participants[0] ?? null
+  const weightTotal = useMemo(() => Object.values(weights).reduce((sum, item) => sum + item, 0), [weights])
+  const weightsValid = weightTotal === 100
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
@@ -101,7 +106,7 @@ export function WellnessDirectorClient({ participants }: Props) {
     return data
   }
 
-  const persistWeights = async (nextWeights: typeof weights) => {
+  const persistWeights = async (nextWeights: WeightsState) => {
     setConfigStatus('saving')
     const response = await fetch('/api/admin/wellness-director-config', {
       method: 'PUT',
@@ -109,7 +114,7 @@ export function WellnessDirectorClient({ participants }: Props) {
       body: JSON.stringify({ weights: nextWeights }),
     })
     if (!response.ok) {
-      setConfigStatus('idle')
+      setConfigStatus('dirty')
       throw new Error('Failed to save config')
     }
     setConfigStatus('saved')
@@ -122,11 +127,11 @@ export function WellnessDirectorClient({ participants }: Props) {
         <select
           value={deptFilter}
           onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}
-          style={filterSelectStyle}
+          className="form-select"
         >
           {departments.map((d) => <option key={d}>{d}</option>)}
         </select>
-        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} style={filterSelectStyle}>
+        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="form-select">
           <option value="All">All participants</option>
           {participants.filter((e) => deptFilter === 'All' || e.department === deptFilter).map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
         </select>
@@ -169,12 +174,14 @@ export function WellnessDirectorClient({ participants }: Props) {
               <div>Override: {overrideLabel(overrides[selected.id] ?? selected.override_state)}</div>
               <input
                 aria-label="override note"
+                className="form-control-dark"
                 value={overrideNotes[selected.id] ?? ''}
                 onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
                 placeholder="Optional note"
               />
               <input
                 aria-label="snooze days"
+                className="form-control-dark"
                 type="number"
                 min={1}
                 max={30}
@@ -182,8 +189,8 @@ export function WellnessDirectorClient({ participants }: Props) {
                 onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
-                <button type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
+                <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
+                <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
               </div>
             </>
           ) : (
@@ -192,27 +199,44 @@ export function WellnessDirectorClient({ participants }: Props) {
         </Card>
         <Card title="Engagement-score weights">
           {Object.entries(weights).map(([key, value]) => (
-            <div key={key}>
-              <label htmlFor={key}>{engagementComponentLabel(key)}</label>
+            <div key={key} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6, alignItems: 'center' }}>
+                <label htmlFor={key} style={{ color: '#fff', fontSize: 12 }}>{engagementComponentLabel(key)}</label>
+                <span style={{ color: '#A5ACAF', fontSize: 11 }}>{value}%</span>
+              </div>
               <input
                 id={key}
                 aria-label={engagementComponentLabel(key)}
+                className="range-control"
                 type="range"
                 min={0}
                 max={100}
                 value={value}
                 onChange={(e) => {
                   const next = { ...weights, [key]: Number(e.target.value) }
-                  const total = Object.values(next).reduce((sum, item) => sum + item, 0)
-                  if (total === 100) {
-                    setWeights(next)
-                    persistWeights(next).catch(() => setConfigStatus('idle'))
-                  }
+                  setWeights(next)
+                  setConfigStatus('dirty')
                 }}
               />
             </div>
           ))}
-          <div>{configStatus === 'saving' ? 'Saving…' : configStatus === 'saved' ? 'Saved' : ''}</div>
+          <div style={{ color: weightsValid ? '#69BE28' : '#FFA500', fontSize: 11, marginTop: 4 }}>
+            Total: {weightTotal}% {weightsValid ? '— ready to save' : '— must total 100% before saving'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+            <button
+              className="btn-primary"
+              type="button"
+              disabled={!weightsValid || configStatus === 'saving'}
+              onClick={() => persistWeights(weights).catch(() => undefined)}
+              style={{ opacity: !weightsValid || configStatus === 'saving' ? 0.6 : 1 }}
+            >
+              {configStatus === 'saving' ? 'Saving…' : 'Save weights'}
+            </button>
+            <div style={{ color: '#A5ACAF', fontSize: 11 }}>
+              {configStatus === 'saved' ? 'Saved' : configStatus === 'dirty' ? 'Unsaved changes' : ''}
+            </div>
+          </div>
         </Card>
       </div>
     </>

@@ -99,6 +99,21 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Dismiss')
   })
 
+  test('uses shared dark form styling hooks for baseline overrides inputs', () => {
+    const markup = selectedMarkup([participant])
+    expect(markup).toContain('aria-label="override note"')
+    expect(markup).toContain('class="form-control-dark"')
+    expect(markup).toContain('aria-label="snooze days"')
+  })
+
+  test('renders editable weights UI with save gating feedback', () => {
+    const markup = selectedMarkup([participant])
+    expect(markup).toContain('Save weights')
+    expect(markup).toContain('Total: 100%')
+    expect(markup).toContain('ready to save')
+    expect(markup).toContain('class="range-control"')
+  })
+
   test('scope changes still leave selected participant within the filtered set', () => {
     const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
     expect(markup).toContain('Bea Able')
