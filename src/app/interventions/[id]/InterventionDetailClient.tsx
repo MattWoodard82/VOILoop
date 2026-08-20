@@ -222,9 +222,9 @@ export function InterventionDetailClient({ intervention, participant, wellness, 
             </div>
           </div>
           <div>
-            <label style={labelStyle}>Recommended action / notes (visible to admin)</label>
+            <label style={labelStyle}>Intervention notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="e.g. Schedule 1:1 check-in, recommend sleep hygiene program..."
+              placeholder="Add notes about this intervention — visible to admins and wellness directors"
               style={{ ...inputStyle, resize: 'vertical' as const }} />
           </div>
         </div>
