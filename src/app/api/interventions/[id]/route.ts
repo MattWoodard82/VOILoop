@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession, getUserAccess } from '@/lib/supabase/server'
+import type { InterventionStatus } from '@/types'
 
 export const runtime = 'nodejs'
 
-const VALID_STATUSES = new Set(['Pending', 'In Progress', 'Monitoring', 'Resolved'])
+const VALID_STATUSES = new Set<InterventionStatus>(['Pending', 'In Progress', 'Monitoring', 'Resolved'])
+const ACTIONED_STATUSES = new Set<InterventionStatus>(['In Progress', 'Monitoring', 'Resolved'])
 
 interface InterventionUpdatePayload {
   status?: string
@@ -37,17 +39,38 @@ export async function PATCH(
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const status = (payload.status ?? '').trim()
+  const status = (payload.status ?? '').trim() as InterventionStatus
   if (!VALID_STATUSES.has(status)) {
     return NextResponse.json({ error: 'Invalid intervention status.' }, { status: 400 })
   }
 
   const supabase = createServerSupabaseClient()
+
+  // Fetch the existing record to preserve date_actioned and date_resolved across updates
+  const { data: existing, error: fetchError } = await supabase
+    .from('interventions')
+    .select('date_actioned, date_resolved, outcome')
+    .eq('id', interventionId)
+    .maybeSingle()
+
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+  const existingDateActioned = existing?.date_actioned ?? null
+  const existingDateResolved = existing?.date_resolved ?? null
+  const existingOutcome = existing?.outcome ?? null
+  const shouldSetDateActioned = existingDateActioned === null && ACTIONED_STATUSES.has(status)
+  // Preserve the original resolution date when the record is already Resolved —
+  // only stamp today on a fresh transition into Resolved, clear on reopen.
+  const transitioningToResolved = status === 'Resolved' && existingOutcome !== 'Resolved'
   const updateRecord = {
     outcome: status,
     notes: payload.notes ?? null,
     wd_notes: payload.wdNotes ?? null,
-    date_resolved: status === 'Resolved' ? new Date().toISOString().split('T')[0] : null,
+    date_actioned: shouldSetDateActioned ? today : existingDateActioned,
+    date_resolved: transitioningToResolved ? today : (status === 'Resolved' ? existingDateResolved : null),
   }
 
   const { error } = await supabase

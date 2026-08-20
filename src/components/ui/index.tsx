@@ -99,6 +99,134 @@ export function Card({ title, badge, children, className }: CardProps) {
   )
 }
 
+interface SkeletonBlockProps {
+  width?: number | string
+  height?: number | string
+  radius?: number | string
+  className?: string
+  style?: React.CSSProperties
+}
+
+export function SkeletonBlock({
+  width = '100%',
+  height = 12,
+  radius = 8,
+  className,
+  style,
+}: SkeletonBlockProps) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('skeleton-block', className)}
+      style={{ width, height, borderRadius: radius, ...style }}
+    />
+  )
+}
+
+export function SkeletonText({
+  lines = 3,
+  lastLineWidth = '60%',
+}: {
+  lines?: number
+  lastLineWidth?: number | string
+}) {
+  return (
+    <div aria-hidden="true" style={{ display: 'grid', gap: 8 }}>
+      {Array.from({ length: lines }).map((_, index) => (
+        <SkeletonBlock
+          key={index}
+          height={10}
+          radius={999}
+          width={index === lines - 1 ? lastLineWidth : '100%'}
+        />
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonCircle({ size = 24 }: { size?: number }) {
+  return <SkeletonBlock width={size} height={size} radius="50%" />
+}
+
+export function CardSkeleton({
+  title,
+  badgeWidth = 64,
+  lines = 3,
+  minHeight,
+}: {
+  title?: string
+  badgeWidth?: number
+  lines?: number
+  minHeight?: number
+}) {
+  return (
+    <Card
+      title={title}
+      badge={<SkeletonBlock width={badgeWidth} height={18} radius={999} />}
+      className="loading-card"
+    >
+      <div style={{ display: 'grid', gap: 10, minHeight }}>
+        <SkeletonText lines={lines} />
+      </div>
+    </Card>
+  )
+}
+
+export function TableSkeleton({
+  columns,
+  rows,
+}: {
+  columns: number
+  rows: number
+}) {
+  return (
+    <div aria-hidden="true" style={{ display: 'grid', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 12 }}>
+        {Array.from({ length: columns }).map((_, index) => (
+          <SkeletonBlock key={`head-${index}`} height={8} width="70%" radius={999} />
+        ))}
+      </div>
+      {Array.from({ length: rows }).map((_, rowIndex) => (
+        <div key={`row-${rowIndex}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 12 }}>
+          {Array.from({ length: columns }).map((__, colIndex) => (
+            <SkeletonBlock key={`cell-${rowIndex}-${colIndex}`} height={12} radius={999} width={colIndex === 0 ? '80%' : '100%'} />
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function ChartSkeleton({ height = 180 }: { height?: number }) {
+  return (
+    <div aria-hidden="true" style={{ display: 'grid', gap: 12 }}>
+      <SkeletonBlock height={height} radius={10} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <SkeletonBlock width={72} height={10} radius={999} />
+        <SkeletonBlock width={54} height={10} radius={999} />
+      </div>
+    </div>
+  )
+}
+
+export function LoadingNotice({
+  children = 'Loading…',
+  busy = true,
+}: {
+  children?: ReactNode
+  busy?: boolean
+}) {
+  return (
+    <span
+      aria-live="polite"
+      aria-busy={busy}
+      style={{ fontSize: 11, color: '#A5ACAF' }}
+    >
+      {children}
+    </span>
+  )
+}
+
 // ─── Score pill ───────────────────────────────────────────────────────────────
 export function ScorePill({ value, type = 'recovery' }: { value: number; type?: 'recovery' | 'sleep' }) {
   let cls = 'pill-green'

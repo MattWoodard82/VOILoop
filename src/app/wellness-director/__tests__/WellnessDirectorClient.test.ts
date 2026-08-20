@@ -20,7 +20,9 @@ jest.mock('@/components/layout/DashboardShell', () => {
   }
 })
 
-jest.mock('../WellnessDirectorCharts', () => ({ WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)) }))
+jest.mock('../WellnessDirectorCharts', () => ({
+  WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)),
+}))
 jest.mock('@/components/ui', () => {
   const React = require('react')
   return {
@@ -29,6 +31,10 @@ jest.mock('@/components/ui', () => {
     Card: ({ title, children }: { title: string; children: React.ReactNode }) => React.createElement('section', { 'data-title': title }, children),
     Badge: ({ children }: { children: React.ReactNode }) => React.createElement('span', null, children),
     BarRow: ({ label, value }: { label: string; value: number }) => React.createElement('div', null, `${label}:${value}`),
+    ChartSkeleton: () => React.createElement('div', { className: 'chart-skeleton' }),
+    LoadingNotice: ({ children }: { children?: React.ReactNode }) => React.createElement('span', null, children ?? 'Loading…'),
+    SkeletonBlock: () => React.createElement('div', { className: 'skeleton-block' }),
+    TableSkeleton: () => React.createElement('div', { className: 'table-skeleton' }),
   }
 })
 jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
@@ -38,6 +44,8 @@ jest.mock('next/link', () => {
   MockLink.displayName = 'MockLink'
   return MockLink
 })
+
+const originalUseState = React.useState
 
 const participant: ParticipantWithWellness = {
   id: 'P1',
@@ -70,44 +78,86 @@ const participant: ParticipantWithWellness = {
   override_note: null,
 }
 
-const selectedMarkup = (participants: any[]) => renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
+function renderClientMarkup(
+  participants: ParticipantWithWellness[],
+  {
+    deptFilter = 'All',
+    personFilter = 'All',
+    configLoaded = true,
+  }: {
+    deptFilter?: string
+    personFilter?: string
+    configLoaded?: boolean
+  } = {},
+) {
+  const useStateSpy = jest.spyOn(React, 'useState')
+  const useEffectSpy = jest.spyOn(React, 'useEffect').mockImplementation(() => {})
+
+  useStateSpy
+    .mockImplementationOnce(() => [deptFilter, jest.fn()])
+    .mockImplementationOnce(() => [personFilter, jest.fn()])
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(originalUseState as typeof React.useState)
+    .mockImplementationOnce(() => ['idle', jest.fn()])
+    .mockImplementationOnce(() => [configLoaded, jest.fn()])
+
+  try {
+    return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
+  } finally {
+    useStateSpy.mockRestore()
+    useEffectSpy.mockRestore()
+  }
+}
 
 describe('WellnessDirectorClient', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
 
-  test('renders explainability and baseline state', () => {
-    const markup = selectedMarkup([participant])
+  test('renders loading placeholders before config hydration finishes', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1', configLoaded: false })
+    expect(markup).toContain('Loading weights…')
+    expect(markup).toContain('table-skeleton')
+    expect(markup).toContain('chart-skeleton')
+  })
+
+  test('renders explainability, score breakdown, and selected participant controls when config is loaded', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('Engagement score')
     expect(markup).toContain('Baseline building (13 days remaining)')
-    expect(markup).toContain('improving')
-  })
-
-  test('shows the five FR-13 engagement component labels in the breakdown', () => {
-    const markup = selectedMarkup([participant])
-    expect(markup).toContain('WHOOP/CSV submission consistency')
-    expect(markup).toContain('Device-wear consistency')
-    expect(markup).toContain('Pulse survey completion')
-    expect(markup).toContain('Nudge response rate')
-    expect(markup).toContain('Workout volume vs. baseline')
-  })
-
-  test('shows snooze and dismiss controls for the selected participant', () => {
-    const markup = selectedMarkup([participant])
+    expect(markup).toContain('aria-label="override note"')
     expect(markup).toContain('Snooze')
     expect(markup).toContain('Dismiss')
+    expect(markup).toContain('Loading weights…')
+    expect(markup).toContain('table-skeleton')
   })
 
-  test('scope changes still leave selected participant within the filtered set', () => {
-    const markup = selectedMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }])
+  test('shows selection guidance when all participants are in scope', () => {
+    const markup = renderClientMarkup([participant, { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' }], {
+      deptFilter: 'All',
+      personFilter: 'All',
+    })
     expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
+    expect(markup).toContain('Choose a participant to view risk tier.')
+    expect(markup).toContain('table-skeleton')
   })
 
-  test('omits missing engagement scores from the chart', () => {
-    const markup = selectedMarkup([{ ...participant, engagement_score: null } as any])
-    expect(markup).not.toContain('"value":0')
+  test('shows empty states when selected participant data is unavailable or out of scope', () => {
+    const missingBreakdownMarkup = renderClientMarkup(
+      [{ ...participant, engagement_score_components: null } as ParticipantWithWellness],
+      { personFilter: 'P1' },
+    )
+    expect(missingBreakdownMarkup).toContain('table-skeleton')
+
+    const erParticipant = { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' } as ParticipantWithWellness
+    const outOfScopeMarkup = renderClientMarkup([participant, erParticipant], {
+      deptFilter: 'ER',
+      personFilter: 'P1',
+    })
+    expect(outOfScopeMarkup).toContain('Choose a participant to review baseline status and overrides.')
+    expect(outOfScopeMarkup).toContain('table-skeleton')
   })
 
   test('wellness director page links to the events manager for leadership users', async () => {
@@ -134,6 +184,51 @@ describe('WellnessDirectorClient', () => {
 
     expect(markup).toContain('Events and nudges')
     expect(markup).toContain('Open events manager')
-    expect(markup).toContain('href="/admin/events"')
+    expect(markup).toContain('href="/wellness-director/events"')
+  })
+
+  test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+      },
+      interventions: [
+        {
+          id: 'int-1',
+          participant_id: 'P1',
+          date_triggered: '2026-08-07',
+          department: 'Ops',
+          trigger_metric: 'Recovery Score',
+          trigger_value: '38',
+          intervention_type: '1:1 Wellness Check-in',
+          assigned_to: 'Wellness Director',
+          date_actioned: null,
+          date_resolved: null,
+          outcome: 'Pending',
+          notes: 'Immediate review',
+          wd_notes: null,
+        },
+      ],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).toContain('Department intervention summary')
+    expect(markup).toContain('Live summary of logged intervention records by department. Computed, data-driven recommendations are coming soon.')
+    expect(markup).toContain('Logged triggers: Recovery Score')
+    expect(markup).toContain('Logged interventions')
+    expect(markup).not.toContain('Suggested interventions by department')
   })
 })

@@ -7,6 +7,9 @@ const ADMIN_ONLY = ['/admin']
 // /admin/import is accessible to any authenticated user; list it before ADMIN_ONLY so it takes priority
 const AUTHENTICATED_ROUTES = ['/admin/import']
 const WELLNESS_DIRECTOR_ROUTES = ['/wellness-director', '/pulse', '/interventions', '/outcomes', '/admin/challenges']
+const LEADERSHIP_REDIRECTS: Record<string, string> = {
+  '/admin/events': '/wellness-director/events',
+}
 const LEGACY_EXECUTIVE_ROUTE = '/executive'
 
 type CookieToSet = {
@@ -39,6 +42,15 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     const suffix = pathname.slice(LEGACY_EXECUTIVE_ROUTE.length)
     url.pathname = `/wellness-director${suffix}`
+    return NextResponse.redirect(url)
+  }
+
+  const matchedLeadershipRedirect = Object.entries(LEADERSHIP_REDIRECTS).find(([route]) => isRouteMatch(pathname, route))
+  if (matchedLeadershipRedirect) {
+    const [legacyRoute, targetRoute] = matchedLeadershipRedirect
+    const url = request.nextUrl.clone()
+    const suffix = pathname.slice(legacyRoute.length)
+    url.pathname = `${targetRoute}${suffix}`
     return NextResponse.redirect(url)
   }
 

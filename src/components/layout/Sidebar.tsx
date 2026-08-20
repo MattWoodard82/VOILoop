@@ -5,8 +5,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Activity, BarChart2, MessageSquare, Target, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
+import { SkeletonBlock } from '@/components/ui'
 
-type NavRole = 'admin' | 'wellness_director' | 'participant' | null
+export type NavRole = 'admin' | 'wellness_director' | 'participant' | null
 
 const LEADERSHIP_NAV = [
   { label: 'Dashboards', items: [
@@ -16,7 +17,7 @@ const LEADERSHIP_NAV = [
   { label: 'Programs', items: [
     { href: '/interventions', label: 'Interventions', icon: Target },
     { href: '/outcomes', label: 'Outcomes', icon: TrendingUp },
-    { href: '/admin/events', label: 'Events and Nudges', icon: MessageSquare },
+    { href: '/wellness-director/events', label: 'Events and Nudges', icon: MessageSquare },
   ]},
 ]
 
@@ -34,12 +35,20 @@ const PARTICIPANT_NAV = [
   ]},
 ]
 
-export function Sidebar() {
+export function getNavigationForRole(role: NavRole, _pathname: string) {
+  if (role === 'admin') return ADMIN_NAV
+  if (role === 'wellness_director') return LEADERSHIP_NAV
+  if (role === 'participant') return PARTICIPANT_NAV
+  return []
+}
+
+export function Sidebar({ initialRole = null }: { initialRole?: NavRole }) {
   const pathname = usePathname()
   const router = useRouter()
   const [email, setEmail] = useState('')
-  const [role, setRole] = useState<NavRole>(null)
+  const [role, setRole] = useState<NavRole>(initialRole)
   const [signingOut, setSigningOut] = useState(false)
+  const [hydratedIdentity, setHydratedIdentity] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -60,6 +69,7 @@ export function Sidebar() {
 
       if (mounted) {
         setRole((access?.role as NavRole | undefined) ?? null)
+        setHydratedIdentity(true)
       }
     }
 
@@ -76,12 +86,7 @@ export function Sidebar() {
     return source.slice(0, 2).toUpperCase()
   }, [email])
 
-  const nav = useMemo(() => {
-    if (role === 'admin') return ADMIN_NAV
-    if (role === 'wellness_director') return LEADERSHIP_NAV
-    if (role === 'participant') return PARTICIPANT_NAV
-    return pathname.startsWith('/my') || pathname.startsWith('/admin/import') ? PARTICIPANT_NAV : LEADERSHIP_NAV
-  }, [pathname, role])
+  const nav = useMemo(() => getNavigationForRole(role, pathname), [role, pathname])
 
   const handleSignOut = async () => {
     setSigningOut(true)
@@ -139,9 +144,13 @@ export function Sidebar() {
             {initials}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {email || 'Signed in'}
-            </div>
+            {hydratedIdentity ? (
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {email || 'Signed in'}
+              </div>
+            ) : (
+              <SkeletonBlock width={112} height={12} radius={999} />
+            )}
           </div>
         </div>
         <button

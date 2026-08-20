@@ -30,7 +30,9 @@ interface Props {
   empMap: Record<string, Participant>
 }
 
-const statusVariant = (s: string) =>
+type InterventionBadgeVariant = 'green' | 'amber' | 'red' | 'wolf'
+
+const statusVariant = (s: InterventionStatus): InterventionBadgeVariant =>
   s === 'Pending' ? 'red' : s === 'In Progress' ? 'amber' : s === 'Monitoring' ? 'wolf' : 'green'
 
 export function InterventionsTableClient({ interventions, empMap }: Props) {
@@ -71,7 +73,7 @@ export function InterventionsTableClient({ interventions, empMap }: Props) {
               <td style={{ color: '#A5ACAF' }}>{int.assigned_to}</td>
               <td style={{ color: '#A5ACAF' }}>{int.date_triggered ? formatDate(int.date_triggered) : '—'}</td>
               <td style={{ textAlign: 'right' }}>
-                <Badge variant={statusVariant(int.outcome) as any}>{int.outcome}</Badge>
+                <Badge variant={statusVariant(int.outcome)}>{int.outcome}</Badge>
               </td>
             </tr>
           )

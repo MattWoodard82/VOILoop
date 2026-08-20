@@ -1,5 +1,5 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getTeamDashboard, getTeamWellnessTrend } from '@/lib/supabase/queries'
+import { getRecentlyResolvedInterventions, getTeamDashboard, getTeamWellnessTrend } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge, Alert } from '@/components/ui'
 import { Check } from 'lucide-react'
 import { OutcomesCharts } from './OutcomesCharts'
@@ -13,9 +13,10 @@ export default async function OutcomesPage() {
   if ('redirect' in access && access.redirect) redirect(access.redirect)
   if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
 
-  const [{ participants, stats, interventions }, trend] = await Promise.all([
+  const [{ participants, stats, interventions }, trend, recentlyResolved] = await Promise.all([
     getTeamDashboard(),
     getTeamWellnessTrend(5),
+    getRecentlyResolvedInterventions(10),
   ])
 
   const benchmark = participants.find((e) => e.is_exact_data)
@@ -95,7 +96,7 @@ export default async function OutcomesPage() {
 
       <div style={{ marginTop: 14 }}>
         <Card title="Recently resolved interventions" badge={<Badge variant="green">{resolved.length} resolved</Badge>}>
-          {resolved.length === 0 ? (
+          {recentlyResolved.length === 0 ? (
             <div style={{ fontSize: 12, color: '#A5ACAF' }}>No resolved interventions yet.</div>
           ) : (
             <table className="data-table">
@@ -109,7 +110,7 @@ export default async function OutcomesPage() {
                 </tr>
               </thead>
               <tbody>
-                {resolved.slice(0, 10).map((entry) => {
+                {recentlyResolved.map((entry) => {
                   const participant = participantMap[entry.participant_id]
                   return (
                     <tr key={entry.id}>
@@ -117,7 +118,7 @@ export default async function OutcomesPage() {
                       <td>{entry.department ?? '—'}</td>
                       <td>{entry.trigger_metric ?? '—'}</td>
                       <td>{entry.intervention_type ?? '—'}</td>
-                      <td style={{ textAlign: 'right', color: '#A5ACAF' }}>{entry.date_resolved ?? entry.date_actioned ?? '—'}</td>
+                      <td style={{ textAlign: 'right', color: '#A5ACAF' }}>{entry.date_resolved}</td>
                     </tr>
                   )
                 })}

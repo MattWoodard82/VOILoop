@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { parseFrontendError } from '@/lib/frontend-error'
+import { Card, LoadingNotice, SkeletonBlock, SkeletonText } from '@/components/ui'
 
 interface Event {
   id: string
@@ -158,7 +159,8 @@ export function EventsNudgeCard() {
     setAckSubmitting(false)
   }
 
-  if (loading) return null
+  const showNudgeSkeleton = loading && !nudge
+  const showEventsSkeleton = loading && events.length === 0
 
   return (
     <div style={{ marginBottom: 14 }}>
@@ -200,7 +202,17 @@ export function EventsNudgeCard() {
         </div>
       )}
 
-      {nudge && (
+      {showNudgeSkeleton ? (
+        <Card title="This week's focus" className="loading-card">
+          <div style={{ display: 'grid', gap: 10, minHeight: 124 }}>
+            <SkeletonText lines={3} lastLineWidth="80%" />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <SkeletonBlock width="58%" height={10} radius={999} />
+              <SkeletonBlock width={96} height={28} radius={999} />
+            </div>
+          </div>
+        </Card>
+      ) : nudge ? (
         <div style={{
           background: '#002244',
           border: '1px solid #0a3560',
@@ -209,8 +221,11 @@ export function EventsNudgeCard() {
           padding: '14px 18px',
           marginBottom: 10,
         }}>
-          <div style={{ fontSize: 10, color: '#69BE28', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, marginBottom: 6 }}>
-            This week&apos;s focus · from {nudge.author}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ fontSize: 10, color: '#69BE28', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600 }}>
+              This week&apos;s focus · from {nudge.author}
+            </div>
+            {loading ? <LoadingNotice>Refreshing…</LoadingNotice> : null}
           </div>
           <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.6 }}>
             {nudge.message}
@@ -224,13 +239,35 @@ export function EventsNudgeCard() {
             </button>
           )}
         </div>
-      )}
+      ) : null}
 
-      {events.length > 0 && (
-        <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 10, overflow: 'hidden' }}>
+      {showEventsSkeleton ? (
+        <Card title="Upcoming events" badge={<LoadingNotice>Loading…</LoadingNotice>} className="loading-card">
+          <div style={{ display: 'grid', gap: 14, minHeight: 214 }}>
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} style={{ display: 'flex', gap: 12 }}>
+                <SkeletonBlock width={36} height={36} radius={8} />
+                <div style={{ flex: 1, display: 'grid', gap: 8 }}>
+                  <SkeletonBlock width="42%" height={12} radius={999} />
+                  <SkeletonBlock width="58%" height={10} radius={999} />
+                  <SkeletonBlock width="88%" height={10} radius={999} />
+                </div>
+                <div style={{ display: 'grid', justifyItems: 'end', gap: 8 }}>
+                  <SkeletonBlock width={48} height={10} radius={999} />
+                  <SkeletonBlock width={64} height={26} radius={999} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : events.length > 0 ? (
+        <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 10, overflow: 'hidden', position: 'relative', minHeight: 214 }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #0a3560', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>Upcoming events</div>
-            <div style={{ fontSize: 10, color: '#A5ACAF' }}>{events.length} coming up</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {loading ? <LoadingNotice>Refreshing…</LoadingNotice> : null}
+              <div style={{ fontSize: 10, color: '#A5ACAF' }}>{events.length} coming up</div>
+            </div>
           </div>
 
           {events.map((event, i) => {
@@ -298,7 +335,7 @@ export function EventsNudgeCard() {
             )
           })}
         </div>
-      )}
+      ) : loading ? null : null}
     </div>
   )
 }

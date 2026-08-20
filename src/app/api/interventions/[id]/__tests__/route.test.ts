@@ -63,12 +63,22 @@ describe('PATCH /api/interventions/[id]', () => {
     mockGetSession.mockResolvedValue({ user: { id: 'wd-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: false })
 
-    const eq = jest.fn(async () => ({ error: null }))
-    const update = jest.fn(() => ({ eq }))
+    const updateEq = jest.fn(async () => ({ error: null }))
+    const update = jest.fn(() => ({ eq: updateEq }))
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
         if (table === 'interventions') {
-          return { update }
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({
+                  data: { date_actioned: null },
+                  error: null,
+                })),
+              })),
+            })),
+            update,
+          }
         }
         throw new Error(`Unexpected table ${table}`)
       }),
@@ -87,19 +97,30 @@ describe('PATCH /api/interventions/[id]', () => {
       outcome: 'Monitoring',
       notes: 'Progressing',
       wd_notes: 'Keep checking weekly',
+      date_actioned: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
       date_resolved: null,
     })
-    expect(eq).toHaveBeenCalledWith('id', 'int-1')
+    expect(updateEq).toHaveBeenCalledWith('id', 'int-1')
   })
 
   test('sets date_resolved when status is Resolved', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
 
-    const eq = jest.fn(async () => ({ error: null }))
-    const update = jest.fn(() => ({ eq }))
+    const updateEq = jest.fn(async () => ({ error: null }))
+    const update = jest.fn(() => ({ eq: updateEq }))
     mockCreateServerSupabaseClient.mockReturnValue({
-      from: jest.fn(() => ({ update })),
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { date_actioned: '2026-08-01' },
+              error: null,
+            })),
+          })),
+        })),
+        update,
+      })),
     } as never)
 
     const response = await PATCH(makePatchRequest({
@@ -113,7 +134,78 @@ describe('PATCH /api/interventions/[id]', () => {
     expect(response.status).toBe(200)
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
       outcome: 'Resolved',
+      date_actioned: '2026-08-01',
       date_resolved: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     }))
+  })
+
+  test('saving notes on an already-Resolved record preserves the original date_resolved', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
+
+    const update = jest.fn(() => ({ eq: jest.fn(async () => ({ error: null })) }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { date_actioned: '2026-08-01', date_resolved: '2026-08-10', outcome: 'Resolved' },
+              error: null,
+            })),
+          })),
+        })),
+        update,
+      })),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({
+      status: 'Resolved',
+      notes: 'Updated notes without changing status',
+      wdNotes: 'Added wd note',
+    }), {
+      params: { id: 'int-4' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'Resolved',
+      date_resolved: '2026-08-10', // preserved, not overwritten with today
+    }))
+  })
+  test('reopening preserves date_actioned and clears date_resolved', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
+
+    const update = jest.fn(() => ({ eq: jest.fn(async () => ({ error: null })) }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { date_actioned: '2026-08-01' },
+              error: null,
+            })),
+          })),
+        })),
+        update,
+      })),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({
+      status: 'Pending',
+      notes: 'Needs more follow-up',
+      wdNotes: 'Reopened after participant relapse',
+    }), {
+      params: { id: 'int-3' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(update).toHaveBeenCalledWith({
+      outcome: 'Pending',
+      notes: 'Needs more follow-up',
+      wd_notes: 'Reopened after participant relapse',
+      date_actioned: '2026-08-01',
+      date_resolved: null,
+    })
   })
 })

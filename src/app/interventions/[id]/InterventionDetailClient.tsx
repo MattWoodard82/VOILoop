@@ -2,16 +2,17 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts'
+import type { DailyWellness, Habit, Intervention, InterventionStatus, Participant, Workout } from '@/types'
 
 interface Props {
-  intervention: any
-  participant: any
-  wellness: any[]
-  habits: any[]
-  workouts: any[]
+  intervention: Intervention
+  participant: Participant | null
+  wellness: DailyWellness[]
+  habits: Habit[]
+  workouts: Workout[]
 }
 
-const STATUS_OPTIONS = ['Pending', 'In Progress', 'Monitoring', 'Resolved']
+const STATUS_OPTIONS: InterventionStatus[] = ['Pending', 'In Progress', 'Monitoring', 'Resolved']
 
 const statusColor = (s: string) => {
   if (s === 'Resolved') return '#69BE28'
@@ -43,7 +44,7 @@ function MetricCard({ label, before, after, unit }: { label: string; before: any
   )
 }
 
-export function InterventionDetailClient({ intervention, participant, wellness, habits, workouts }: Props) {
+export function InterventionDetailClient({ intervention, participant, wellness, habits: _habits, workouts }: Props) {
   const router = useRouter()
   const [status, setStatus] = useState(intervention.outcome ?? 'Pending')
   const [notes, setNotes] = useState(intervention.notes ?? '')
@@ -221,9 +222,9 @@ export function InterventionDetailClient({ intervention, participant, wellness, 
             </div>
           </div>
           <div>
-            <label style={labelStyle}>Recommended action / notes (visible to admin)</label>
+            <label style={labelStyle}>Intervention notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              placeholder="e.g. Schedule 1:1 check-in, recommend sleep hygiene program..."
+              placeholder="Add notes about this intervention — visible to admins and wellness directors"
               style={{ ...inputStyle, resize: 'vertical' as const }} />
           </div>
         </div>

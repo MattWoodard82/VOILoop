@@ -1,0 +1,351 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`InterventionsPage renders manual logging copy and coming-soon recommendation card 1`] = `
+<DashboardShell
+  title="Intervention Tracking"
+>
+  <div
+    style={
+      {
+        "display": "grid",
+        "gap": 10,
+        "gridTemplateColumns": "repeat(4,1fr)",
+        "marginBottom": 18,
+      }
+    }
+  >
+    <KpiCard
+      color="#ff6b6b"
+      delta="1 manually logged records"
+      deltaDir="neutral"
+      label="Triggered interventions"
+      value={1}
+    />
+    <KpiCard
+      color="#FFA500"
+      delta="Manual review queue"
+      deltaDir="neutral"
+      label="Pending action"
+      value={1}
+    />
+    <KpiCard
+      color="#A5ACAF"
+      delta="No monitoring records"
+      deltaDir="neutral"
+      label="In progress"
+      value={0}
+    />
+    <KpiCard
+      color="#69BE28"
+      delta="1 still open"
+      deltaDir="neutral"
+      label="Resolved interventions"
+      value={0}
+    />
+  </div>
+  <Card
+    badge={
+      <InterventionCreateClient
+        participants={
+          [
+            {
+              "department": "ICU",
+              "first_name": "Alex",
+              "id": "EMP001",
+              "last_name": "Morgan",
+            },
+          ]
+        }
+      />
+    }
+    title="Active intervention log"
+  >
+    <InterventionsTableClient
+      empMap={
+        {
+          "EMP001": {
+            "department": "ICU",
+            "first_name": "Alex",
+            "id": "EMP001",
+            "last_name": "Morgan",
+          },
+        }
+      }
+      interventions={
+        [
+          {
+            "assigned_to": "Wellness Director",
+            "date_triggered": "2026-08-18",
+            "department": "ICU",
+            "id": "int-1",
+            "intervention_type": "1:1 Wellness Check-in",
+            "notes": "Needs review",
+            "outcome": "Pending",
+            "participant_id": "EMP001",
+            "trigger_metric": "Recovery Score",
+            "trigger_value": "38",
+          },
+        ]
+      }
+    />
+  </Card>
+  <div
+    style={
+      {
+        "display": "grid",
+        "gap": 14,
+        "gridTemplateColumns": "1fr 1fr",
+        "marginTop": 14,
+      }
+    }
+  >
+    <Card
+      title="Recommended actions"
+    >
+      <div
+        style={
+          {
+            "color": "#A5ACAF",
+            "fontSize": 12,
+            "lineHeight": 1.6,
+          }
+        }
+      >
+        Coming soon. Intervention logging is manual today, and this dashboard does not yet generate recommendation cards from live data.
+      </div>
+    </Card>
+    <Card
+      title="Status breakdown"
+    >
+      <div
+        style={
+          {
+            "alignItems": "center",
+            "display": "flex",
+            "gap": 8,
+            "marginBottom": 10,
+          }
+        }
+      >
+        <span
+          style={
+            {
+              "color": "#A5ACAF",
+              "fontSize": 11,
+              "width": 100,
+            }
+          }
+        >
+          Pending
+        </span>
+        <div
+          style={
+            {
+              "background": "#0a3560",
+              "borderRadius": 4,
+              "flex": 1,
+              "height": 8,
+              "overflow": "hidden",
+            }
+          }
+        >
+          <div
+            style={
+              {
+                "background": "#ff6b6b",
+                "borderRadius": 4,
+                "height": "100%",
+                "width": "100%",
+              }
+            }
+          />
+        </div>
+        <span
+          style={
+            {
+              "color": "#ff6b6b",
+              "fontSize": 12,
+              "fontWeight": 700,
+              "textAlign": "right",
+              "width": 20,
+            }
+          }
+        >
+          1
+        </span>
+      </div>
+      <div
+        style={
+          {
+            "alignItems": "center",
+            "display": "flex",
+            "gap": 8,
+            "marginBottom": 10,
+          }
+        }
+      >
+        <span
+          style={
+            {
+              "color": "#A5ACAF",
+              "fontSize": 11,
+              "width": 100,
+            }
+          }
+        >
+          In progress
+        </span>
+        <div
+          style={
+            {
+              "background": "#0a3560",
+              "borderRadius": 4,
+              "flex": 1,
+              "height": 8,
+              "overflow": "hidden",
+            }
+          }
+        >
+          <div
+            style={
+              {
+                "background": "#FFA500",
+                "borderRadius": 4,
+                "height": "100%",
+                "width": "0%",
+              }
+            }
+          />
+        </div>
+        <span
+          style={
+            {
+              "color": "#FFA500",
+              "fontSize": 12,
+              "fontWeight": 700,
+              "textAlign": "right",
+              "width": 20,
+            }
+          }
+        >
+          0
+        </span>
+      </div>
+      <div
+        style={
+          {
+            "alignItems": "center",
+            "display": "flex",
+            "gap": 8,
+            "marginBottom": 10,
+          }
+        }
+      >
+        <span
+          style={
+            {
+              "color": "#A5ACAF",
+              "fontSize": 11,
+              "width": 100,
+            }
+          }
+        >
+          Monitoring
+        </span>
+        <div
+          style={
+            {
+              "background": "#0a3560",
+              "borderRadius": 4,
+              "flex": 1,
+              "height": 8,
+              "overflow": "hidden",
+            }
+          }
+        >
+          <div
+            style={
+              {
+                "background": "#A5ACAF",
+                "borderRadius": 4,
+                "height": "100%",
+                "width": "0%",
+              }
+            }
+          />
+        </div>
+        <span
+          style={
+            {
+              "color": "#A5ACAF",
+              "fontSize": 12,
+              "fontWeight": 700,
+              "textAlign": "right",
+              "width": 20,
+            }
+          }
+        >
+          0
+        </span>
+      </div>
+      <div
+        style={
+          {
+            "alignItems": "center",
+            "display": "flex",
+            "gap": 8,
+            "marginBottom": 10,
+          }
+        }
+      >
+        <span
+          style={
+            {
+              "color": "#A5ACAF",
+              "fontSize": 11,
+              "width": 100,
+            }
+          }
+        >
+          Resolved
+        </span>
+        <div
+          style={
+            {
+              "background": "#0a3560",
+              "borderRadius": 4,
+              "flex": 1,
+              "height": 8,
+              "overflow": "hidden",
+            }
+          }
+        >
+          <div
+            style={
+              {
+                "background": "#69BE28",
+                "borderRadius": 4,
+                "height": "100%",
+                "width": "0%",
+              }
+            }
+          />
+        </div>
+        <span
+          style={
+            {
+              "color": "#69BE28",
+              "fontSize": 12,
+              "fontWeight": 700,
+              "textAlign": "right",
+              "width": 20,
+            }
+          }
+        >
+          0
+        </span>
+      </div>
+    </Card>
+  </div>
+</DashboardShell>
+`;

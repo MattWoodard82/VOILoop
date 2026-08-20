@@ -1,4 +1,10 @@
-import { getLatestWellness, getLatestWorkouts, getParticipantImportBatches, getTeamDashboard } from '../queries'
+import {
+  getLatestWellness,
+  getLatestWorkouts,
+  getParticipantImportBatches,
+  getRecentlyResolvedInterventions,
+  getTeamDashboard,
+} from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
 
@@ -316,6 +322,67 @@ describe('getParticipantImportBatches', () => {
     await expect(getParticipantImportBatches('P1', 2)).resolves.toEqual([
       { id: 'batch-3', participant_id: 'P1', started_at: '2026-07-04T10:00:00Z' },
       { id: 'batch-2', participant_id: 'P1', started_at: '2026-07-03T10:00:00Z' },
+    ])
+  })
+})
+
+describe('getRecentlyResolvedInterventions', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+  const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockCreateServerSupabaseClient.mockImplementation(() => {
+      throw new Error('Server client unavailable in unit test')
+    })
+  })
+
+  test('returns only resolved rows ordered by date_resolved descending', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        interventions: [
+          { id: 'resolved-older', participant_id: 'P1', outcome: 'Resolved', date_resolved: '2026-06-01', date_triggered: '2026-07-10' },
+          { id: 'resolved-newer', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-15', date_triggered: '2026-05-01' },
+          { id: 'monitoring-1', participant_id: 'P3', outcome: 'Monitoring', date_resolved: '2026-08-01', date_triggered: '2026-08-01' },
+        ],
+      }) as never
+    )
+
+    await expect(getRecentlyResolvedInterventions()).resolves.toEqual([
+      { id: 'resolved-newer', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-15', date_triggered: '2026-05-01' },
+      { id: 'resolved-older', participant_id: 'P1', outcome: 'Resolved', date_resolved: '2026-06-01', date_triggered: '2026-07-10' },
+    ])
+  })
+
+  test('applies the requested limit after resolution-date ordering', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        interventions: [
+          { id: 'resolved-1', participant_id: 'P1', outcome: 'Resolved', date_resolved: '2026-07-03' },
+          { id: 'resolved-2', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-02' },
+          { id: 'resolved-3', participant_id: 'P3', outcome: 'Resolved', date_resolved: '2026-07-01' },
+        ],
+      }) as never
+    )
+
+    await expect(getRecentlyResolvedInterventions(2)).resolves.toEqual([
+      { id: 'resolved-1', participant_id: 'P1', outcome: 'Resolved', date_resolved: '2026-07-03' },
+      { id: 'resolved-2', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-02' },
+    ])
+  })
+
+  test('drops resolved rows with missing date_resolved so the section stays explicitly date-driven', async () => {
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        interventions: [
+          { id: 'resolved-missing-date', participant_id: 'P1', outcome: 'Resolved', date_resolved: null, date_triggered: '2026-07-05' },
+          { id: 'resolved-dated', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-04', date_triggered: '2026-06-01' },
+        ],
+      }) as never
+    )
+
+    await expect(getRecentlyResolvedInterventions()).resolves.toEqual([
+      { id: 'resolved-dated', participant_id: 'P2', outcome: 'Resolved', date_resolved: '2026-07-04', date_triggered: '2026-06-01' },
     ])
   })
 })

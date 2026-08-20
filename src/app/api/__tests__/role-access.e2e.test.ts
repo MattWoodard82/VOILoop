@@ -96,6 +96,11 @@ describe('role access e2e (route-level)', () => {
         }
         if (table === 'interventions') {
           return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { date_actioned: null }, error: null })),
+              })),
+            })),
             update: jest.fn(() => ({
               eq: jest.fn(async () => ({ error: null })),
             })),
@@ -133,7 +138,14 @@ describe('role access e2e (route-level)', () => {
     }))
     mockCreateServerSupabaseClient.mockReturnValue({
       from: jest.fn((table: string) => {
-        if (table === 'interventions') return { update }
+        if (table === 'interventions') return {
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(async () => ({ data: { date_actioned: null }, error: null })),
+            })),
+          })),
+          update,
+        }
         if (table === 'events') return { insert: jest.fn(async () => ({ error: null })) }
         throw new Error(`Unexpected table ${table}`)
       }),
@@ -155,6 +167,16 @@ describe('role access e2e (route-level)', () => {
       body: JSON.stringify({ title: 'Event', event_date: '2026-08-01', event_type: 'general' }),
     }))
     expect(adminPostResponse.status).toBe(200)
+  })
+
+  test('wellness directors are still blocked from participant-only events route after leadership route move', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'wd-2' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'wellness_director', mustChangePassword: false })
+
+    const response = await getParticipantEvents()
+    if (!response) throw new Error('Expected participant route response')
+
+    expect(response.status).toBe(403)
   })
 
   test('admins can access admin mutations but are blocked from participant-only route', async () => {

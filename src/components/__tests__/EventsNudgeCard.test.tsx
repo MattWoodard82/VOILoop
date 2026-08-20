@@ -17,6 +17,15 @@ jest.mock('react', () => {
 jest.mock('@/lib/frontend-error', () => ({
   parseFrontendError: jest.fn(),
 }))
+jest.mock('@/components/ui', () => {
+  const React = require('react')
+  return {
+    Card: ({ title, badge, children }: { title?: React.ReactNode; badge?: React.ReactNode; children: React.ReactNode }) => React.createElement('section', null, title, badge, children),
+    LoadingNotice: ({ children }: { children?: React.ReactNode }) => React.createElement('span', null, children ?? 'Loading…'),
+    SkeletonBlock: () => React.createElement('div', { className: 'skeleton-block' }),
+    SkeletonText: () => React.createElement('div', { className: 'skeleton-block' }),
+  }
+})
 
 const mockParseFrontendError = parseFrontendError as jest.Mock
 
@@ -101,6 +110,26 @@ describe('EventsNudgeCard', () => {
     expect(markup).toContain('Bring water')
     expect(markup).toContain('✓ Going')
     expect(markup).toContain('Weekly')
+  })
+
+  test('renders stable skeleton shells while card data is loading', async () => {
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([null, jest.fn()]) // nudge
+      .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // rsvps
+      .mockReturnValueOnce([true, jest.fn()]) // loading
+      .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
+      .mockReturnValueOnce(['', jest.fn()]) // ackText
+      .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
+
+    const { EventsNudgeCard } = await import('../EventsNudgeCard')
+    const markup = renderToStaticMarkup(React.createElement(EventsNudgeCard))
+
+    expect(markup).toContain('This week&#x27;s focus')
+    expect(markup).toContain('Upcoming events')
+    expect(markup).toContain('skeleton-block')
   })
 
   test('submitAcknowledgement shows the parsed structured error message when the PATCH fails', async () => {
