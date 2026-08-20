@@ -46,10 +46,10 @@ export async function PATCH(
 
   const supabase = createServerSupabaseClient()
 
-  // Fetch the existing record to preserve date_actioned across updates
+  // Fetch the existing record to preserve date_actioned and date_resolved across updates
   const { data: existing, error: fetchError } = await supabase
     .from('interventions')
-    .select('date_actioned')
+    .select('date_actioned, date_resolved, outcome')
     .eq('id', interventionId)
     .maybeSingle()
 
@@ -59,13 +59,18 @@ export async function PATCH(
 
   const today = new Date().toISOString().split('T')[0]
   const existingDateActioned = existing?.date_actioned ?? null
+  const existingDateResolved = existing?.date_resolved ?? null
+  const existingOutcome = existing?.outcome ?? null
   const shouldSetDateActioned = existingDateActioned === null && ACTIONED_STATUSES.has(status)
+  // Preserve the original resolution date when the record is already Resolved —
+  // only stamp today on a fresh transition into Resolved, clear on reopen.
+  const transitioningToResolved = status === 'Resolved' && existingOutcome !== 'Resolved'
   const updateRecord = {
     outcome: status,
     notes: payload.notes ?? null,
     wd_notes: payload.wdNotes ?? null,
     date_actioned: shouldSetDateActioned ? today : existingDateActioned,
-    date_resolved: status === 'Resolved' ? today : null,
+    date_resolved: transitioningToResolved ? today : (status === 'Resolved' ? existingDateResolved : null),
   }
 
   const { error } = await supabase

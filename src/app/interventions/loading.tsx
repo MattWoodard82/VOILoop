@@ -1,9 +1,8 @@
-import { DashboardShell } from '@/components/layout/DashboardShell'
 import { CardSkeleton } from '@/components/ui'
 
 export default function Loading() {
   return (
-    <DashboardShell title="Intervention Tracking">
+    <div style={{ padding: "20px 24px" }}>
       <div style={{ display: 'grid', gap: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {Array.from({ length: 4 }).map((_, index) => (
@@ -12,6 +11,6 @@ export default function Loading() {
         </div>
         <CardSkeleton title="Active intervention log" lines={8} minHeight={260} />
       </div>
-    </DashboardShell>
+    </div>
   )
 }

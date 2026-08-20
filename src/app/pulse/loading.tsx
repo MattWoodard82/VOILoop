@@ -1,9 +1,8 @@
-import { DashboardShell } from '@/components/layout/DashboardShell'
 import { CardSkeleton } from '@/components/ui'
 
 export default function Loading() {
   return (
-    <DashboardShell title="Pulse Survey Dashboard">
+    <div style={{ padding: "20px 24px" }}>
       <div style={{ display: 'grid', gap: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {Array.from({ length: 4 }).map((_, index) => (
@@ -20,6 +19,6 @@ export default function Loading() {
           <CardSkeleton title="Question breakdown" lines={7} minHeight={240} />
         </div>
       </div>
-    </DashboardShell>
+    </div>
   )
 }

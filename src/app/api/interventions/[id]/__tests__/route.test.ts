@@ -139,6 +139,39 @@ describe('PATCH /api/interventions/[id]', () => {
     }))
   })
 
+  test('saving notes on an already-Resolved record preserves the original date_resolved', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })
+
+    const update = jest.fn(() => ({ eq: jest.fn(async () => ({ error: null })) }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { date_actioned: '2026-08-01', date_resolved: '2026-08-10', outcome: 'Resolved' },
+              error: null,
+            })),
+          })),
+        })),
+        update,
+      })),
+    } as never)
+
+    const response = await PATCH(makePatchRequest({
+      status: 'Resolved',
+      notes: 'Updated notes without changing status',
+      wdNotes: 'Added wd note',
+    }), {
+      params: { id: 'int-4' },
+    })
+
+    expect(response.status).toBe(200)
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: 'Resolved',
+      date_resolved: '2026-08-10', // preserved, not overwritten with today
+    }))
+  })
   test('reopening preserves date_actioned and clears date_resolved', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'admin-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'admin', mustChangePassword: false })

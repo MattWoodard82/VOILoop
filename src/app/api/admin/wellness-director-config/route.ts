@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createServerSupabaseClient, requireAdmin } from '@/lib/supabase/server'
+import { createServerSupabaseClient, requireAdmin, getSession, getUserAccess } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -39,8 +39,13 @@ function normalizeWeights(rawWeights: unknown): typeof DEFAULT_WEIGHTS {
 }
 
 export async function GET() {
-  const admin = await requireAdmin()
-  if ('redirect' in admin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Wellness Directors need to read config to display their dashboard weights; admins can also read.
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const access = await getUserAccess(session.user.id)
+  if (access.role !== 'admin' && access.role !== 'wellness_director') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase

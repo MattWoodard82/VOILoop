@@ -1,9 +1,8 @@
-import { DashboardShell } from '@/components/layout/DashboardShell'
 import { Card, CardSkeleton, ChartSkeleton } from '@/components/ui'
 
 export default function Loading() {
   return (
-    <DashboardShell title="Wellness Director Dashboard">
+    <div style={{ padding: "20px 24px" }}>
       <div style={{ display: 'grid', gap: 14 }}>
         <CardSkeleton title="Loading dashboard" lines={2} minHeight={72} />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
@@ -18,6 +17,6 @@ export default function Loading() {
           <CardSkeleton title="Risk tier" lines={3} minHeight={210} />
         </div>
       </div>
-    </DashboardShell>
+    </div>
   )
 }

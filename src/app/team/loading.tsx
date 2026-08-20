@@ -1,10 +1,9 @@
-import { DashboardShell } from '@/components/layout/DashboardShell'
 import { CardSkeleton } from '@/components/ui'
 
 export default function Loading() {
   return (
-    <DashboardShell title="Team Roster">
+    <div style={{ padding: "20px 24px" }}>
       <CardSkeleton title="Participant ranking context" lines={5} minHeight={180} />
-    </DashboardShell>
+    </div>
   )
 }
