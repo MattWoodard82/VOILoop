@@ -146,16 +146,20 @@ export function ChallengesAdminClient() {
 
   const loadParticipants = async (challengeId: string, status: 'all' | 'completed' | 'incomplete') => {
     setParticipantsLoading(true)
-    const query = status === 'all' ? '' : `?status=${status}`
-    const response = await fetch(`/api/admin/challenges/${challengeId}/participants${query}`, { cache: 'no-store' })
-    if (!response.ok) {
-      await setErrorFromResponse(response, 'Failed to load participants')
+    try {
+      const query = status === 'all' ? '' : `?status=${status}`
+      const response = await fetch(`/api/admin/challenges/${challengeId}/participants${query}`, { cache: 'no-store' })
+      if (!response.ok) {
+        await setErrorFromResponse(response, 'Failed to load participants')
+        return
+      }
+      const payload = await response.json()
+      setParticipants(payload.participants ?? [])
+    } catch {
+      setError('Failed to load participants')
+    } finally {
       setParticipantsLoading(false)
-      return
     }
-    const payload = await response.json()
-    setParticipants(payload.participants ?? [])
-    setParticipantsLoading(false)
   }
 
   const updateChallenge = async () => {
