@@ -48,16 +48,9 @@ Output updates:
 - `outputs/parking-lot.md`
 
 ### Phase 1 — Persona-by-Persona As-Is Journey Mapping
-For each persona, guide the room through:
-1. Trigger
-2. Entry point
-3. Step-by-step journey
-4. Thoughts/feelings at each step
-5. Pain points + severity
-6. Workarounds
-7. Channel/touchpoint/system dependencies
-8. Failure points / abandonment points
-9. Current success signals and missing telemetry
+Start by deeply reviewing Matt and Heathers answers to each of the persona questions.  Immediately review any contradictions in answers so that they both can clear them up before proceeding.  Write any updates to the files themselves, which we'll check into the repo.
+Once alignment has been completed, deeply review the answers and surface gaps or ambiguities for us to review together.
+
 
 Create one file per persona:
 - `outputs/journey-participant-as-is.md`
@@ -68,7 +61,6 @@ Create one file per persona:
 ### Phase 2 — Root Cause and Opportunity Framing
 For each major pain point:
 - Ask for likely root causes
-- Ask what evidence supports each cause
 - Mark confidence
 - Identify candidate opportunity areas (without solutioning too early)
 
@@ -97,7 +89,7 @@ Update:
 
 ### Phase 5 — Full-Fidelity UI Definition
 Once the as-is journeys are fully documented and the team agrees they are complete enough to design from:
-- Translate each prioritized journey and opportunity into full-fidelity UI requirements.
+- Translate each prioritized journey and opportunity into full-fidelity UI wireframes.
 - Define the screens, states, interactions, copy, validation, error handling, loading, empty states, and edge cases needed to support the journey end-to-end.
 - Preserve journey fidelity; do not invent new workflow steps unless explicitly flagged as a proposed future-state change.
 - Separate requirements for Participant, Wellness Director, Admin, and Exec surfaces when they differ.
