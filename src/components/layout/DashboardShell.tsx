@@ -8,6 +8,7 @@ interface DashboardShellProps {
   showPeriodFilter?: boolean
   showExport?: boolean
   showSignOut?: boolean
+  actions?: React.ReactNode
   children: React.ReactNode
 }
 
@@ -17,6 +18,7 @@ export async function DashboardShell({
   showPeriodFilter,
   showExport,
   showSignOut,
+  actions,
   children,
 }: DashboardShellProps) {
   const { role } = await getRoleAndSession()
@@ -31,6 +33,7 @@ export async function DashboardShell({
           showPeriodFilter={showPeriodFilter}
           showExport={showExport}
           showSignOut={showSignOut}
+          actions={actions}
         />
         <main style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
           {children}

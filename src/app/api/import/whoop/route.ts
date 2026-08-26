@@ -148,7 +148,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!role) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'participant') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -185,6 +185,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (!selectedParticipantProfile) {
     return NextResponse.json({ error: 'Selected participant was not found or is inactive' }, { status: 422 })
+  }
+
+  // Participants may only upload their own data — verify the selected
+  // participant is the one linked to the authenticated user.
+  if (role === 'participant') {
+    const { data: ownParticipant, error: ownParticipantError } = await supabase
+      .from('participants')
+      .select('id')
+      .eq('auth_user_id', session.user.id)
+      .maybeSingle()
+
+    if (ownParticipantError) {
+      return NextResponse.json(
+        { error: `Failed to verify participant ownership: ${ownParticipantError.message}` },
+        { status: 500 },
+      )
+    }
+
+    if (!ownParticipant || ownParticipant.id !== selectedParticipantProfile.participantId) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
   }
 
   const fileValidationErrors = validateWhoopCsvFiles(files)

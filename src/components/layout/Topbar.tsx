@@ -8,6 +8,7 @@ interface TopbarProps {
   showPeriodFilter?: boolean
   showExport?: boolean
   showSignOut?: boolean
+  actions?: React.ReactNode
 }
 
 export function Topbar({
@@ -16,8 +17,9 @@ export function Topbar({
   showPeriodFilter = true,
   showExport = true,
   showSignOut = true,
+  actions,
 }: TopbarProps) {
-  const hasActions = showPeriodFilter || showExport || showSignOut
+  const hasActions = showPeriodFilter || showExport || showSignOut || Boolean(actions)
 
   return (
     <header className="flex items-center justify-between px-6 h-[52px]"
@@ -28,6 +30,7 @@ export function Topbar({
           {showPeriodFilter && period ? (
             <span className="badge badge-wolf">{period}</span>
           ) : null}
+          {actions}
           {showExport ? (
             <button className="btn-primary flex items-center gap-1" type="button" disabled title="Export not available in this pilot">
               <Download size={11} />
