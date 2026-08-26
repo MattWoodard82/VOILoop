@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Upload, X } from 'lucide-react'
 import { WhoopImportClient, type ParticipantOption } from '@/app/admin/import/WhoopImportClient'
 
@@ -8,12 +8,66 @@ interface ParticipantCsvUploadButtonProps {
   participant: ParticipantOption
 }
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function ParticipantCsvUploadButton({ participant }: ParticipantCsvUploadButtonProps) {
   const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  const close = () => setOpen(false)
+
+  // Move focus into the dialog when it opens, and restore it to the
+  // trigger button when it closes.
+  useEffect(() => {
+    if (open) {
+      closeButtonRef.current?.focus()
+    } else {
+      triggerRef.current?.focus()
+    }
+  }, [open])
+
+  // Trap focus within the dialog and close on Escape while it's open.
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        close()
+        return
+      }
+
+      if (e.key !== 'Tab' || !dialogRef.current) return
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (el) => !el.hasAttribute('disabled'),
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+
+      if (e.shiftKey && active === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [open])
 
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className="btn-primary flex items-center gap-1"
         onClick={() => setOpen(true)}
@@ -23,8 +77,9 @@ export function ParticipantCsvUploadButton({ participant }: ParticipantCsvUpload
       </button>
 
       {open && (
-        <div style={overlayStyle} onClick={() => setOpen(false)}>
+        <div style={overlayStyle} onClick={close}>
           <div
+            ref={dialogRef}
             style={modalStyle}
             role="dialog"
             aria-modal="true"
@@ -36,9 +91,10 @@ export function ParticipantCsvUploadButton({ participant }: ParticipantCsvUpload
                 Upload your WHOOP data
               </h3>
               <button
+                ref={closeButtonRef}
                 type="button"
                 aria-label="Close"
-                onClick={() => setOpen(false)}
+                onClick={close}
                 style={{ background: 'none', border: 'none', color: '#A5ACAF', cursor: 'pointer', padding: 4 }}
               >
                 <X size={18} />

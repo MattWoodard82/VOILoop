@@ -604,7 +604,7 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
 
       <Card title="WHOOP upload management">
         <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 16, lineHeight: 1.6 }}>
-          WHOOP uploads are handled by your administrator during this pilot phase.
+          Use the <strong style={{ color: '#fff' }}>Upload CSV</strong> button in the top-right corner to upload your own WHOOP export. Your administrator can also upload data on your behalf.
         </div>
       </Card>
     </div>

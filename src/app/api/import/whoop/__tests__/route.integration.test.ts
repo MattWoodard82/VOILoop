@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { POST } from '../route'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
@@ -10,6 +11,10 @@ import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   getSession: jest.fn(),
+}))
+
+jest.mock('@/lib/supabase/admin', () => ({
+  createAdminSupabaseClient: jest.fn(),
 }))
 
 jest.mock('@/lib/whoop/parser', () => ({
@@ -65,6 +70,7 @@ function makeRequest(
 describe('POST /api/import/whoop integration', () => {
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
   const mockParseWorkbook = parseWorkbook as jest.MockedFunction<typeof parseWorkbook>
   const mockValidateTabStructure = validateTabStructure as jest.MockedFunction<typeof validateTabStructure>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
@@ -151,32 +157,13 @@ describe('POST /api/import/whoop integration', () => {
           }
         }
         if (table === 'participants') {
+          // Ownership check: which participant is this authenticated user linked to?
           return {
-            select: jest.fn((columns: string) => {
-              if (columns === 'id') {
-                return {
-                  eq: jest.fn(() => ({
-                    maybeSingle: jest.fn(async () => ({ data: { id: 'EMP001' }, error: null })),
-                  })),
-                }
-              }
-              return {
-                eq: jest.fn(() => ({
-                  eq: jest.fn(() => ({
-                    maybeSingle: jest.fn(async () => ({
-                      data: {
-                        id: 'EMP001',
-                        first_name: 'Travis',
-                        last_name: 'Brandenburgh',
-                        department: 'Ops',
-                        device_id: null,
-                      },
-                      error: null,
-                    })),
-                  })),
-                })),
-              }
-            }),
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP001' }, error: null })),
+              })),
+            })),
           }
         }
         return {}
@@ -184,9 +171,39 @@ describe('POST /api/import/whoop integration', () => {
     }
     mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
 
+    // Participant uploads use a privileged admin client for the selected
+    // participant profile lookup and all downstream mutations.
+    const mockAdminSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        return {}
+      }),
+    }
+    mockCreateAdminSupabaseClient.mockReturnValue(mockAdminSupabase as never)
+
     const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'], 'multipart/form-data; boundary=test', 'EMP001'))
     expect(response.status).toBe(200)
     expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
+      supabase: mockAdminSupabase,
       userId: 'participant-user-1',
       participantId: 'EMP001',
     }))
@@ -214,33 +231,13 @@ describe('POST /api/import/whoop integration', () => {
           }
         }
         if (table === 'participants') {
+          // The authenticated user is linked to EMP999, not the requested EMP001
           return {
-            select: jest.fn((columns: string) => {
-              if (columns === 'id') {
-                return {
-                  eq: jest.fn(() => ({
-                    // The authenticated user is linked to EMP999, not the requested EMP001
-                    maybeSingle: jest.fn(async () => ({ data: { id: 'EMP999' }, error: null })),
-                  })),
-                }
-              }
-              return {
-                eq: jest.fn(() => ({
-                  eq: jest.fn(() => ({
-                    maybeSingle: jest.fn(async () => ({
-                      data: {
-                        id: 'EMP001',
-                        first_name: 'Travis',
-                        last_name: 'Brandenburgh',
-                        department: 'Ops',
-                        device_id: null,
-                      },
-                      error: null,
-                    })),
-                  })),
-                })),
-              }
-            }),
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP999' }, error: null })),
+              })),
+            })),
           }
         }
         return {}
@@ -253,6 +250,7 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'Forbidden',
     })
+    expect(mockCreateAdminSupabaseClient).not.toHaveBeenCalled()
     expect(mockPersistWhoopImport).not.toHaveBeenCalled()
   })
 
