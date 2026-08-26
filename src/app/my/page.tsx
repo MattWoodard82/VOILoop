@@ -9,6 +9,7 @@ import { MyDashboardClient } from './MyDashboardClient'
 import { buildParticipantInsights } from './insights'
 import { SignOutButton } from '@/components/auth/SignOutButton'
 import { getRoleAndSession } from '@/lib/supabase/server'
+import { ParticipantCsvUploadButton } from './ParticipantCsvUploadButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,6 +142,15 @@ export default async function MyPage() {
       showPeriodFilter={false}
       showExport={false}
       showSignOut={false}
+      actions={
+        <ParticipantCsvUploadButton
+          participant={{
+            id: participant.id,
+            label: `${participant.first_name} ${participant.last_name}`.trim(),
+            meta: participant.department ?? '',
+          }}
+        />
+      }
     >
       <MyDashboardClient
         participant={participant}

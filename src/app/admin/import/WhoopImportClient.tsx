@@ -16,15 +16,20 @@ export interface ParticipantOption {
 
 interface WhoopImportClientProps {
   participants: ParticipantOption[]
+  /**
+   * When provided, the participant picker is hidden and every upload is
+   * locked to this participant (used for participant self-service uploads).
+   */
+  lockedParticipant?: ParticipantOption
 }
 
-export function WhoopImportClient({ participants }: WhoopImportClientProps) {
+export function WhoopImportClient({ participants, lockedParticipant }: WhoopImportClientProps) {
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [result, setResult] = useState<ImportResult | null>(null)
   const [structureErrors, setStructureErrors] = useState<string[] | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [participantSearch, setParticipantSearch] = useState('')
-  const [selectedParticipantId, setSelectedParticipantId] = useState('')
+  const [selectedParticipantId, setSelectedParticipantId] = useState(lockedParticipant?.id ?? '')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const filteredParticipants = participants.filter((participant) => {
@@ -170,7 +175,7 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
         <div style={{ fontSize: 13, color: '#A5ACAF', lineHeight: 1.6 }}>
           <strong style={{ color: '#fff' }}>Accepted format:</strong> exactly 3 CSV files named <code>workouts.csv</code>, <code>sleeps.csv</code>, and <code>physiological_cycles.csv</code>.
           <br />
-          <strong style={{ color: '#fff' }}>Participant assignment:</strong> Choose a participant first. Every row in the upload is linked to that participant.
+          <strong style={{ color: '#fff' }}>Participant assignment:</strong> {lockedParticipant ? 'Every row in the upload is linked to your participant record.' : 'Choose a participant first. Every row in the upload is linked to that participant.'}
           <br />
           <strong style={{ color: '#fff' }}>Note:</strong> Re-uploading the same files is safe — records are upserted, not duplicated.
         </div>
@@ -180,50 +185,57 @@ export function WhoopImportClient({ participants }: WhoopImportClientProps) {
         <div style={{ fontSize: 12, color: '#A5ACAF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
           Participant
         </div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <input
-            aria-label="Search participants"
-            type="text"
-            placeholder="Search participant by name, department, or ID"
-            value={participantSearch}
-            onChange={(e) => setParticipantSearch(e.target.value)}
-            style={{
-              width: '100%',
-              border: '1px solid #0a3560',
-              borderRadius: 6,
-              background: '#001224',
-              color: '#fff',
-              padding: '9px 10px',
-              fontSize: 13,
-            }}
-          />
-          <select
-            aria-label="Select participant"
-            value={selectedParticipantId}
-            onChange={(e) => setSelectedParticipantId(e.target.value)}
-            disabled={status === 'uploading'}
-            style={{
-              width: '100%',
-              border: '1px solid #0a3560',
-              borderRadius: 6,
-              background: '#001224',
-              color: '#fff',
-              padding: '9px 10px',
-              fontSize: 13,
-            }}
-          >
-            <option value="">Select participant</option>
-            {filteredParticipants.map((participant) => (
-              <option key={participant.id} value={participant.id}>
-                {participant.label} ({participant.id}){participant.meta ? ` — ${participant.meta}` : ''}
-              </option>
-            ))}
-          </select>
-          <div style={{ color: '#A5ACAF', fontSize: 12 }}>
-            Showing {filteredParticipants.length} of {participants.length} participants
+        {lockedParticipant ? (
+          <div style={{ fontSize: 13, color: '#fff' }}>
+            Uploading for: <strong>{lockedParticipant.label}</strong> ({lockedParticipant.id}){lockedParticipant.meta ? ` — ${lockedParticipant.meta}` : ''}
           </div>
-        </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <input
+              aria-label="Search participants"
+              type="text"
+              placeholder="Search participant by name, department, or ID"
+              value={participantSearch}
+              onChange={(e) => setParticipantSearch(e.target.value)}
+              style={{
+                width: '100%',
+                border: '1px solid #0a3560',
+                borderRadius: 6,
+                background: '#001224',
+                color: '#fff',
+                padding: '9px 10px',
+                fontSize: 13,
+              }}
+            />
+            <select
+              aria-label="Select participant"
+              value={selectedParticipantId}
+              onChange={(e) => setSelectedParticipantId(e.target.value)}
+              disabled={status === 'uploading'}
+              style={{
+                width: '100%',
+                border: '1px solid #0a3560',
+                borderRadius: 6,
+                background: '#001224',
+                color: '#fff',
+                padding: '9px 10px',
+                fontSize: 13,
+              }}
+            >
+              <option value="">Select participant</option>
+              {filteredParticipants.map((participant) => (
+                <option key={participant.id} value={participant.id}>
+                  {participant.label} ({participant.id}){participant.meta ? ` — ${participant.meta}` : ''}
+                </option>
+              ))}
+            </select>
+            <div style={{ color: '#A5ACAF', fontSize: 12 }}>
+              Showing {filteredParticipants.length} of {participants.length} participants
+            </div>
+          </div>
+        )}
       </div>
+
 
       {/* Drop zone */}
       {status === 'idle' || status === 'uploading' ? (

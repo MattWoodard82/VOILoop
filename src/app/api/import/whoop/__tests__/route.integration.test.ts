@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { POST } from '../route'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { parseWorkbook } from '@/lib/whoop/parser'
 import { validateTabStructure } from '@/lib/whoop/validators'
 import { mapExercise, mapManualEntries, mapWellness } from '@/lib/whoop/mappers'
@@ -10,6 +11,10 @@ import { prepareWhoopWorkbookForImport } from '@/lib/whoop/workbook-context'
 jest.mock('@/lib/supabase/server', () => ({
   createServerSupabaseClient: jest.fn(),
   getSession: jest.fn(),
+}))
+
+jest.mock('@/lib/supabase/admin', () => ({
+  createAdminSupabaseClient: jest.fn(),
 }))
 
 jest.mock('@/lib/whoop/parser', () => ({
@@ -65,6 +70,7 @@ function makeRequest(
 describe('POST /api/import/whoop integration', () => {
   const mockGetSession = getSession as jest.MockedFunction<typeof getSession>
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
   const mockParseWorkbook = parseWorkbook as jest.MockedFunction<typeof parseWorkbook>
   const mockValidateTabStructure = validateTabStructure as jest.MockedFunction<typeof validateTabStructure>
   const mockPersistWhoopImport = persistWhoopImport as jest.MockedFunction<typeof persistWhoopImport>
@@ -94,16 +100,16 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({ error: 'Unauthorized' })
   })
 
-  test('rejects non-admin users', async () => {
+  test('rejects roles that are neither admin nor participant', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'u1' } } as never)
 
     const mockSupabase = {
       from: jest.fn(() => ({
         select: jest.fn(() => ({
           eq: jest.fn(() => ({
-            maybeSingle: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
+            maybeSingle: jest.fn(async () => ({ data: { role: 'wellness_director' }, error: null })),
           })),
-          single: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
+          single: jest.fn(async () => ({ data: { role: 'wellness_director' }, error: null })),
         })),
       })),
     }
@@ -114,6 +120,138 @@ describe('POST /api/import/whoop integration', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: 'Forbidden',
     })
+  })
+
+  test('allows a participant to upload their own data', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-user-1' } } as never)
+    mockParseWorkbook.mockReturnValue({ Sheet1: [{}] } as never)
+    mockValidateTabStructure.mockReturnValue({
+      valid: true,
+      missingRequiredTabs: [],
+      missingAtLeastOneTab: false,
+      missingColumns: {},
+    })
+    mockPrepareWhoopWorkbookForImport.mockResolvedValue({
+      workbook: {},
+      participantProfiles: [],
+    })
+    mockPersistWhoopImport.mockResolvedValue({
+      batchId: 'batch-1',
+      status: 'completed',
+      success: true,
+      fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
+      tabs: [],
+      totals: { processed: 0, inserted: 0, updated: 0, skipped: 0, failed: 0 },
+      errors: [],
+    })
+
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'participants') {
+          // Ownership check: which participant is this authenticated user linked to?
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP001' }, error: null })),
+              })),
+            })),
+          }
+        }
+        return {}
+      }),
+    }
+    mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
+
+    // Participant uploads use a privileged admin client for the selected
+    // participant profile lookup and all downstream mutations.
+    const mockAdminSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                eq: jest.fn(() => ({
+                  maybeSingle: jest.fn(async () => ({
+                    data: {
+                      id: 'EMP001',
+                      first_name: 'Travis',
+                      last_name: 'Brandenburgh',
+                      department: 'Ops',
+                      device_id: null,
+                    },
+                    error: null,
+                  })),
+                })),
+              })),
+            })),
+          }
+        }
+        return {}
+      }),
+    }
+    mockCreateAdminSupabaseClient.mockReturnValue(mockAdminSupabase as never)
+
+    const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'], 'multipart/form-data; boundary=test', 'EMP001'))
+    expect(response.status).toBe(200)
+    expect(mockPersistWhoopImport).toHaveBeenCalledWith(expect.objectContaining({
+      supabase: mockAdminSupabase,
+      userId: 'participant-user-1',
+      participantId: 'EMP001',
+    }))
+  })
+
+  test('forbids a participant from uploading data for someone else', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-user-1' } } as never)
+    mockParseWorkbook.mockReturnValue({ Sheet1: [{}] } as never)
+    mockValidateTabStructure.mockReturnValue({
+      valid: true,
+      missingRequiredTabs: [],
+      missingAtLeastOneTab: false,
+      missingColumns: {},
+    })
+
+    const mockSupabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { role: 'participant' }, error: null })),
+              })),
+            })),
+          }
+        }
+        if (table === 'participants') {
+          // The authenticated user is linked to EMP999, not the requested EMP001
+          return {
+            select: jest.fn(() => ({
+              eq: jest.fn(() => ({
+                maybeSingle: jest.fn(async () => ({ data: { id: 'EMP999' }, error: null })),
+              })),
+            })),
+          }
+        }
+        return {}
+      }),
+    }
+    mockCreateServerSupabaseClient.mockReturnValue(mockSupabase as never)
+
+    const response = await POST(makeRequest(['workouts.csv', 'sleeps.csv', 'physiological_cycles.csv'], 'multipart/form-data; boundary=test', 'EMP001'))
+    expect(response.status).toBe(403)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Forbidden',
+    })
+    expect(mockCreateAdminSupabaseClient).not.toHaveBeenCalled()
+    expect(mockPersistWhoopImport).not.toHaveBeenCalled()
   })
 
   test('returns 422 when workbook structure is invalid', async () => {

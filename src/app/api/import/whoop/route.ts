@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, getSession } from '@/lib/supabase/server'
+import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import {
   parseWorkbook,
   TAB_EXERCISE,
@@ -148,8 +149,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!role) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-  if (role !== 'admin') {
+  if (role !== 'admin' && role !== 'participant') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Participants may only upload their own data. Resolve the participant
+  // record linked to the authenticated user *before* looking up the
+  // submitted participantId — under RLS a participant can only see their
+  // own row, so this check must happen first or a mismatched id would be
+  // rejected as "not found" (422) instead of "forbidden" (403).
+  let ownParticipantId: string | null = null
+  if (role === 'participant') {
+    const { data: ownParticipant, error: ownParticipantError } = await supabase
+      .from('participants')
+      .select('id')
+      .eq('auth_user_id', session.user.id)
+      .maybeSingle()
+
+    if (ownParticipantError) {
+      return NextResponse.json(
+        { error: `Failed to verify participant ownership: ${ownParticipantError.message}` },
+        { status: 500 },
+      )
+    }
+    ownParticipantId = ownParticipant?.id ?? null
   }
 
   const contentType = req.headers.get('content-type') ?? ''
@@ -177,9 +200,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Participant is required' }, { status: 400 })
   }
 
+  // Enforce ownership before touching the (RLS-hidden-for-others) selected
+  // participant profile, so a mismatched id reliably returns 403.
+  if (role === 'participant' && (!ownParticipantId || ownParticipantId !== participantId)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Participant self-service uploads bypass RLS write restrictions using a
+  // privileged server client — participants are not granted write access to
+  // upload_batches/workouts/wellness/habits tables directly. Admin uploads
+  // keep using the cookie-scoped client as before.
+  const mutationClient = role === 'participant' ? createAdminSupabaseClient() : supabase
+
   let selectedParticipantProfile: WhoopParticipantProfile | null = null
   try {
-    selectedParticipantProfile = await getSelectedParticipantProfile(supabase, participantId)
+    selectedParticipantProfile = await getSelectedParticipantProfile(mutationClient, participantId)
   } catch (error) {
     return NextResponse.json({ error: `Failed to load participant: ${toErrorMessage(error)}` }, { status: 500 })
   }
@@ -261,7 +296,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let preparedWorkbook = wb
   let participantProfiles: WhoopParticipantProfile[] = []
   try {
-    const prepared = await prepareWhoopWorkbookForImport(supabase, wb, {
+    const prepared = await prepareWhoopWorkbookForImport(mutationClient, wb, {
       authUserId: session.user.id,
       selectedParticipantProfile: selectedParticipantProfile,
     })
@@ -281,7 +316,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   try {
     const result = await persistWhoopImport({
-      supabase,
+      supabase: mutationClient,
       userId: session.user.id,
       participantId: selectedParticipantProfile.participantId,
       fileName,
@@ -293,7 +328,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       participantProfiles,
     })
 
-    const recomputeResult = await recomputeActiveChallengeProgress(supabase, {
+    const recomputeResult = await recomputeActiveChallengeProgress(mutationClient, {
       source: 'event',
       batchId: result.batchId,
     })
