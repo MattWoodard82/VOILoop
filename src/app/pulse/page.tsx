@@ -35,6 +35,10 @@ export default async function PulsePage() {
   ])
 
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const pulseCounts = pulse.reduce<Record<string, number>>((acc, row) => {
+    acc[row.participant_id] = (acc[row.participant_id] ?? 0) + 1
+    return acc
+  }, {})
   const responded = pulse.length
   const avgMentalWellbeing = safeAvg(pulse.map((p) => p.mental_wellbeing))
   const avgEnergy = safeAvg(pulse.map((p) => p.energy_level))
@@ -90,6 +94,7 @@ export default async function PulsePage() {
             .sort((a, b) => (pulseMap[b.id]?.mental_wellbeing ?? 0) - (pulseMap[a.id]?.mental_wellbeing ?? 0))
             .map((e) => {
               const score = pulseMap[e.id]?.mental_wellbeing ?? 0
+              const count = pulseCounts[e.id] ?? 0
               const color = score >= 4 ? '#69BE28' : score >= 3 ? '#FFA500' : '#ff6b6b'
               return (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
@@ -102,6 +107,7 @@ export default async function PulsePage() {
                   <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ width: `${score * 20}%`, height: '100%', background: color, borderRadius: 3 }} />
                   </div>
+                  <span style={{ width: 24, textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#A5ACAF' }}>{count}</span>
                   <span style={{ width: 24, textAlign: 'right', fontSize: 11, fontWeight: 700, color }}>{score}</span>
                 </div>
               )
