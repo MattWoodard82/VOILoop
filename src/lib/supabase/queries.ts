@@ -394,17 +394,19 @@ export async function getLatestHabits(date?: string, supabase = getQueryClient()
 }
 
 export async function getLatestPulse(supabase = getQueryClient()): Promise<PulseSurvey[]> {
-  const { data: latestDate } = await supabase
-    .from('pulse_surveys')
-    .select('date')
-    .order('date', { ascending: false })
-    .limit(1)
-    .single()
-  if (!latestDate) return []
+  const now = new Date()
+  const utcDay = now.getUTCDay() // 0 = Sunday ... 6 = Saturday
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday))
+  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6))
+  const weekStart = monday.toISOString().slice(0, 10)
+  const weekEnd = sunday.toISOString().slice(0, 10)
+
   const { data, error } = await supabase
     .from('pulse_surveys')
     .select('*')
-    .eq('date', latestDate.date)
+    .gte('date', weekStart)
+    .lte('date', weekEnd)
   if (error) throw error
   return data ?? []
 }
