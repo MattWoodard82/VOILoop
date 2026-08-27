@@ -1,5 +1,5 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getTeamDashboard, getLatestPulse } from '@/lib/supabase/queries'
+import { getTeamDashboard, getCurrentWeekPulse } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge } from '@/components/ui'
 import { initials, safeAvg } from '@/lib/utils'
 import { requireAuth } from '@/lib/supabase/server'
@@ -31,7 +31,7 @@ export default async function PulsePage() {
 
   const [{ participants }, pulse] = await Promise.all([
     getTeamDashboard(),
-    getLatestPulse(),
+    getCurrentWeekPulse(),
   ])
 
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
