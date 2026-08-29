@@ -409,6 +409,31 @@ export async function getLatestPulse(supabase = getQueryClient()): Promise<Pulse
   return data ?? []
 }
 
+// Used by the wellness-director pulse dashboard (src/app/pulse/page.tsx) so response
+// counts reflect the full current Monday-Sunday calendar week rather than only the
+// single most recent submission date. Kept separate from getLatestPulse (which many
+// other callers rely on for a "most recent snapshot regardless of week" semantics,
+// e.g. leaderboard/rank scoring and team dashboard enrichment) to avoid changing
+// their behavior.
+export async function getCurrentWeekPulse(supabase = getQueryClient()): Promise<PulseSurvey[]> {
+  const now = new Date()
+  const utcDay = now.getUTCDay() // 0 = Sunday ... 6 = Saturday
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday))
+  const sunday = new Date(Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate() + 6))
+  const weekStart = monday.toISOString().slice(0, 10)
+  const weekEnd = sunday.toISOString().slice(0, 10)
+
+  const { data, error } = await supabase
+    .from('pulse_surveys')
+    .select('*')
+    .gte('date', weekStart)
+    .order('date', { ascending: false })
+  if (error) throw error
+
+  return (data ?? []).filter((row) => row.date <= weekEnd)
+}
+
 export async function getPulseTrend(): Promise<{ date: string; avg_mental_wellbeing: number; avg_energy_level: number }[]> {
   const supabase = getQueryClient()
   const { data, error } = await supabase
