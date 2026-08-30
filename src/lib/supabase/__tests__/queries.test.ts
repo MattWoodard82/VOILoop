@@ -98,6 +98,10 @@ function makeTableClient(tables: Record<string, any[]>) {
         const resultRows = runQuery(rows, filters, orders, limitCount)
         return { data: resultRows[0] ?? null, error: null }
       }),
+      maybeSingle: jest.fn(async () => {
+        const resultRows = runQuery(rows, filters, orders, limitCount)
+        return { data: resultRows[0] ?? null, error: null }
+      }),
       then: (resolve: (value: QueryResult<any[]>) => void, reject: (reason: unknown) => void) => {
         let resultRows = runQuery(rows, filters, orders, limitCount)
         if (rangeBounds) {

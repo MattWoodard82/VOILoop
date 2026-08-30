@@ -1,6 +1,7 @@
 import { createClient } from './client'
 import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
+import { DEFAULT_ENGAGEMENT_WEIGHTS, normalizeEngagementWeights, type EngagementWeights } from '@/lib/wellness-director-config'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -137,6 +138,40 @@ function computeWorkoutVolumeVsBaseline(
   return Math.max(0, Math.min(100, Math.round(ratio * 100)))
 }
 
+// Average minutes spent in each HR zone (1-5) per workout, over a trailing window.
+// WHOOP only reports zone percentages + total duration per workout (not raw zone minutes),
+// so each workout's zone minutes are approximated as duration_min * (zoneN_pct / 100).
+// Returns null for a zone (or the whole result) when there isn't enough data in the window.
+function computeAverageZoneMinutes(
+  workouts: Workout[],
+  windowDays: number,
+  referenceDate: Date,
+): { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } | null {
+  const windowStart = new Date(referenceDate)
+  windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
+  const windowStartKey = toDateKey(windowStart)
+
+  const windowed = workouts.filter((w) => w.date.slice(0, 10) >= windowStartKey)
+  if (windowed.length === 0) return null
+
+  const zoneKeys = ['zone1_pct', 'zone2_pct', 'zone3_pct', 'zone4_pct', 'zone5_pct'] as const
+  const resultKeys = ['zone1', 'zone2', 'zone3', 'zone4', 'zone5'] as const
+  const result: { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } = {
+    zone1: null, zone2: null, zone3: null, zone4: null, zone5: null,
+  }
+
+  zoneKeys.forEach((zoneKey, i) => {
+    const minutes = windowed
+      .map((w) => (w.duration_min != null && w[zoneKey] != null ? w.duration_min * ((w[zoneKey] as number) / 100) : null))
+      .filter((v): v is number => v !== null)
+    if (minutes.length > 0) {
+      result[resultKeys[i]] = Math.round((minutes.reduce((a, b) => a + b, 0) / minutes.length) * 10) / 10
+    }
+  })
+
+  return result
+}
+
 interface NudgeRecord { id: string; week_of: string }
 interface NudgeTargetRecord { nudge_id: string; target_type: string; target_label: string | null; participant_id: string | null }
 interface NudgeAcknowledgementRecord { nudge_id: string; participant_id: string }
@@ -230,7 +265,7 @@ export async function getParticipants(supabase = getQueryClient()): Promise<Part
     .from('participants')
     .select('*')
     .eq('status', 'Active')
-    .order('last_name')
+    .order('first_name')
   if (error) throw error
   return data ?? []
 }
@@ -570,6 +605,21 @@ export async function getNudgeEngagementData(
   return { nudges: nudges ?? [], targets: targets ?? [], acknowledgements: acknowledgements ?? [] }
 }
 
+// Reads the admin-configured FR-13 engagement-score weights so getTeamDashboard's score
+// calculation reflects whatever the admin actually saved, instead of a fixed default that
+// silently ignores the "Engagement-score weights" card. Falls back to defaults when no
+// config row has been saved yet, or when the read fails for any reason (dashboard should
+// never hard-fail just because the config table is unreachable).
+export async function getEngagementWeights(supabase = getQueryClient()): Promise<EngagementWeights> {
+  const { data, error } = await supabase
+    .from('wellness_director_config')
+    .select('weights')
+    .eq('id', 'current')
+    .maybeSingle()
+  if (error || !data) return DEFAULT_ENGAGEMENT_WEIGHTS
+  return normalizeEngagementWeights(data.weights)
+}
+
 export async function getTeamDashboard(): Promise<{
   participants: ParticipantWithWellness[]
   stats: TeamStats
@@ -594,7 +644,7 @@ export async function getTeamDashboard(): Promise<{
   // directly as the query's hard boundary with no further downstream trimming, so an
   // off-by-one here would leak an extra day's nudges into the result.
   const nudgeSinceDate = toDateKey(new Date(now.getTime() - 20 * MS_PER_DAY))
-  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData] = await Promise.all([
+  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData, engagementWeights] = await Promise.all([
     getLatestWellness(undefined, participantIds, supabase),
     getLatestWorkouts(undefined, supabase),
     getLatestHabits(undefined, supabase),
@@ -604,6 +654,7 @@ export async function getTeamDashboard(): Promise<{
     getWellnessHistoryForParticipants(participantIds, historySinceDate, supabase),
     getPulseHistoryForParticipants(participantIds, historySinceDate, supabase),
     getNudgeEngagementData(nudgeSinceDate, supabase),
+    getEngagementWeights(supabase),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
@@ -636,6 +687,7 @@ export async function getTeamDashboard(): Promise<{
     const pulseCompletion = computeWeeklyConsistency(pulseRows, recentWeeks, enrolledDate, () => true)
     const nudgeResponse = computeNudgeResponseRate(emp, nudgeData.nudges, nudgeData.targets, nudgeData.acknowledgements)
     const workoutVolume = computeWorkoutVolumeVsBaseline(workoutRows, 21, now)
+    const avgZoneMinutes = computeAverageZoneMinutes(workoutRows, 21, now)
     const engagementComponents: Record<string, number> = {
       submission_consistency: submissionConsistency ?? 0,
       device_wear_consistency: deviceWearConsistency ?? 0,
@@ -644,11 +696,11 @@ export async function getTeamDashboard(): Promise<{
       workout_volume: workoutVolume ?? 0,
     }
     const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
+      submissionConsistency != null ? Math.round((submissionConsistency * engagementWeights.submission_consistency) / 100) : 0,
+      deviceWearConsistency != null ? Math.round((deviceWearConsistency * engagementWeights.device_wear_consistency) / 100) : 0,
+      pulseCompletion != null ? Math.round((pulseCompletion * engagementWeights.pulse_completion) / 100) : 0,
+      nudgeResponse != null ? Math.round((nudgeResponse * engagementWeights.nudge_response) / 100) : 0,
+      workoutVolume != null ? Math.round((workoutVolume * engagementWeights.workout_volume) / 100) : 0,
     ].reduce((sum, part) => sum + part, 0)
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
@@ -684,6 +736,7 @@ export async function getTeamDashboard(): Promise<{
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
       engagement_score: engagementScore,
       engagement_score_components: engagementComponents,
+      avg_zone_minutes: avgZoneMinutes,
       physiological_trend: physiologicalTrend,
       physiological_trend_metrics: physiologicalMetrics,
       risk_tier_label: riskLevel === 'High' ? 'High concern' : riskLevel === 'Medium' ? 'Watch' : 'Stable',

@@ -28,7 +28,8 @@ jest.mock('@/components/ui', () => {
   return {
     KpiCard: ({ label, value }: { label: string; value: React.ReactNode }) => React.createElement('div', null, `${label}:${value}`),
     Alert: ({ children }: { children: React.ReactNode }) => React.createElement('div', null, children),
-    Card: ({ title, children }: { title: string; children: React.ReactNode }) => React.createElement('section', { 'data-title': title }, children),
+    Card: ({ title, badge, children }: { title: string; badge?: React.ReactNode; children: React.ReactNode }) =>
+      React.createElement('section', { 'data-title': title }, badge, children),
     Badge: ({ children }: { children: React.ReactNode }) => React.createElement('span', null, children),
     BarRow: ({ label, value }: { label: string; value: number }) => React.createElement('div', null, `${label}:${value}`),
     ChartSkeleton: () => React.createElement('div', { className: 'chart-skeleton' }),
@@ -76,6 +77,7 @@ const participant: ParticipantWithWellness = {
   baseline_days_remaining: 13,
   override_state: null,
   override_note: null,
+  avg_zone_minutes: { zone1: 5, zone2: 8, zone3: 6, zone4: 2, zone5: 1 },
 }
 
 function renderClientMarkup(
@@ -84,26 +86,36 @@ function renderClientMarkup(
     deptFilter = 'All',
     personFilter = 'All',
     configLoaded = true,
+    role = 'admin',
   }: {
     deptFilter?: string
     personFilter?: string
     configLoaded?: boolean
+    role?: 'admin' | 'wellness_director'
   } = {},
 ) {
   const useStateSpy = jest.spyOn(React, 'useState')
   const useEffectSpy = jest.spyOn(React, 'useEffect').mockImplementation(() => {})
 
+  // Hook call order in WellnessDirectorClient: deptFilter, personFilter, weights,
+  // overrides, overrideNotes, snoozeDays, configStatus, configLoaded, nudgeMessage,
+  // nudgeStatus, nudgeError. Only the ones the tests need to control are overridden;
+  // the rest pass through to the real useState so they keep their real defaults.
   useStateSpy
-    .mockImplementationOnce(() => [deptFilter, jest.fn()])
-    .mockImplementationOnce(() => [personFilter, jest.fn()])
-    .mockImplementationOnce(originalUseState as typeof React.useState)
-    .mockImplementationOnce(originalUseState as typeof React.useState)
-    .mockImplementationOnce(originalUseState as typeof React.useState)
-    .mockImplementationOnce(() => ['idle', jest.fn()])
-    .mockImplementationOnce(() => [configLoaded, jest.fn()])
+    .mockImplementationOnce(() => [deptFilter, jest.fn()]) // deptFilter
+    .mockImplementationOnce(() => [personFilter, jest.fn()]) // personFilter
+    .mockImplementationOnce(originalUseState as typeof React.useState) // weights
+    .mockImplementationOnce(originalUseState as typeof React.useState) // overrides
+    .mockImplementationOnce(originalUseState as typeof React.useState) // overrideNotes
+    .mockImplementationOnce(originalUseState as typeof React.useState) // snoozeDays
+    .mockImplementationOnce(originalUseState as typeof React.useState) // configStatus
+    .mockImplementationOnce(() => [configLoaded, jest.fn()]) // configLoaded
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeMessage
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeStatus
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeError
 
   try {
-    return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
+    return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants, role }))
   } finally {
     useStateSpy.mockRestore()
     useEffectSpy.mockRestore()
@@ -129,8 +141,35 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('aria-label="override note"')
     expect(markup).toContain('Snooze')
     expect(markup).toContain('Dismiss')
-    expect(markup).toContain('Loading weights…')
-    expect(markup).toContain('table-skeleton')
+    expect(markup).not.toContain('Loading weights…')
+    expect(markup).not.toContain('table-skeleton')
+    expect(markup).toContain('WHOOP/CSV submission consistency')
+    expect(markup).toContain('Send a nudge to Alex Able')
+  })
+
+  test('shows cohort and selected-participant averages, and flags steps as unavailable', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('Cohort averages')
+    expect(markup).toContain('Alex Able')
+    expect(markup).toContain('Avg steps: not available (no WHOOP steps data source).')
+    expect(markup).toContain('Avg weighted score')
+    expect(markup).toContain('Avg wear consistency')
+  })
+
+  test('admins can edit and save engagement-score weights', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1', role: 'admin' })
+    expect(markup).toContain('Save weights')
+    expect(markup).toContain('range-control')
+    expect(markup).not.toContain('view only')
+    expect(markup).not.toContain('Contact an admin')
+  })
+
+  test('wellness directors see engagement-score weights as read-only', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1', role: 'wellness_director' })
+    expect(markup).toContain('view only')
+    expect(markup).toContain('Contact an admin to request a change.')
+    expect(markup).not.toContain('Save weights')
+    expect(markup).not.toContain('range-control')
   })
 
   test('shows selection guidance when all participants are in scope', () => {
@@ -141,7 +180,8 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Bea Able')
     expect(markup).toContain('Choose a participant to review baseline status and overrides.')
     expect(markup).toContain('Choose a participant to view risk tier.')
-    expect(markup).toContain('table-skeleton')
+    expect(markup).toContain('Cohort averages')
+    expect(markup).not.toContain('Send a nudge')
   })
 
   test('shows empty states when selected participant data is unavailable or out of scope', () => {
@@ -149,7 +189,8 @@ describe('WellnessDirectorClient', () => {
       [{ ...participant, engagement_score_components: null } as ParticipantWithWellness],
       { personFilter: 'P1' },
     )
-    expect(missingBreakdownMarkup).toContain('table-skeleton')
+    expect(missingBreakdownMarkup).toContain('No score breakdown available for the selected participant.')
+    expect(missingBreakdownMarkup).toContain('Send a nudge to Alex Able')
 
     const erParticipant = { ...participant, id: 'P2', first_name: 'Bea', department: 'ER' } as ParticipantWithWellness
     const outOfScopeMarkup = renderClientMarkup([participant, erParticipant], {
@@ -157,7 +198,7 @@ describe('WellnessDirectorClient', () => {
       personFilter: 'P1',
     })
     expect(outOfScopeMarkup).toContain('Choose a participant to review baseline status and overrides.')
-    expect(outOfScopeMarkup).toContain('table-skeleton')
+    expect(outOfScopeMarkup).not.toContain('Send a nudge')
   })
 
   test('wellness director page links to the events manager for leadership users', async () => {

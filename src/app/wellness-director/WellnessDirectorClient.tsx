@@ -1,12 +1,14 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import type { ParticipantWithWellness } from '@/types'
+import type { AppRole } from '@/lib/supabase/server'
 import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 
 interface Props {
   participants: ParticipantWithWellness[]
+  role?: AppRole | null
 }
 
 function overrideLabel(state?: ParticipantWithWellness['override_state']) {
@@ -45,7 +47,57 @@ const DEFAULT_WEIGHTS: WeightsState = {
   workout_volume: 20,
 }
 
-export function WellnessDirectorClient({ participants }: Props) {
+type ZoneMinutes = { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null }
+type Averages = { avgWeightedScore: number | null; avgWearConsistency: number | null; avgZoneMinutes: ZoneMinutes }
+
+function formatStat(value: number | null, suffix = '') {
+  return value != null ? `${value}${suffix}` : '—'
+}
+
+// Renders one averages block (either the whole cohort/department scope, or a single
+// selected participant) beneath the Engagement score chart. Avg steps is intentionally
+// omitted: WHOOP does not report step count anywhere in the CSV export or our schema.
+function AveragesBlock({ title, averages }: { title: string; averages: Averages }) {
+  return (
+    <div style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, fontSize: 11, color: '#A5ACAF' }}>
+        <div>Avg weighted score: <strong style={{ color: '#fff' }}>{formatStat(averages.avgWeightedScore)}</strong></div>
+        <div>Avg wear consistency: <strong style={{ color: '#fff' }}>{formatStat(averages.avgWearConsistency, '%')}</strong></div>
+        <div style={{ gridColumn: '1 / -1' }}>
+          Avg zone 1-5 duration (min): {' '}
+          <strong style={{ color: '#fff' }}>
+            Z1 {formatStat(averages.avgZoneMinutes.zone1)} · Z2 {formatStat(averages.avgZoneMinutes.zone2)} · Z3 {formatStat(averages.avgZoneMinutes.zone3)} · Z4 {formatStat(averages.avgZoneMinutes.zone4)} · Z5 {formatStat(averages.avgZoneMinutes.zone5)}
+          </strong>
+        </div>
+        <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>Avg steps: not available (no WHOOP steps data source).</div>
+      </div>
+    </div>
+  )
+}
+
+function averageOf(values: Array<number | null | undefined>) {
+  const valid = values.filter((v): v is number => v != null)
+  if (valid.length === 0) return null
+  return Math.round((valid.reduce((sum, v) => sum + v, 0) / valid.length) * 10) / 10
+}
+
+function computeAverages(group: ParticipantWithWellness[]): Averages {
+  return {
+    avgWeightedScore: averageOf(group.map((p) => p.engagement_score)),
+    avgWearConsistency: averageOf(group.map((p) => p.engagement_score_components?.device_wear_consistency)),
+    avgZoneMinutes: {
+      zone1: averageOf(group.map((p) => p.avg_zone_minutes?.zone1)),
+      zone2: averageOf(group.map((p) => p.avg_zone_minutes?.zone2)),
+      zone3: averageOf(group.map((p) => p.avg_zone_minutes?.zone3)),
+      zone4: averageOf(group.map((p) => p.avg_zone_minutes?.zone4)),
+      zone5: averageOf(group.map((p) => p.avg_zone_minutes?.zone5)),
+    },
+  }
+}
+
+export function WellnessDirectorClient({ participants, role }: Props) {
+  const isAdmin = role === 'admin'
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
   const [weights, setWeights] = useState<WeightsState>(DEFAULT_WEIGHTS)
@@ -54,6 +106,9 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
   const [configStatus, setConfigStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle')
   const [configLoaded, setConfigLoaded] = useState(false)
+  const [nudgeMessage, setNudgeMessage] = useState('')
+  const [nudgeStatus, setNudgeStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const [nudgeError, setNudgeError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -99,6 +154,9 @@ export function WellnessDirectorClient({ participants }: Props) {
       value: e.engagement_score as number,
     }))
 
+  const cohortAverages = useMemo(() => computeAverages(scopedParticipants), [scopedParticipants])
+  const selectedAverages = useMemo(() => (selected ? computeAverages([selected]) : null), [selected])
+
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
     const response = await fetch('/api/admin/wellness-director-overrides', {
       method: 'POST',
@@ -132,6 +190,29 @@ export function WellnessDirectorClient({ participants }: Props) {
     return response.json()
   }
 
+  const sendNudge = async (participantId: string) => {
+    if (!nudgeMessage.trim()) return
+    setNudgeStatus('sending')
+    setNudgeError('')
+    const response = await fetch('/api/admin/events', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: nudgeMessage.trim(),
+        target_type: 'participant',
+        participant_id: participantId,
+      }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null) as { error?: string } | null
+      setNudgeStatus('error')
+      setNudgeError(payload?.error ?? 'Failed to send nudge.')
+      return
+    }
+    setNudgeStatus('sent')
+    setNudgeMessage('')
+  }
+
   return (
     <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -154,6 +235,14 @@ export function WellnessDirectorClient({ participants }: Props) {
             <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
           ) : (
             <ChartSkeleton height={210} />
+          )}
+          {configLoaded && (
+            <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
+              <AveragesBlock title="Cohort averages" averages={cohortAverages} />
+              {selected && selectedAverages && (
+                <AveragesBlock title={`${selected.first_name} ${selected.last_name}`} averages={selectedAverages} />
+              )}
+            </div>
           )}
         </Card>
         <Card title="Score breakdown">
@@ -220,7 +309,7 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div>Choose a participant to review baseline status and overrides.</div>
           )}
         </Card>
-       <Card title="Engagement-score weights">
+       <Card title="Engagement-score weights" badge={!isAdmin ? <Badge variant="wolf">view only</Badge> : undefined}>
          {!configLoaded ? (
            <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
              {Array.from({ length: 5 }).map((_, index) => (
@@ -230,6 +319,15 @@ export function WellnessDirectorClient({ participants }: Props) {
                </div>
              ))}
            </div>
+         ) : !isAdmin ? (
+           <>
+             {Object.entries(weights).map(([key, value]) => (
+               <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />
+             ))}
+             <div style={{ color: '#A5ACAF', fontSize: 11, marginTop: 8 }}>
+               Set by an admin for the whole cohort. Contact an admin to request a change.
+             </div>
+           </>
          ) : (
            <>
              {Object.entries(weights).map(([key, value]) => (
@@ -276,6 +374,36 @@ export function WellnessDirectorClient({ participants }: Props) {
          <div>{!configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
        </Card>
       </div>
+
+      {selected && (
+        <div style={{ marginTop: 14 }}>
+          <Card title={`Send a nudge to ${selected.first_name} ${selected.last_name}`}>
+            <textarea
+              aria-label="nudge message"
+              className="form-control-dark"
+              value={nudgeMessage}
+              onChange={(e) => { setNudgeMessage(e.target.value); if (nudgeStatus !== 'idle') setNudgeStatus('idle') }}
+              placeholder="Write a short message for this participant…"
+              rows={3}
+              style={{ width: '100%', boxSizing: 'border-box' }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+              <button
+                className="btn-primary"
+                type="button"
+                disabled={!nudgeMessage.trim() || nudgeStatus === 'sending'}
+                onClick={() => sendNudge(selected.id)}
+                style={{ opacity: !nudgeMessage.trim() || nudgeStatus === 'sending' ? 0.6 : 1 }}
+              >
+                {nudgeStatus === 'sending' ? 'Sending…' : 'Send nudge'}
+              </button>
+              <div style={{ color: nudgeStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
+                {nudgeStatus === 'sent' ? 'Sent' : nudgeStatus === 'error' ? nudgeError : ''}
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </>
   )
 }
