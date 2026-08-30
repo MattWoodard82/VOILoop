@@ -129,6 +129,15 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     return () => { cancelled = true }
   }, [])
 
+  // Reset the nudge draft whenever the selected participant changes, so switching
+  // from one participant to another can't leave a stale draft or "Sent"/"error"
+  // status that appears to belong to (and could be sent to) the wrong person.
+  useEffect(() => {
+    setNudgeMessage('')
+    setNudgeStatus('idle')
+    setNudgeError('')
+  }, [personFilter])
+
   const departments = useMemo(() => ['All', ...Array.from(new Set(participants.map((e) => e.department))).sort()], [participants])
   const filtered = useMemo(() => {
     let result = [...participants]
@@ -194,23 +203,31 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     if (!nudgeMessage.trim()) return
     setNudgeStatus('sending')
     setNudgeError('')
-    const response = await fetch('/api/admin/events', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: nudgeMessage.trim(),
-        target_type: 'participant',
-        participant_id: participantId,
-      }),
-    })
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null) as { error?: string } | null
+    try {
+      const response = await fetch('/api/admin/events', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: nudgeMessage.trim(),
+          target_type: 'participant',
+          participant_id: participantId,
+        }),
+      })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null
+        setNudgeStatus('error')
+        setNudgeError(payload?.error ?? 'Failed to send nudge.')
+        return
+      }
+      setNudgeStatus('sent')
+      setNudgeMessage('')
+    } catch {
+      // fetch() itself rejects on network/offline/timeout failures (as opposed to
+      // a non-ok HTTP response, handled above) - without this, those failures
+      // would leave the button stuck in "Sending…" forever.
       setNudgeStatus('error')
-      setNudgeError(payload?.error ?? 'Failed to send nudge.')
-      return
+      setNudgeError('Failed to send nudge. Check your connection and try again.')
     }
-    setNudgeStatus('sent')
-    setNudgeMessage('')
   }
 
   return (
@@ -397,7 +414,7 @@ export function WellnessDirectorClient({ participants, role }: Props) {
               >
                 {nudgeStatus === 'sending' ? 'Sending…' : 'Send nudge'}
               </button>
-              <div style={{ color: nudgeStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
+              <div role="status" aria-live="polite" style={{ color: nudgeStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
                 {nudgeStatus === 'sent' ? 'Sent' : nudgeStatus === 'error' ? nudgeError : ''}
               </div>
             </div>

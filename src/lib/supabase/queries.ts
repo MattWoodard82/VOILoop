@@ -150,8 +150,15 @@ function computeAverageZoneMinutes(
   const windowStart = new Date(referenceDate)
   windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
   const windowStartKey = toDateKey(windowStart)
+  const windowEndKey = toDateKey(referenceDate)
 
-  const windowed = workouts.filter((w) => w.date.slice(0, 10) >= windowStartKey)
+  // Bound the window on both ends: without the upper bound, future-dated or
+  // otherwise out-of-order imported workouts (dated after referenceDate) would
+  // still be included and could inflate the trailing-window averages.
+  const windowed = workouts.filter((w) => {
+    const dateKey = w.date.slice(0, 10)
+    return dateKey >= windowStartKey && dateKey <= windowEndKey
+  })
   if (windowed.length === 0) return null
 
   const zoneKeys = ['zone1_pct', 'zone2_pct', 'zone3_pct', 'zone4_pct', 'zone5_pct'] as const
@@ -695,13 +702,15 @@ export async function getTeamDashboard(): Promise<{
       nudge_response: nudgeResponse ?? 0,
       workout_volume: workoutVolume ?? 0,
     }
-    const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * engagementWeights.submission_consistency) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * engagementWeights.device_wear_consistency) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * engagementWeights.pulse_completion) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * engagementWeights.nudge_response) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * engagementWeights.workout_volume) / 100) : 0,
-    ].reduce((sum, part) => sum + part, 0)
+    const engagementScore: number = Math.round(
+      [
+        submissionConsistency != null ? (submissionConsistency * engagementWeights.submission_consistency) / 100 : 0,
+        deviceWearConsistency != null ? (deviceWearConsistency * engagementWeights.device_wear_consistency) / 100 : 0,
+        pulseCompletion != null ? (pulseCompletion * engagementWeights.pulse_completion) / 100 : 0,
+        nudgeResponse != null ? (nudgeResponse * engagementWeights.nudge_response) / 100 : 0,
+        workoutVolume != null ? (workoutVolume * engagementWeights.workout_volume) / 100 : 0,
+      ].reduce((sum, part) => sum + part, 0),
+    )
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const last21 = rows.slice(-21)

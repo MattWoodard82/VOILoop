@@ -35,6 +35,17 @@ export function normalizeEngagementWeights(rawWeights: unknown): EngagementWeigh
   const candidate = rawWeights as Record<string, unknown>
   const hasAllKeys = FR13_WEIGHT_KEYS.every((key) => typeof candidate[key] === 'number' && Number.isFinite(candidate[key]))
   if (!hasAllKeys) return DEFAULT_ENGAGEMENT_WEIGHTS
+
+  const values = FR13_WEIGHT_KEYS.map((key) => candidate[key] as number)
+  // Mirror the PUT route's validation: every individual weight must be within the
+  // 0-100 range, and the full set must sum to 100 (rounded to avoid float noise
+  // like 33.33 * 3 = 99.99000000000001). A malformed/legacy row that slips past
+  // this falls back to defaults instead of producing out-of-range engagement
+  // scores or incorrect risk tiers.
+  const inRange = values.every((value) => value >= 0 && value <= 100)
+  const total = Math.round(values.reduce((sum, value) => sum + value, 0) * 100) / 100
+  if (!inRange || total !== 100) return DEFAULT_ENGAGEMENT_WEIGHTS
+
   return {
     submission_consistency: candidate.submission_consistency as number,
     device_wear_consistency: candidate.device_wear_consistency as number,
