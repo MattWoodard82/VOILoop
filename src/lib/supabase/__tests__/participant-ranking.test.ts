@@ -7,13 +7,21 @@ function makeSupabaseClient(tables: Record<string, any[]>) {
   return {
     from: jest.fn((table: string) => {
       const rows = [...(tables[table] ?? [])]
-      const filters: Array<{ column: string; value: any }> = []
+      const filters: Array<{ kind: 'eq' | 'gte' | 'lte'; column: string; value: any }> = []
       const orders: Array<{ column: string; ascending: boolean }> = []
       let limitCount: number | null = null
 
       const runQuery = () => {
         let result = [...rows]
-        for (const filter of filters) result = result.filter((row) => row[filter.column] === filter.value)
+        for (const filter of filters) {
+          if (filter.kind === 'gte') {
+            result = result.filter((row) => row[filter.column] >= filter.value)
+          } else if (filter.kind === 'lte') {
+            result = result.filter((row) => row[filter.column] <= filter.value)
+          } else {
+            result = result.filter((row) => row[filter.column] === filter.value)
+          }
+        }
         for (const order of orders) {
           result.sort((a, b) => {
             if (a[order.column] === b[order.column]) return 0
@@ -29,7 +37,15 @@ function makeSupabaseClient(tables: Record<string, any[]>) {
       const builder: any = {
         select: jest.fn(() => builder),
         eq: jest.fn((column: string, value: any) => {
-          filters.push({ column, value })
+          filters.push({ kind: 'eq', column, value })
+          return builder
+        }),
+        gte: jest.fn((column: string, value: any) => {
+          filters.push({ kind: 'gte', column, value })
+          return builder
+        }),
+        lte: jest.fn((column: string, value: any) => {
+          filters.push({ kind: 'lte', column, value })
           return builder
         }),
         or: jest.fn(() => builder),

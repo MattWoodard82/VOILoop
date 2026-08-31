@@ -1,4 +1,5 @@
 import {
+  getCurrentWeekPulse,
   getLatestWellness,
   getLatestWorkouts,
   getParticipantImportBatches,
@@ -973,6 +974,55 @@ describe('getTeamHealthScore', () => {
     expect(result.current.window).toEqual({ start: '2026-08-17', end: '2026-08-23' })
     expect(result.current.sleep).toBe(100.0)
     expect(result.baseline.window).toEqual({ start: '2026-07-02', end: '2026-07-27' })
+  })
+})
+
+describe('getCurrentWeekPulse', () => {
+  const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  test('includes submissions from Monday through Sunday of the current week and excludes adjacent weeks', async () => {
+    // 2026-08-19 is a Wednesday, so the current week runs Mon 2026-08-17 - Sun 2026-08-23.
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-19T12:00:00Z'))
+
+    const pulseSurveys = [
+      { id: 'boundary-mon', participant_id: 'P1', date: '2026-08-17', energy_level: 3 },
+      { id: 'boundary-sun', participant_id: 'P1', date: '2026-08-23', energy_level: 4 },
+      { id: 'mid-week', participant_id: 'P1', date: '2026-08-19', energy_level: 5 },
+      { id: 'prior-week', participant_id: 'P2', date: '2026-08-16', energy_level: 2 },
+      { id: 'next-week', participant_id: 'P2', date: '2026-08-24', energy_level: 2 },
+    ]
+
+    mockCreateClient.mockReturnValue(makeTableClient({ pulse_surveys: pulseSurveys }) as never)
+
+    const result = await getCurrentWeekPulse()
+
+    expect(result.map((row) => row.id).sort()).toEqual(['boundary-mon', 'boundary-sun', 'mid-week'])
+  })
+
+  test('returns every submission for a participant who responded on multiple days, without deduping', async () => {
+    // 2026-08-19 is a Wednesday, so the current week runs Mon 2026-08-17 - Sun 2026-08-23.
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-19T12:00:00Z'))
+
+    const pulseSurveys = [
+      { id: 'mon', participant_id: 'P1', date: '2026-08-17', energy_level: 3 },
+      { id: 'tue', participant_id: 'P1', date: '2026-08-18', energy_level: 4 },
+      { id: 'wed', participant_id: 'P1', date: '2026-08-19', energy_level: 5 },
+    ]
+
+    mockCreateClient.mockReturnValue(makeTableClient({ pulse_surveys: pulseSurveys }) as never)
+
+    const result = await getCurrentWeekPulse()
+
+    expect(result).toHaveLength(3)
+    expect(result.filter((row) => row.participant_id === 'P1')).toHaveLength(3)
   })
 })
 

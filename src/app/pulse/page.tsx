@@ -1,5 +1,5 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { getTeamDashboard, getLatestPulse } from '@/lib/supabase/queries'
+import { getTeamDashboard, getCurrentWeekPulse } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge } from '@/components/ui'
 import { initials, safeAvg } from '@/lib/utils'
 import { requireAuth } from '@/lib/supabase/server'
@@ -31,10 +31,14 @@ export default async function PulsePage() {
 
   const [{ participants }, pulse] = await Promise.all([
     getTeamDashboard(),
-    getLatestPulse(),
+    getCurrentWeekPulse(),
   ])
 
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const pulseCounts = pulse.reduce<Record<string, number>>((acc, row) => {
+    acc[row.participant_id] = (acc[row.participant_id] ?? 0) + 1
+    return acc
+  }, {})
   const responded = pulse.length
   const avgMentalWellbeing = safeAvg(pulse.map((p) => p.mental_wellbeing))
   const avgEnergy = safeAvg(pulse.map((p) => p.energy_level))
@@ -61,12 +65,19 @@ export default async function PulsePage() {
     { label: 'None', key: 'none' },
   ]
 
+  const now = new Date()
+  const utcDay = now.getUTCDay()
+  const diffToMonday = utcDay === 0 ? -6 : 1 - utcDay
+  const weekMonday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diffToMonday))
+  const weekSunday = new Date(Date.UTC(weekMonday.getUTCFullYear(), weekMonday.getUTCMonth(), weekMonday.getUTCDate() + 6))
+  const weekLabel = `${weekMonday.toISOString().slice(5, 10).replace('-', '/')} – ${weekSunday.toISOString().slice(5, 10).replace('-', '/')}`
+
   return (
-    <DashboardShell title="Pulse Survey Dashboard">
+    <DashboardShell title="Pulse Survey Dashboard" period={weekLabel}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Response rate" value={`${Math.round((responded / participants.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${participants.length} responded`} deltaDir="up" />
-        <KpiCard label="Avg mental wellbeing" value={`${avgMentalWellbeing}/5`} color="#fff" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
-        <KpiCard label="Avg energy level" value={`${avgEnergy}/5`} color="#69BE28" delta={responded > 0 ? 'Latest survey average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Response rate" value={`${Math.round((responded / participants.length) * 100)}%`} color="#69BE28" delta={`${responded} of ${participants.length} responded this week`} deltaDir="up" />
+        <KpiCard label="Avg mental wellbeing" value={`${avgMentalWellbeing}/5`} color="#fff" delta={responded > 0 ? 'This week\'s average' : 'No responses yet'} deltaDir="neutral" />
+        <KpiCard label="Avg energy level" value={`${avgEnergy}/5`} color="#69BE28" delta={responded > 0 ? 'This week\'s average' : 'No responses yet'} deltaDir="neutral" />
         <KpiCard label="Confident about health" value={`${pctConfident}%`} color="#fff" delta={responded > 0 ? 'Said true this week' : 'No responses yet'} deltaDir="neutral" />
       </div>
 
@@ -83,6 +94,7 @@ export default async function PulsePage() {
             .sort((a, b) => (pulseMap[b.id]?.mental_wellbeing ?? 0) - (pulseMap[a.id]?.mental_wellbeing ?? 0))
             .map((e) => {
               const score = pulseMap[e.id]?.mental_wellbeing ?? 0
+              const count = pulseCounts[e.id] ?? 0
               const color = score >= 4 ? '#69BE28' : score >= 3 ? '#FFA500' : '#ff6b6b'
               return (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
@@ -95,6 +107,7 @@ export default async function PulsePage() {
                   <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ width: `${score * 20}%`, height: '100%', background: color, borderRadius: 3 }} />
                   </div>
+                  <span style={{ width: 24, textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#A5ACAF' }}>{count}</span>
                   <span style={{ width: 24, textAlign: 'right', fontSize: 11, fontWeight: 700, color }}>{score}</span>
                 </div>
               )
@@ -191,7 +204,7 @@ export default async function PulsePage() {
 
         <Card title="Health flags">
           {flaggedResponses === 0 ? (
-            <div style={{ fontSize: 12, color: '#A5ACAF' }}>No respondents added a health flag in the latest pulse window.</div>
+            <div style={{ fontSize: 12, color: '#A5ACAF' }}>No respondents added a health flag this week.</div>
           ) : (
             pulse
               .filter((entry) => typeof entry.health_flag === 'string' && entry.health_flag.trim().length > 0)
