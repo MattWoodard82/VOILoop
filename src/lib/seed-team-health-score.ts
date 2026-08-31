@@ -7,10 +7,13 @@
  * exercise the Team Health Score baseline/last-week/current windows, which each
  * need many consecutive days of daily_wellness + workouts history. This script
  * additively backfills several months of realistic daily_wellness and workouts
- * rows for one participant (EMP001 / Travis Brandenburgh) spanning from the
- * admin-configured baseline window through "today" (computed at run time), so
- * the Team Health Score Trend / 5-Metric Breakdown cards have real data to
- * render locally instead of "Missing data this window".
+ * rows for every participant seeded by seed.ts, spanning from the later of the
+ * admin-configured baseline window or each participant's enrolled_date through
+ * "today" (computed at run time), so the Team Health Score Trend / 5-Metric
+ * Breakdown cards -- and the cohort/per-participant averages block -- have real
+ * data to render locally instead of "Missing data this window" / all-zero
+ * averages. Each participant gets a distinct performance profile (via a
+ * per-participant salt + baseline offset) so the cohort doesn't look uniform.
  *
  * Safe to re-run: every insert is an upsert keyed on the same unique
  * constraints seed.ts uses (participant_id+date for daily_wellness,
@@ -63,7 +66,23 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-const PARTICIPANT_ID = 'EMP001'
+// Mirrors seed.ts's participantDefs (id + enrolled_date only -- the rest of
+// each participant's profile already lives in seed.ts). Each entry also gets
+// a distinct performance profile so the cohort isn't uniform: `baseOffset`
+// shifts recovery/sleep/HRV up or down, and `salt` keeps each participant's
+// pseudo-random day-to-day noise independent of the others.
+const PARTICIPANTS: { id: string; enrolledDate: string; baseOffset: number; salt: number }[] = [
+  { id: 'EMP001', enrolledDate: '2026-01-15', baseOffset: 0,   salt: 100 }, // Travis -- exact-data reference participant, unchanged
+  { id: 'EMP002', enrolledDate: '2026-01-15', baseOffset: 5,   salt: 200 },
+  { id: 'EMP003', enrolledDate: '2026-02-01', baseOffset: -8,  salt: 300 },
+  { id: 'EMP004', enrolledDate: '2026-02-01', baseOffset: 2,   salt: 400 },
+  { id: 'EMP005', enrolledDate: '2026-02-15', baseOffset: -12, salt: 500 },
+  { id: 'EMP006', enrolledDate: '2026-03-01', baseOffset: 6,   salt: 600 },
+  { id: 'EMP007', enrolledDate: '2026-03-01', baseOffset: -3,  salt: 700 },
+  { id: 'EMP008', enrolledDate: '2026-03-15', baseOffset: -15, salt: 800 },
+  { id: 'EMP009', enrolledDate: '2026-04-01', baseOffset: 4,   salt: 900 },
+  { id: 'EMP010', enrolledDate: '2026-08-01', baseOffset: -5,  salt: 1000 }, // Caleb -- enrolled recently, so short history is expected
+]
 
 function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10)
@@ -94,99 +113,114 @@ async function main() {
     .maybeSingle()
   if (configErr) { console.error('team_health_score_config:', configErr); process.exit(1) }
 
-  const startDate = config?.baseline_start ?? '2026-07-02'
+  const baselineStart = config?.baseline_start ?? '2026-07-02'
   const endDate = toDateKey(new Date()) // through "today", whenever this runs
-  console.log(`Backfilling ${PARTICIPANT_ID} daily_wellness + workouts from ${startDate} to ${endDate}...`)
 
   const wellnessRows: Record<string, unknown>[] = []
   const workoutRows: Record<string, unknown>[] = []
 
-  let cursor = startDate
-  let dayIndex = 0
-  while (cursor <= endDate) {
-    const r1 = dayRandom(cursor, 1)
-    const r2 = dayRandom(cursor, 2)
-    const r3 = dayRandom(cursor, 3)
-    const dow = new Date(`${cursor}T00:00:00.000Z`).getUTCDay() // 0=Sun..6=Sat
+  for (const participant of PARTICIPANTS) {
+    // Never backfill before a participant's real enrolled_date -- e.g. Caleb
+    // (EMP010) enrolled 2026-08-01, so a short, recent-only history is correct
+    // for him even once every other participant has a full baseline window.
+    const startDate = baselineStart > participant.enrolledDate ? baselineStart : participant.enrolledDate
+    if (startDate > endDate) continue
 
-    // Gentle upward trend over the whole range so the Trend chart shows
-    // visible baseline -> last week -> current movement, plus day-to-day noise.
-    const trend = Math.min(dayIndex / 45, 1) // ramps up over ~45 days then holds
-    const sleepHrs = Math.round((6.6 + trend * 0.9 + (r1 - 0.5) * 1.0) * 100) / 100
-    const hrvMs = Math.round(34 + trend * 10 + (r2 - 0.5) * 8)
-    const recoveryScore = Math.max(1, Math.min(100, Math.round(58 + trend * 20 + (r3 - 0.5) * 24)))
-    // "Sleep onset" the previous night, ~22:00-23:30 local, so sleepNightDate's
-    // 6am-cutoff rule maps it onto `cursor` (the night that ends this morning).
-    const onsetHour = 22 + Math.floor(r1 * 2) // 22 or 23
-    const onsetMinute = Math.floor(r2 * 60)
-    const onsetDate = addDays(cursor, -1)
-    const sleepOnsetTime = `${onsetDate}T${String(onsetHour).padStart(2, '0')}:${String(onsetMinute).padStart(2, '0')}:00.000Z`
+    let cursor = startDate
+    let dayIndex = 0
+    let rowCount = 0
+    let woCount = 0
+    while (cursor <= endDate) {
+      const r1 = dayRandom(cursor, participant.salt + 1)
+      const r2 = dayRandom(cursor, participant.salt + 2)
+      const r3 = dayRandom(cursor, participant.salt + 3)
+      const dow = new Date(`${cursor}T00:00:00.000Z`).getUTCDay() // 0=Sun..6=Sat
 
-    wellnessRows.push({
-      participant_id: PARTICIPANT_ID,
-      date: cursor,
-      recovery_score: recoveryScore,
-      hrv_ms: hrvMs,
-      resting_hr: 60 - Math.round(trend * 4),
-      blood_oxygen: 97.5,
-      skin_temp: 33.2,
-      day_strain: Math.round((8 + r1 * 6) * 100) / 100,
-      calories: 2200 + Math.round(r2 * 400),
-      sleep_perf: Math.max(1, Math.min(100, Math.round(70 + trend * 15 + (r3 - 0.5) * 20))),
-      sleep_hrs: sleepHrs,
-      sleep_debt: Math.round((1.2 - trend * 0.7) * 100) / 100,
-      sleep_need: 8.1,
-      deep_sleep: 1.3,
-      rem_sleep: 1.6,
-      light_sleep: sleepHrs - 2.9 > 0 ? Math.round((sleepHrs - 2.9) * 100) / 100 : 3.0,
-      sleep_eff: 88,
-      sleep_consistency: 75,
-      resp_rate: 15.8,
-      sleep_onset_time: sleepOnsetTime,
-    })
+      // Gentle upward trend over the whole range so the Trend chart shows
+      // visible baseline -> last week -> current movement, plus day-to-day noise,
+      // offset per-participant so the cohort isn't uniform.
+      const trend = Math.min(dayIndex / 45, 1) // ramps up over ~45 days then holds
+      const offset = participant.baseOffset
+      const sleepHrs = Math.round((6.6 + offset / 20 + trend * 0.9 + (r1 - 0.5) * 1.0) * 100) / 100
+      const hrvMs = Math.round(34 + offset / 2 + trend * 10 + (r2 - 0.5) * 8)
+      const recoveryScore = Math.max(1, Math.min(100, Math.round(58 + offset + trend * 20 + (r3 - 0.5) * 24)))
+      // "Sleep onset" the previous night, ~22:00-23:30 local, so sleepNightDate's
+      // 6am-cutoff rule maps it onto `cursor` (the night that ends this morning).
+      const onsetHour = 22 + Math.floor(r1 * 2) // 22 or 23
+      const onsetMinute = Math.floor(r2 * 60)
+      const onsetDate = addDays(cursor, -1)
+      const sleepOnsetTime = `${onsetDate}T${String(onsetHour).padStart(2, '0')}:${String(onsetMinute).padStart(2, '0')}:00.000Z`
 
-    // Rest days on Tue/Thu (dow 2, 4) so zone2Score and coverage still read
-    // realistically <100% workout days but with plenty of coverage for the
-    // wear-consistency/coverage% calculations, which key off daily_wellness.
-    if (dow !== 2 && dow !== 4) {
-      const durationMin = 25 + Math.round(r1 * 30)
-      const startHour = 6 + Math.floor(r2 * 3)
-      workoutRows.push({
-        participant_id: PARTICIPANT_ID,
+      wellnessRows.push({
+        participant_id: participant.id,
         date: cursor,
-        start_time: `${cursor}T${String(startHour).padStart(2, '0')}:15:00Z`,
-        end_time: `${cursor}T${String(startHour).padStart(2, '0')}:${String(15 + (durationMin % 45)).padStart(2, '0')}:00Z`,
-        activity: dow % 2 === 0 ? 'Running' : 'Weightlifting',
-        duration_min: durationMin,
-        strain: Math.round((7 + r3 * 5) * 100) / 100,
-        calories: 250 + Math.round(r1 * 200),
-        max_hr: 165 + Math.round(r2 * 15),
-        avg_hr: 125 + Math.round(r3 * 20),
-        zone1_pct: 30,
-        zone2_pct: 20 + Math.round(trend * 8),
-        zone3_pct: 20,
-        zone4_pct: 20 - Math.round(trend * 4),
-        zone5_pct: 10 - Math.round(trend * 4),
+        recovery_score: recoveryScore,
+        hrv_ms: hrvMs,
+        resting_hr: 60 - Math.round(offset / 4) - Math.round(trend * 4),
+        blood_oxygen: 97.5,
+        skin_temp: 33.2,
+        day_strain: Math.round((8 + r1 * 6) * 100) / 100,
+        calories: 2200 + Math.round(r2 * 400),
+        sleep_perf: Math.max(1, Math.min(100, Math.round(70 + offset + trend * 15 + (r3 - 0.5) * 20))),
+        sleep_hrs: sleepHrs,
+        sleep_debt: Math.max(0, Math.round((1.2 - offset / 20 - trend * 0.7) * 100) / 100),
+        sleep_need: 8.1,
+        deep_sleep: 1.3,
+        rem_sleep: 1.6,
+        light_sleep: sleepHrs - 2.9 > 0 ? Math.round((sleepHrs - 2.9) * 100) / 100 : 3.0,
+        sleep_eff: 88,
+        sleep_consistency: 75,
+        resp_rate: 15.8,
+        sleep_onset_time: sleepOnsetTime,
       })
-    }
+      rowCount += 1
 
-    cursor = addDays(cursor, 1)
-    dayIndex += 1
+      // Rest days on Tue/Thu (dow 2, 4) so zone2Score and coverage still read
+      // realistically <100% workout days but with plenty of coverage for the
+      // wear-consistency/coverage% calculations, which key off daily_wellness.
+      if (dow !== 2 && dow !== 4) {
+        const durationMin = 25 + Math.round(r1 * 30)
+        const startHour = 6 + Math.floor(r2 * 3)
+        workoutRows.push({
+          participant_id: participant.id,
+          date: cursor,
+          start_time: `${cursor}T${String(startHour).padStart(2, '0')}:15:00Z`,
+          end_time: `${cursor}T${String(startHour).padStart(2, '0')}:${String(15 + (durationMin % 45)).padStart(2, '0')}:00Z`,
+          activity: dow % 2 === 0 ? 'Running' : 'Weightlifting',
+          duration_min: durationMin,
+          strain: Math.round((7 + r3 * 5) * 100) / 100,
+          calories: 250 + Math.round(r1 * 200),
+          max_hr: 165 + Math.round(r2 * 15),
+          avg_hr: 125 + Math.round(r3 * 20),
+          zone1_pct: 30,
+          zone2_pct: 20 + Math.round(trend * 8),
+          zone3_pct: 20,
+          zone4_pct: 20 - Math.round(trend * 4),
+          zone5_pct: 10 - Math.round(trend * 4),
+        })
+        woCount += 1
+      }
+
+      cursor = addDays(cursor, 1)
+      dayIndex += 1
+    }
+    console.log(`  ${participant.id}: ${startDate} → ${endDate} (${rowCount} wellness days, ${woCount} workouts)`)
   }
 
+  console.log(`Upserting ${wellnessRows.length} daily_wellness rows across ${PARTICIPANTS.length} participants...`)
   const { error: wellErr } = await supabase
     .from('daily_wellness')
     .upsert(wellnessRows, { onConflict: 'participant_id,date' })
   if (wellErr) { console.error('daily_wellness backfill:', wellErr); process.exit(1) }
-  console.log(`✅ ${wellnessRows.length} daily_wellness rows upserted for ${PARTICIPANT_ID}`)
+  console.log(`✅ ${wellnessRows.length} daily_wellness rows upserted`)
 
   const { error: woErr } = await supabase
     .from('workouts')
     .upsert(workoutRows, { onConflict: 'participant_id,start_time' })
   if (woErr) { console.error('workouts backfill:', woErr); process.exit(1) }
-  console.log(`✅ ${workoutRows.length} workout rows upserted for ${PARTICIPANT_ID}`)
+  console.log(`✅ ${workoutRows.length} workout rows upserted`)
 
-  console.log('\n🎉 Team Health Score test data ready. Select Travis Brandenburgh on /wellness-director to see it.')
+  console.log('\n🎉 Team Health Score test data ready for the whole cohort on /wellness-director.')
 }
 
 main()
