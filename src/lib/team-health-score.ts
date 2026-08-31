@@ -195,8 +195,11 @@ export function hrvScore(
   isBaselineWindow: boolean,
 ): number | null {
   // Not a missing-data placeholder — a defined convention: the baseline
-  // window's own HRV trend can't be meaningfully compared to itself.
-  if (isBaselineWindow) return 50.0
+  // window's own HRV trend can't be meaningfully compared to itself. But this
+  // only applies once we've confirmed the baseline actually has HRV data —
+  // otherwise a participant with zero baseline nights would get a synthetic
+  // "neutral" 50.0 baseline score instead of the null that reflects reality.
+  if (isBaselineWindow) return baselineHrvMs != null ? 50.0 : null
   const withData = nightsInWindow(nights, window).filter((n): n is NightInput & { hrvMs: number } => n.hrvMs != null)
   if (withData.length === 0 || baselineHrvMs == null || baselineHrvMs === 0) return null
   const windowHrvMs = avgOf(withData.map((n) => n.hrvMs))
@@ -206,10 +209,16 @@ export function hrvScore(
 
 /** (c) Zone 2+ Activity Time — 20% weight. */
 export function zone2Score(workouts: WorkoutInput[], window: Window): number | null {
-  const inWindow = workoutsInWindow(workouts, window)
-  if (inWindow.length === 0) return null
+  // A workout row with no duration and no Zone 2-5 percentages at all carries
+  // zero information, not a real zero-minute reading. Coercing it to 0 would
+  // count it as "measured" and drag the activity score down, contradicting
+  // the null-for-no-underlying-data convention used elsewhere in this file.
+  const measurable = workoutsInWindow(workouts, window).filter(
+    (w) => w.durationMin != null && [w.zone2Pct, w.zone3Pct, w.zone4Pct, w.zone5Pct].some((pct) => pct != null),
+  )
+  if (measurable.length === 0) return null
 
-  const totalMinutes = inWindow.reduce((sum, w) => {
+  const totalMinutes = measurable.reduce((sum, w) => {
     const duration = w.durationMin ?? 0
     const zone2plusPct = (w.zone2Pct ?? 0) + (w.zone3Pct ?? 0) + (w.zone4Pct ?? 0) + (w.zone5Pct ?? 0)
     return sum + (duration * zone2plusPct) / 100
@@ -233,8 +242,9 @@ export function strainBalanceScore(
   baselineRecoveryPct: number | null,
   isBaselineWindow: boolean,
 ): number | null {
-  // Not a missing-data placeholder — same convention as hrvScore above.
-  if (isBaselineWindow) return 100.0
+  // Not a missing-data placeholder — same convention as hrvScore above, and
+  // same guard: only apply it once baseline recovery data actually exists.
+  if (isBaselineWindow) return baselineRecoveryPct != null ? 100.0 : null
   if (windowRecoveryPct == null || baselineRecoveryPct == null || baselineRecoveryPct === 0) return null
   if (windowRecoveryPct >= baselineRecoveryPct) return 100.0
   const pctDecline = ((baselineRecoveryPct - windowRecoveryPct) / baselineRecoveryPct) * 100

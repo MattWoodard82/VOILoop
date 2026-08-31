@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, requireAdmin, getSession, getUserAccess } from '@/lib/supabase/server'
 import { normalizeTeamHealthScoreConfig } from '@/lib/team-health-score-config'
+import { isValidCalendarDateString } from '@/lib/date-validation'
 
 export const runtime = 'nodejs'
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const MIN_BASELINE_DAYS = 7
 
 function daysInclusive(start: string, end: string): number {
@@ -43,8 +43,7 @@ export async function PUT(request: Request) {
   const baselineStart = body?.baseline_start
   const baselineEnd = body?.baseline_end
 
-  if (typeof baselineStart !== 'string' || typeof baselineEnd !== 'string' ||
-      !DATE_RE.test(baselineStart) || !DATE_RE.test(baselineEnd)) {
+  if (!isValidCalendarDateString(baselineStart) || !isValidCalendarDateString(baselineEnd)) {
     return NextResponse.json({ error: 'Invalid baseline window' }, { status: 400 })
   }
   if (baselineStart > baselineEnd) {
@@ -61,6 +60,7 @@ export async function PUT(request: Request) {
       id: 'current',
       baseline_start: baselineStart,
       baseline_end: baselineEnd,
+      updated_at: new Date().toISOString(),
     }, { onConflict: 'id' })
     .select('*')
     .single()

@@ -157,6 +157,15 @@ describe('mapWellness', () => {
     expect(wellness[0].recovery_score).toBe(65)
   })
 
+  test('maps a real Sleep onset value through to sleep_onset_time as a full ISO timestamp (needed by the Team Health Score night-mapping rule)', () => {
+    const wb: ParsedWorkbook = {
+      Stress: [{ ...stressRows[0], 'Sleep onset': '2024-01-14 23:15:00' }],
+    }
+    const { wellness } = mapWellness(wb)
+    expect(wellness).toHaveLength(1)
+    expect(wellness[0].sleep_onset_time).toBe('2024-01-14T23:15:00.000Z')
+  })
+
   test('deduplicates same participant+date across rows', () => {
     const dupeRows = [...stressRows, ...stressRows]
     const wb: ParsedWorkbook = { Stress: dupeRows }

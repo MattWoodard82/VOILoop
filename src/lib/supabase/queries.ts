@@ -609,24 +609,27 @@ export async function getPulseHistoryForParticipants(
 }
 
 // Fetches full workouts history (not just the latest date's snapshot) for a set
-// of participants since a given date. Used by getTeamHealthScore (GH #119),
-// which needs every workout back to the fixed baseline window, not just a
-// trailing slice like computeWorkoutVolumeVsBaseline/computeAverageZoneMinutes use.
+// of participants, optionally since a given date. Used by getTeamHealthScore
+// (GH #119), which needs every workout back to the fixed baseline window, and by
+// getTeamDashboard's workout-volume/zone-minutes averages, which need the full
+// history (no lower bound) so computeWorkoutVolumeVsBaseline can still see each
+// participant's pre-window baseline rate - a bounded page from getLatestWorkouts
+// can silently truncate that once a cohort's total workout rows cross
+// PostgREST's page cap (see HISTORY_PAGE_SIZE above).
 export async function getWorkoutHistoryForParticipants(
   participantIds: string[],
-  sinceDate: string,
+  sinceDate?: string,
   supabase = getQueryClient(),
 ): Promise<Workout[]> {
   if (participantIds.length === 0) return []
-  return fetchAllPages<Workout>((from, to) =>
-    supabase
+  return fetchAllPages<Workout>((from, to) => {
+    let query = supabase
       .from('workouts')
       .select('*')
       .in('participant_id', participantIds)
-      .gte('date', sinceDate)
-      .order('date', { ascending: true })
-      .range(from, to)
-  )
+    if (sinceDate) query = query.gte('date', sinceDate)
+    return query.order('date', { ascending: true }).range(from, to)
+  })
 }
 
 // Fetches the nudge/target/acknowledgement data needed to compute nudge response
@@ -699,7 +702,13 @@ export async function getTeamHealthScore(
   supabase = getQueryClient(),
 ): Promise<ParticipantScoreResult> {
   const config = await getTeamHealthScoreConfig(supabase)
-  const historySinceDate = config.baselineStart < currentStart ? config.baselineStart : currentStart
+  // scoreParticipant also needs the full "last week" window (the 7 days immediately
+  // before currentStart) even when the configured baseline starts on or after
+  // currentStart (e.g. after navigating to a week before the baseline). Anchor the
+  // fetch to whichever of baselineStart or (currentStart - 7 days) is earliest so
+  // lastWeekWindow's rows are never excluded.
+  const lastWeekSinceDate = toDateKey(new Date(new Date(`${currentStart}T00:00:00Z`).getTime() - 7 * MS_PER_DAY))
+  const historySinceDate = [config.baselineStart, lastWeekSinceDate].sort()[0]
 
   const [wellnessRows, workoutRows] = await Promise.all([
     getWellnessHistoryForParticipants([participantId], historySinceDate, supabase),
@@ -735,7 +744,7 @@ export async function getTeamDashboard(): Promise<{
   // directly as the query's hard boundary with no further downstream trimming, so an
   // off-by-one here would leak an extra day's nudges into the result.
   const nudgeSinceDate = toDateKey(new Date(now.getTime() - 20 * MS_PER_DAY))
-  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData, engagementWeights] = await Promise.all([
+  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, workoutHistory, nudgeData, engagementWeights] = await Promise.all([
     getLatestWellness(undefined, participantIds, supabase),
     getLatestWorkouts(undefined, supabase),
     getLatestHabits(undefined, supabase),
@@ -744,6 +753,15 @@ export async function getTeamDashboard(): Promise<{
     getRiskFlagsForParticipantGroup(participantIds, privilegedSupabase),
     getWellnessHistoryForParticipants(participantIds, historySinceDate, supabase),
     getPulseHistoryForParticipants(participantIds, historySinceDate, supabase),
+    // Trailing-window workout metrics (workoutVolume/avgZoneMinutes below) need
+    // every workout ever logged for every participant (computeWorkoutVolumeVsBaseline
+    // compares the trailing window against each participant's own pre-window
+    // historical rate, with no fixed lookback limit). getLatestWorkouts above is
+    // unpaginated and globally ordered by date/start_time, so once a cohort's total
+    // workout row count crosses PostgREST's page cap it silently truncates to the
+    // most-recent rows only - which can drop an entire participant's history. Use
+    // the paginated, per-participant-filtered fetch instead for these metrics.
+    getWorkoutHistoryForParticipants(participantIds, undefined, supabase),
     getNudgeEngagementData(nudgeSinceDate, supabase),
     getEngagementWeights(supabase),
   ])
@@ -765,7 +783,7 @@ export async function getTeamDashboard(): Promise<{
     // components reflect real variation instead of a single-point snapshot.
     const wellnessRows = wellnessHistory.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date))
     const pulseRows = pulseHistory.filter((row) => row.participant_id === emp.id)
-    const workoutRows = workouts.filter((row) => row.participant_id === emp.id)
+    const workoutRows = workoutHistory.filter((row) => row.participant_id === emp.id)
 
     // FR-13 component formulas (GH issue #66): each is participant-scoped, uses its
     // own defined window, and returns null (not a flattened default) when there's

@@ -53,8 +53,11 @@ describe('sleepScore', () => {
 })
 
 describe('hrvScore', () => {
-  it('baseline window always 50', () => {
+  it('baseline window with baseline data = 50', () => {
     expect(hrvScore([], w, 50.0, true)).toBe(50.0)
+  })
+  it('baseline window with NO baseline HRV data -> null (not a synthetic 50)', () => {
+    expect(hrvScore([], w, null, true)).toBeNull()
   })
   it('no change vs baseline = 50', () => {
     expect(hrvScore([night({ hrvMs: 60.0 })], w, 60.0, false)).toBe(50.0)
@@ -81,6 +84,10 @@ describe('zone2Score', () => {
   it('no workouts in window -> null (deviates from Python\'s 0.0 default per product direction)', () => {
     expect(zone2Score([], w)).toBeNull()
   })
+  it('a workout with no duration and no zone percentages at all -> null, not a measured zero', () => {
+    const workouts = [workout({ date: '2026-08-11', durationMin: null, zone2Pct: null, zone3Pct: null, zone4Pct: null, zone5Pct: null })]
+    expect(zone2Score(workouts, w)).toBeNull()
+  })
 })
 
 describe('recoveryScore', () => {
@@ -94,8 +101,11 @@ describe('recoveryScore', () => {
 })
 
 describe('strainBalanceScore', () => {
-  it('baseline window always 100', () => {
+  it('baseline window with baseline data = 100', () => {
     expect(strainBalanceScore(50, 50, true)).toBe(100.0)
+  })
+  it('baseline window with NO baseline recovery data -> null (not a synthetic 100)', () => {
+    expect(strainBalanceScore(null, null, true)).toBeNull()
   })
   it('at or above baseline = 100', () => {
     expect(strainBalanceScore(80, 70, false)).toBe(100.0)

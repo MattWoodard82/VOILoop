@@ -812,6 +812,65 @@ describe('getTeamDashboard', () => {
     jest.useRealTimers()
   })
 
+  test('uses the admin-saved non-default weights (not the hardcoded 25/20/20/15/20 defaults) when computing engagement score', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Hana', last_name: 'High', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    // P1 has one pulse survey in each of the last 3 calendar weeks (100% pulse
+    // completion) and nothing else - no daily_wellness rows, no workouts, no nudge
+    // acknowledgements - so submission_consistency, device_wear_consistency,
+    // nudge_response, and workout_volume all resolve to 0.
+    const pulseSurveys = [
+      { id: 'pulse-p1-w0', participant_id: 'P1', date: '2026-08-17', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w1', participant_id: 'P1', date: '2026-08-12', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w2', participant_id: 'P1', date: '2026-08-03', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+        // Non-default weights: pulse_completion (the only component P1 scores 100 on)
+        // is weighted at 70 instead of the default 20, with the remaining 30 spread
+        // across the other components (all of which P1 scores 0 on). If this saved
+        // config were ignored in favor of the hardcoded defaults, the score would be
+        // 20 instead of 70.
+        wellness_director_config: [
+          {
+            id: 'current',
+            weights: {
+              submission_consistency: 10,
+              device_wear_consistency: 10,
+              pulse_completion: 70,
+              nudge_response: 5,
+              workout_volume: 5,
+            },
+          },
+        ],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participant = dashboard.participants.find((p) => p.id === 'P1')
+
+    expect(participant?.engagement_score_components?.pulse_completion).toBe(100)
+    // pulse_completion(100) * 70% + everything else at 0 = 70.
+    expect(participant?.engagement_score).toBe(70)
+
+    jest.useRealTimers()
+  })
+
   test('pulse completion is computed per participant across the last 3 weeks, not diluted by another participant\u2019s row volume', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
 

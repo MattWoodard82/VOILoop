@@ -200,6 +200,15 @@ describe('validateWellnessRow', () => {
     expect(result).not.toBeNull()
     expect(result!.recoveryScore).toBe(75)
     expect(result!.sleepHrs).toBeCloseTo(7.5)
+    expect(result!.sleepOnsetIso).toBeNull()
+  })
+
+  test('parses a real Sleep onset value into a full ISO timestamp (needed by the Team Health Score night-mapping rule)', () => {
+    const errors: ImportRowError[] = []
+    const row = { ...validRow, 'Sleep onset': '2024-01-14 23:30:00' }
+    const result = validateWellnessRow('Stress', row, 2, errors)
+    expect(result).not.toBeNull()
+    expect(result!.sleepOnsetIso).toBe('2024-01-14T23:30:00.000Z')
   })
 
   test('rejects out-of-range recovery score', () => {

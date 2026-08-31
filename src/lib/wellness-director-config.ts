@@ -25,6 +25,20 @@ const FR13_WEIGHT_KEYS = [
   'workout_volume',
 ] as const
 
+// Single source of truth for what makes a set of FR-13 weights valid, shared by the
+// PUT route (rejects a save with a 400) and normalizeEngagementWeights below (falls
+// back to defaults when reading a row that's somehow invalid anyway). Keeping these
+// in sync matters: if PUT accepted a row that normalizeEngagementWeights would then
+// reject, a save could report success while GET/dashboard scoring silently reverted
+// to defaults with no visible error.
+export function isValidEngagementWeights(values: number[]): boolean {
+  if (values.length !== FR13_WEIGHT_KEYS.length) return false
+  const inRange = values.every((value) => Number.isFinite(value) && value >= 0 && value <= 100)
+  // Rounded to avoid float noise like 33.33 * 3 = 99.99000000000001.
+  const total = Math.round(values.reduce((sum, value) => sum + value, 0) * 100) / 100
+  return inRange && total === 100
+}
+
 // A persisted config row may still hold the legacy {recovery, hrv, sleep, debt}
 // shape from before this route switched to the FR-13 component keys. Normalize
 // anything that isn't a complete, well-formed FR-13 weights object back to the
@@ -37,14 +51,7 @@ export function normalizeEngagementWeights(rawWeights: unknown): EngagementWeigh
   if (!hasAllKeys) return DEFAULT_ENGAGEMENT_WEIGHTS
 
   const values = FR13_WEIGHT_KEYS.map((key) => candidate[key] as number)
-  // Mirror the PUT route's validation: every individual weight must be within the
-  // 0-100 range, and the full set must sum to 100 (rounded to avoid float noise
-  // like 33.33 * 3 = 99.99000000000001). A malformed/legacy row that slips past
-  // this falls back to defaults instead of producing out-of-range engagement
-  // scores or incorrect risk tiers.
-  const inRange = values.every((value) => value >= 0 && value <= 100)
-  const total = Math.round(values.reduce((sum, value) => sum + value, 0) * 100) / 100
-  if (!inRange || total !== 100) return DEFAULT_ENGAGEMENT_WEIGHTS
+  if (!isValidEngagementWeights(values)) return DEFAULT_ENGAGEMENT_WEIGHTS
 
   return {
     submission_consistency: candidate.submission_consistency as number,

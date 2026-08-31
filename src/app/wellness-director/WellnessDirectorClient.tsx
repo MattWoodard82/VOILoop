@@ -234,8 +234,11 @@ export function WellnessDirectorClient({ participants, role }: Props) {
   const cohortAverages = useMemo(() => computeAverages(scopedParticipants), [scopedParticipants])
   const selectedAverages = useMemo(() => (selected ? computeAverages([selected]) : null), [selected])
 
-  // Recomputes the selected participant's Team Health Score whenever they change
-  // or the WD navigates to a different reporting week.
+  // Recomputes the selected participant's Team Health Score whenever they change,
+  // the WD navigates to a different reporting week, or the admin saves a new
+  // baseline window - otherwise both the trend chart and 5-metric breakdown below
+  // would keep showing scores computed against the previous baseline until the
+  // next unrelated navigation or a full reload.
   useEffect(() => {
     if (!selected) {
       setTeamHealthScore(null)
@@ -263,7 +266,7 @@ export function WellnessDirectorClient({ participants, role }: Props) {
         if (!cancelled) setThsLoading(false)
       })
     return () => { cancelled = true }
-  }, [selected, currentStart])
+  }, [selected, currentStart, baselineConfig])
 
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
     const response = await fetch('/api/admin/wellness-director-overrides', {
@@ -532,9 +535,9 @@ export function WellnessDirectorClient({ participants, role }: Props) {
                 type="recovery"
                 seriesName="Team Health Score"
                 data={[
-                  { name: 'Baseline', value: teamHealthScore.baseline.composite ?? 0, color: teamHealthScore.baseline.composite != null ? recoveryColor(teamHealthScore.baseline.composite) : NO_DATA_COLOR },
-                  { name: 'Last Week', value: teamHealthScore.lastWeek.composite ?? 0, color: teamHealthScore.lastWeek.composite != null ? recoveryColor(teamHealthScore.lastWeek.composite) : NO_DATA_COLOR },
-                  { name: 'Current', value: teamHealthScore.current.composite ?? 0, color: teamHealthScore.current.composite != null ? recoveryColor(teamHealthScore.current.composite) : NO_DATA_COLOR },
+                  { name: 'Baseline', value: teamHealthScore.baseline.composite ?? 0, color: teamHealthScore.baseline.composite != null ? recoveryColor(teamHealthScore.baseline.composite) : NO_DATA_COLOR, label: teamHealthScore.baseline.composite == null ? 'No data' : undefined },
+                  { name: 'Last Week', value: teamHealthScore.lastWeek.composite ?? 0, color: teamHealthScore.lastWeek.composite != null ? recoveryColor(teamHealthScore.lastWeek.composite) : NO_DATA_COLOR, label: teamHealthScore.lastWeek.composite == null ? 'No data' : undefined },
+                  { name: 'Current', value: teamHealthScore.current.composite ?? 0, color: teamHealthScore.current.composite != null ? recoveryColor(teamHealthScore.current.composite) : NO_DATA_COLOR, label: teamHealthScore.current.composite == null ? 'No data' : undefined },
                 ]}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>

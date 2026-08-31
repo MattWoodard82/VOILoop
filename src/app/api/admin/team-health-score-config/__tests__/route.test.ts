@@ -114,10 +114,20 @@ describe('admin team-health-score-config route', () => {
     }))
 
     expect(response.status).toBe(200)
-    expect(upsert).toHaveBeenCalledWith({
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
       id: 'current',
       baseline_start: '2026-01-01',
       baseline_end: '2026-01-31',
-    }, { onConflict: 'id' })
+      updated_at: expect.any(String),
+    }), { onConflict: 'id' })
+  })
+
+  test('PUT rejects an impossible calendar date even though it matches the YYYY-MM-DD shape', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    const response = await PUT(new Request('http://localhost/api/admin/team-health-score-config', {
+      method: 'PUT',
+      body: JSON.stringify({ baseline_start: '2026-02-31', baseline_end: '2026-03-10' }),
+    }))
+    expect(response.status).toBe(400)
   })
 })

@@ -51,6 +51,13 @@ describe('admin team-health-score route', () => {
     expect(response.status).toBe(400)
   })
 
+  test('returns 400 for an impossible calendar date even though it matches the YYYY-MM-DD shape', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'wd-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'wellness_director' } as never)
+    const response = await GET(req('participantId=p1&currentStart=2026-02-31'))
+    expect(response.status).toBe(400)
+  })
+
   test('returns the computed score for a valid request', async () => {
     mockGetSession.mockResolvedValue({ user: { id: 'wd-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'wellness_director' } as never)

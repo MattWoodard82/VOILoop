@@ -1,7 +1,7 @@
 'use client'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-interface ChartData { name: string; value: number; color: string }
+interface ChartData { name: string; value: number; color: string; label?: string }
 interface Props { type: 'recovery' | 'hrv' | 'strain'; data: ChartData[]; seriesName?: string }
 
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
@@ -9,6 +9,11 @@ const GRID = '#0a3560'
 
 export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
   const height = type === 'recovery' ? 210 : 130
+  // Bars need a plotted number even for "no data" (rendered as an empty/zero-height
+  // bar via color), but the tooltip should say so explicitly rather than "0" -
+  // otherwise a genuinely missing window looks identical to a real lowest score.
+  const tooltipFormatter = (value: number, name: string, props: { payload?: ChartData }) =>
+    [props.payload?.label ?? value, name]
 
   if (type === 'recovery') {
     return (
@@ -20,6 +25,7 @@ export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
             contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }}
             labelStyle={{ color: '#fff' }}
             itemStyle={{ color: '#69BE28' }}
+            formatter={tooltipFormatter}
           />
           <Bar dataKey="value" radius={[0, 4, 4, 0]} name={seriesName ?? 'Recovery'}>
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -39,6 +45,7 @@ export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
           contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }}
           labelStyle={{ color: '#fff' }}
           itemStyle={{ color: '#69BE28' }}
+          formatter={tooltipFormatter}
         />
         <Bar dataKey="value" radius={[3, 3, 0, 0]} name={type === 'hrv' ? 'HRV (ms)' : 'Strain'}>
           {data.map((d, i) => <Cell key={i} fill={d.color} />)}

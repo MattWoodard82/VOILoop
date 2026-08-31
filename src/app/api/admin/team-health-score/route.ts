@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
 import { getSession, getUserAccess } from '@/lib/supabase/server'
 import { getTeamHealthScore } from '@/lib/supabase/queries'
+import { isValidCalendarDateString } from '@/lib/date-validation'
 
 export const runtime = 'nodejs'
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(request: Request) {
   const session = await getSession()
@@ -21,8 +20,8 @@ export async function GET(request: Request) {
   if (!participantId) {
     return NextResponse.json({ error: 'participantId is required' }, { status: 400 })
   }
-  if (!currentStart || !DATE_RE.test(currentStart)) {
-    return NextResponse.json({ error: 'currentStart must be a YYYY-MM-DD date' }, { status: 400 })
+  if (!isValidCalendarDateString(currentStart)) {
+    return NextResponse.json({ error: 'currentStart must be a valid YYYY-MM-DD date' }, { status: 400 })
   }
 
   try {

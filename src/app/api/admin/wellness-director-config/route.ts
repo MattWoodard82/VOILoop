@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, requireAdmin, getSession, getUserAccess } from '@/lib/supabase/server'
-import { normalizeEngagementWeights } from '@/lib/wellness-director-config'
+import { normalizeEngagementWeights, isValidEngagementWeights } from '@/lib/wellness-director-config'
 
 export const runtime = 'nodejs'
 
@@ -37,13 +37,13 @@ export async function PUT(request: Request) {
   const nudgeResponse = Number(weights?.nudge_response)
   const workoutVolume = Number(weights?.workout_volume)
 
-  if (![submissionConsistency, deviceWearConsistency, pulseCompletion, nudgeResponse, workoutVolume].every((value) => Number.isFinite(value))) {
+  const values = [submissionConsistency, deviceWearConsistency, pulseCompletion, nudgeResponse, workoutVolume]
+  if (!values.every((value) => Number.isFinite(value))) {
     return NextResponse.json({ error: 'Invalid weights' }, { status: 400 })
   }
 
-  const total = submissionConsistency + deviceWearConsistency + pulseCompletion + nudgeResponse + workoutVolume
-  if (total !== 100) {
-    return NextResponse.json({ error: 'Weights must sum to 100' }, { status: 400 })
+  if (!isValidEngagementWeights(values)) {
+    return NextResponse.json({ error: 'Weights must each be within 0-100 and sum to 100' }, { status: 400 })
   }
 
   const supabase = createServerSupabaseClient()
