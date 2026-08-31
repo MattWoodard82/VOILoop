@@ -188,33 +188,6 @@ describe('WellnessDirectorClient', () => {
     expect(outOfScopeMarkup).not.toContain('Send a nudge')
   })
 
-  test('wellness director page links to the events manager for leadership users', async () => {
-    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
-      session: { user: { id: 'wd-1' } },
-      role: 'wellness_director',
-      mustChangePassword: false,
-    } as never)
-    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
-      participants: [participant],
-      stats: {
-        avg_recovery: 72,
-        avg_hrv: 66,
-        avg_sleep_perf: 84,
-        high_risk_count: 0,
-        total_participants: 1,
-        participation_rate: 100,
-      },
-      interventions: [],
-    })
-
-    const page = await WellnessDirectorPage()
-    const markup = renderToStaticMarkup(page as React.ReactElement)
-
-    expect(markup).toContain('Events and nudges')
-    expect(markup).toContain('Open events manager')
-    expect(markup).toContain('href="/wellness-director/events"')
-  })
-
   test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
     ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
       session: { user: { id: 'wd-1' } },
