@@ -86,21 +86,19 @@ function renderClientMarkup(
     deptFilter = 'All',
     personFilter = 'All',
     configLoaded = true,
-    role = 'admin',
   }: {
     deptFilter?: string
     personFilter?: string
     configLoaded?: boolean
-    role?: 'admin' | 'wellness_director'
   } = {},
 ) {
   const useStateSpy = jest.spyOn(React, 'useState')
   const useEffectSpy = jest.spyOn(React, 'useEffect').mockImplementation(() => {})
 
   // Hook call order in WellnessDirectorClient: deptFilter, personFilter, weights,
-  // overrides, overrideNotes, snoozeDays, configStatus, configLoaded, nudgeMessage,
-  // nudgeStatus, nudgeError. Only the ones the tests need to control are overridden;
-  // the rest pass through to the real useState so they keep their real defaults.
+  // overrides, overrideNotes, snoozeDays, configLoaded, nudgeMessage, nudgeStatus,
+  // nudgeError, ... Only the ones the tests need to control are overridden; the
+  // rest pass through to the real useState so they keep their real defaults.
   useStateSpy
     .mockImplementationOnce(() => [deptFilter, jest.fn()]) // deptFilter
     .mockImplementationOnce(() => [personFilter, jest.fn()]) // personFilter
@@ -108,14 +106,10 @@ function renderClientMarkup(
     .mockImplementationOnce(originalUseState as typeof React.useState) // overrides
     .mockImplementationOnce(originalUseState as typeof React.useState) // overrideNotes
     .mockImplementationOnce(originalUseState as typeof React.useState) // snoozeDays
-    .mockImplementationOnce(originalUseState as typeof React.useState) // configStatus
     .mockImplementationOnce(() => [configLoaded, jest.fn()]) // configLoaded
-    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeMessage
-    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeStatus
-    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeError
 
   try {
-    return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants, role }))
+    return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
   } finally {
     useStateSpy.mockRestore()
     useEffectSpy.mockRestore()
@@ -156,17 +150,10 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Avg wear consistency')
   })
 
-  test('admins can edit and save engagement-score weights', () => {
-    const markup = renderClientMarkup([participant], { personFilter: 'P1', role: 'admin' })
-    expect(markup).toContain('Save weights')
-    expect(markup).toContain('range-control')
-    expect(markup).not.toContain('view only')
-    expect(markup).not.toContain('Contact an admin')
-  })
-
-  test('wellness directors see engagement-score weights as read-only', () => {
-    const markup = renderClientMarkup([participant], { personFilter: 'P1', role: 'wellness_director' })
+  test('engagement-score weights are always read-only on the WD dashboard (edited only in the Admin Console)', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('view only')
+    expect(markup).toContain('Admin Console')
     expect(markup).toContain('Contact an admin to request a change.')
     expect(markup).not.toContain('Save weights')
     expect(markup).not.toContain('range-control')

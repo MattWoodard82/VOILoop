@@ -62,7 +62,7 @@ export default async function WellnessDirectorPage() {
         <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${participants.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
       </div>
 
-      <WellnessDirectorClient participants={participants} role={access.role} />
+      <WellnessDirectorClient participants={participants} />
 
       <div
         style={{

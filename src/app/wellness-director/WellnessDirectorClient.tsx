@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import type { ParticipantWithWellness } from '@/types'
-import type { AppRole } from '@/lib/supabase/server'
 import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
@@ -10,7 +9,6 @@ import type { TeamHealthScoreConfig } from '@/lib/team-health-score-config'
 
 interface Props {
   participants: ParticipantWithWellness[]
-  role?: AppRole | null
 }
 
 function overrideLabel(state?: ParticipantWithWellness['override_state']) {
@@ -132,15 +130,13 @@ function formatWindowLabel(window: ThsWindow) {
   return `${window.start} – ${window.end}`
 }
 
-export function WellnessDirectorClient({ participants, role }: Props) {
-  const isAdmin = role === 'admin'
+export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
   const [weights, setWeights] = useState<WeightsState>(DEFAULT_WEIGHTS)
   const [overrides, setOverrides] = useState<Record<string, ParticipantWithWellness['override_state']>>({})
   const [overrideNotes, setOverrideNotes] = useState<Record<string, string>>({})
   const [snoozeDays, setSnoozeDays] = useState<Record<string, number>>({})
-  const [configStatus, setConfigStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved'>('idle')
   const [configLoaded, setConfigLoaded] = useState(false)
   const [nudgeMessage, setNudgeMessage] = useState('')
   const [nudgeStatus, setNudgeStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
@@ -153,10 +149,11 @@ export function WellnessDirectorClient({ participants, role }: Props) {
   const [thsError, setThsError] = useState('')
   const [baselineConfig, setBaselineConfig] = useState<TeamHealthScoreConfig | null>(null)
   const [baselineLoaded, setBaselineLoaded] = useState(false)
-  const [baselineDraft, setBaselineDraft] = useState({ baseline_start: '', baseline_end: '' })
-  const [baselineStatus, setBaselineStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle')
-  const [baselineError, setBaselineError] = useState('')
 
+  // Both the engagement-score weights and the Team Health Score baseline window
+  // are admin-only settings, editable only from the Admin Console (whole-cohort
+  // scope). This dashboard only fetches and displays them read-only, for
+  // visibility, regardless of the signed-in user's role.
   useEffect(() => {
     let cancelled = false
     fetch('/api/admin/wellness-director-config')
@@ -164,10 +161,7 @@ export function WellnessDirectorClient({ participants, role }: Props) {
       .then((data) => {
         if (cancelled) return
         const config = data?.config?.weights
-        if (config) {
-          setWeights(config)
-          setConfigStatus('idle')
-        }
+        if (config) setWeights(config)
         setConfigLoaded(true)
       })
       .catch(() => {
@@ -185,8 +179,8 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     setNudgeError('')
   }, [personFilter])
 
-  // Loads the admin-configured Team Health Score baseline window (cohort-wide),
-  // read-only for Wellness Directors, editable for admins below.
+  // Loads the admin-configured Team Health Score baseline window (cohort-wide,
+  // read-only here; editable in the Admin Console).
   useEffect(() => {
     let cancelled = false
     fetch('/api/admin/team-health-score-config')
@@ -196,7 +190,6 @@ export function WellnessDirectorClient({ participants, role }: Props) {
         const config = data?.config
         if (config) {
           setBaselineConfig({ baselineStart: config.baselineStart, baselineEnd: config.baselineEnd })
-          setBaselineDraft({ baseline_start: config.baselineStart, baseline_end: config.baselineEnd })
         }
         setBaselineLoaded(true)
       })
@@ -222,8 +215,6 @@ export function WellnessDirectorClient({ participants, role }: Props) {
   const selected = hasExplicitParticipantSelection
     ? scopedParticipants.find((participant) => participant.id === personFilter) ?? null
     : null
-  const weightTotal = useMemo(() => Object.values(weights).reduce((sum, item) => sum + item, 0), [weights])
-  const weightsValid = weightTotal === 100
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
@@ -284,48 +275,6 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     const state = action === 'snooze' ? 'snoozed' : 'dismissed'
     setOverrides((current) => ({ ...current, [participantId]: state }))
     return data
-  }
-
-  const persistWeights = async (nextWeights: WeightsState) => {
-    setConfigStatus('saving')
-    const response = await fetch('/api/admin/wellness-director-config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ weights: nextWeights }),
-    })
-    if (!response.ok) {
-      setConfigStatus('dirty')
-      throw new Error('Failed to save config')
-    }
-    setConfigStatus('saved')
-    return response.json()
-  }
-
-  const baselineDraftValid = baselineDraft.baseline_start !== '' && baselineDraft.baseline_end !== '' && baselineDraft.baseline_start <= baselineDraft.baseline_end
-
-  const persistBaseline = async () => {
-    setBaselineStatus('saving')
-    setBaselineError('')
-    try {
-      const response = await fetch('/api/admin/team-health-score-config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(baselineDraft),
-      })
-      const data = await response.json().catch(() => null) as { config?: { baseline_start: string; baseline_end: string }; error?: string } | null
-      if (!response.ok) {
-        setBaselineStatus('error')
-        setBaselineError(data?.error ?? 'Failed to save baseline window.')
-        return
-      }
-      if (data?.config) {
-        setBaselineConfig({ baselineStart: data.config.baseline_start, baselineEnd: data.config.baseline_end })
-      }
-      setBaselineStatus('saved')
-    } catch {
-      setBaselineStatus('error')
-      setBaselineError('Failed to save baseline window. Check your connection and try again.')
-    }
   }
 
   const sendNudge = async (participantId: string) => {
@@ -455,7 +404,7 @@ export function WellnessDirectorClient({ participants, role }: Props) {
             <div>Choose a participant to review baseline status and overrides.</div>
           )}
         </Card>
-       <Card title="Engagement-score weights" badge={!isAdmin ? <Badge variant="wolf">view only</Badge> : undefined}>
+       <Card title="Engagement-score weights" badge={<Badge variant="wolf">view only</Badge>}>
          {!configLoaded ? (
            <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
              {Array.from({ length: 5 }).map((_, index) => (
@@ -465,55 +414,13 @@ export function WellnessDirectorClient({ participants, role }: Props) {
                </div>
              ))}
            </div>
-         ) : !isAdmin ? (
+         ) : (
            <>
              {Object.entries(weights).map(([key, value]) => (
                <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />
              ))}
              <div style={{ color: '#A5ACAF', fontSize: 11, marginTop: 8 }}>
-               Set by an admin for the whole cohort. Contact an admin to request a change.
-             </div>
-           </>
-         ) : (
-           <>
-             {Object.entries(weights).map(([key, value]) => (
-               <div key={key} style={{ marginBottom: 12 }}>
-                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6, alignItems: 'center' }}>
-                   <label htmlFor={key} style={{ color: '#fff', fontSize: 12 }}>{engagementComponentLabel(key)}</label>
-                   <span style={{ color: '#A5ACAF', fontSize: 11 }}>{value}%</span>
-                 </div>
-                 <input
-                   id={key}
-                   aria-label={engagementComponentLabel(key)}
-                   className="range-control"
-                   type="range"
-                   min={0}
-                   max={100}
-                   value={value}
-                   onChange={(e) => {
-                     const next = { ...weights, [key]: Number(e.target.value) }
-                     setWeights(next)
-                     setConfigStatus('dirty')
-                   }}
-                 />
-               </div>
-             ))}
-             <div style={{ color: weightsValid ? '#69BE28' : '#FFA500', fontSize: 11, marginTop: 4 }}>
-               Total: {weightTotal}% {weightsValid ? '— ready to save' : '— must total 100% before saving'}
-             </div>
-             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-               <button
-                 className="btn-primary"
-                 type="button"
-                 disabled={!weightsValid || configStatus === 'saving'}
-                 onClick={() => persistWeights(weights).catch(() => undefined)}
-                 style={{ opacity: !weightsValid || configStatus === 'saving' ? 0.6 : 1 }}
-               >
-                 {configStatus === 'saving' ? 'Saving…' : 'Save weights'}
-               </button>
-               <div style={{ color: '#A5ACAF', fontSize: 11 }}>
-                 {configStatus === 'saved' ? 'Saved' : configStatus === 'dirty' ? 'Unsaved changes' : ''}
-               </div>
+               Set by an admin for the whole cohort in the Admin Console. Contact an admin to request a change.
              </div>
            </>
          )}
@@ -589,55 +496,16 @@ export function WellnessDirectorClient({ participants, role }: Props) {
       </div>
 
       <div style={{ marginTop: 14 }}>
-        <Card title="Team Health Score baseline window" badge={!isAdmin ? <Badge variant="wolf">view only</Badge> : undefined}>
+        <Card title="Team Health Score baseline window" badge={<Badge variant="wolf">view only</Badge>}>
           {!baselineLoaded ? (
             <LoadingNotice>Loading baseline window…</LoadingNotice>
-          ) : !isAdmin ? (
+          ) : (
             <>
               <div style={{ color: '#fff', fontSize: 12 }}>
                 {baselineConfig ? formatWindowLabel({ start: baselineConfig.baselineStart, end: baselineConfig.baselineEnd }) : '—'}
               </div>
               <div style={{ color: '#A5ACAF', fontSize: 11, marginTop: 8 }}>
-                Set by an admin, applies to the whole cohort. Contact an admin to request a change.
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                <label style={{ fontSize: 11, color: '#A5ACAF', display: 'grid', gap: 4 }}>
-                  Start
-                  <input
-                    aria-label="baseline start date"
-                    className="form-control-dark"
-                    type="date"
-                    value={baselineDraft.baseline_start}
-                    onChange={(e) => { setBaselineDraft((d) => ({ ...d, baseline_start: e.target.value })); setBaselineStatus('dirty') }}
-                  />
-                </label>
-                <label style={{ fontSize: 11, color: '#A5ACAF', display: 'grid', gap: 4 }}>
-                  End
-                  <input
-                    aria-label="baseline end date"
-                    className="form-control-dark"
-                    type="date"
-                    value={baselineDraft.baseline_end}
-                    onChange={(e) => { setBaselineDraft((d) => ({ ...d, baseline_end: e.target.value })); setBaselineStatus('dirty') }}
-                  />
-                </label>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
-                <button
-                  className="btn-primary"
-                  type="button"
-                  disabled={!baselineDraftValid || baselineStatus === 'saving'}
-                  onClick={() => persistBaseline()}
-                  style={{ opacity: !baselineDraftValid || baselineStatus === 'saving' ? 0.6 : 1 }}
-                >
-                  {baselineStatus === 'saving' ? 'Saving…' : 'Save baseline window'}
-                </button>
-                <div style={{ color: baselineStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
-                  {baselineStatus === 'saved' ? 'Saved' : baselineStatus === 'dirty' ? 'Unsaved changes' : baselineStatus === 'error' ? baselineError : ''}
-                </div>
+                Set by an admin in the Admin Console, applies to the whole cohort. Contact an admin to request a change.
               </div>
             </>
           )}
