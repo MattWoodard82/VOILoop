@@ -24,6 +24,10 @@ export interface DailyWellness {
   participant_id: string
   source_batch_id: string | null
   date: string
+  // Raw sleep-onset timestamp (ISO 8601), captured for the Team Health Score
+  // (GH #119) night-mapping rule. Null for historical rows imported before
+  // this field existed, or when the source row had no parsable value.
+  sleep_onset_time?: string | null
   recovery_score: number | null
   hrv_ms: number | null
   resting_hr: number | null

@@ -94,6 +94,7 @@ function mergeWellness(
   return {
     participantId: override.participantId,
     date: override.date,
+    sleepOnsetIso: override.sleepOnsetIso ?? base.sleepOnsetIso,
     recoveryScore: override.recoveryScore ?? base.recoveryScore,
     hrvMs: override.hrvMs ?? base.hrvMs,
     restingHr: override.restingHr ?? base.restingHr,
@@ -118,6 +119,7 @@ function validatedToWellness(v: ValidatedWellnessRow): WhoopWellness {
   return {
     participant_id: v.participantId,
     date: v.date,
+    sleep_onset_time: v.sleepOnsetIso,
     recovery_score: v.recoveryScore,
     hrv_ms: v.hrvMs,
     resting_hr: v.restingHr,

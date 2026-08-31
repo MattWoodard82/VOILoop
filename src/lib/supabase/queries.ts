@@ -2,6 +2,8 @@ import { createClient } from './client'
 import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
 import { DEFAULT_ENGAGEMENT_WEIGHTS, normalizeEngagementWeights, type EngagementWeights } from '@/lib/wellness-director-config'
+import { DEFAULT_TEAM_HEALTH_SCORE_CONFIG, normalizeTeamHealthScoreConfig, type TeamHealthScoreConfig } from '@/lib/team-health-score-config'
+import { scoreParticipant, toNightInputs, toWorkoutInputs, type ParticipantScoreResult } from '@/lib/team-health-score'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -581,6 +583,27 @@ export async function getPulseHistoryForParticipants(
   )
 }
 
+// Fetches full workouts history (not just the latest date's snapshot) for a set
+// of participants since a given date. Used by getTeamHealthScore (GH #119),
+// which needs every workout back to the fixed baseline window, not just a
+// trailing slice like computeWorkoutVolumeVsBaseline/computeAverageZoneMinutes use.
+export async function getWorkoutHistoryForParticipants(
+  participantIds: string[],
+  sinceDate: string,
+  supabase = getQueryClient(),
+): Promise<Workout[]> {
+  if (participantIds.length === 0) return []
+  return fetchAllPages<Workout>((from, to) =>
+    supabase
+      .from('workouts')
+      .select('*')
+      .in('participant_id', participantIds)
+      .gte('date', sinceDate)
+      .order('date', { ascending: true })
+      .range(from, to)
+  )
+}
+
 // Fetches the nudge/target/acknowledgement data needed to compute nudge response
 // rate (trailing 21d) for a set of participants, per DECISION-2 in issue #66.
 export async function getNudgeEngagementData(
@@ -625,6 +648,42 @@ export async function getEngagementWeights(supabase = getQueryClient()): Promise
     .maybeSingle()
   if (error || !data) return DEFAULT_ENGAGEMENT_WEIGHTS
   return normalizeEngagementWeights(data.weights)
+}
+
+// Reads the admin-configured Team Health Score baseline window (GH #119). Separate
+// table/config from FR-13's engagement weights above — this is a date range, not
+// scoring weights, and applies cohort-wide. Falls back to Matt's original fixed
+// window when no row has been saved yet or the read fails.
+export async function getTeamHealthScoreConfig(supabase = getQueryClient()): Promise<TeamHealthScoreConfig> {
+  const { data, error } = await supabase
+    .from('team_health_score_config')
+    .select('baseline_start, baseline_end')
+    .eq('id', 'current')
+    .maybeSingle()
+  if (error || !data) return DEFAULT_TEAM_HEALTH_SCORE_CONFIG
+  return normalizeTeamHealthScoreConfig(data)
+}
+
+// Computes one participant's Team Health Score (baseline/last-week/current windows)
+// per Matt's spec in GH #119. Fetches wellness + workout history back to the earlier
+// of the configured baseline start or the requested current window, then runs the
+// pure scoring engine in team-health-score.ts.
+export async function getTeamHealthScore(
+  participantId: string,
+  currentStart: string,
+  supabase = getQueryClient(),
+): Promise<ParticipantScoreResult> {
+  const config = await getTeamHealthScoreConfig(supabase)
+  const historySinceDate = config.baselineStart < currentStart ? config.baselineStart : currentStart
+
+  const [wellnessRows, workoutRows] = await Promise.all([
+    getWellnessHistoryForParticipants([participantId], historySinceDate, supabase),
+    getWorkoutHistoryForParticipants([participantId], historySinceDate, supabase),
+  ])
+
+  const nights = toNightInputs(wellnessRows)
+  const workouts = toWorkoutInputs(workoutRows)
+  return scoreParticipant(nights, workouts, currentStart, config)
 }
 
 export async function getTeamDashboard(): Promise<{

@@ -2,12 +2,12 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 interface ChartData { name: string; value: number; color: string }
-interface Props { type: 'recovery' | 'hrv' | 'strain'; data: ChartData[] }
+interface Props { type: 'recovery' | 'hrv' | 'strain'; data: ChartData[]; seriesName?: string }
 
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
 const GRID = '#0a3560'
 
-export function WellnessDirectorCharts({ type, data }: Props) {
+export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
   const height = type === 'recovery' ? 210 : 130
 
   if (type === 'recovery') {
@@ -21,7 +21,7 @@ export function WellnessDirectorCharts({ type, data }: Props) {
             labelStyle={{ color: '#fff' }}
             itemStyle={{ color: '#69BE28' }}
           />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} name="Recovery">
+          <Bar dataKey="value" radius={[0, 4, 4, 0]} name={seriesName ?? 'Recovery'}>
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Bar>
         </BarChart>

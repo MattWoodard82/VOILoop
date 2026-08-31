@@ -5,6 +5,8 @@ import type { AppRole } from '@/lib/supabase/server'
 import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
 import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
+import type { ParticipantScoreResult, TeamHealthComponentKey, Window as ThsWindow } from '@/lib/team-health-score'
+import type { TeamHealthScoreConfig } from '@/lib/team-health-score-config'
 
 interface Props {
   participants: ParticipantWithWellness[]
@@ -96,6 +98,40 @@ function computeAverages(group: ParticipantWithWellness[]): Averages {
   }
 }
 
+// Labels for Matt's 5-metric Team Health Score (GH issue #119) — a separate,
+// physiological composite from the FR-13 engagement score above, with its own
+// fixed (non-admin-configurable) component weights.
+const THS_COMPONENT_LABELS: Record<TeamHealthComponentKey, string> = {
+  sleep: 'Sleep Duration',
+  hrv: 'HRV Trend',
+  zone2: 'Zone 2+ Activity',
+  recovery: 'Recovery Score',
+  strain: 'Strain-Recovery Balance',
+}
+const THS_COMPONENT_KEYS = Object.keys(THS_COMPONENT_LABELS) as TeamHealthComponentKey[]
+const NO_DATA_COLOR = '#3a4550'
+
+// Default "Current" window: the Monday of the most recently FULLY COMPLETED
+// Monday-Sunday week (not the still-in-progress current week), matching
+// Matt's report cadence. Prev/Next navigation moves in 7-day steps from here.
+function mostRecentCompletedMonday(referenceDate = new Date()): string {
+  const day = referenceDate.getUTCDay() // 0=Sun .. 6=Sat
+  const daysSinceMonday = (day + 6) % 7
+  const thisMonday = new Date(Date.UTC(referenceDate.getUTCFullYear(), referenceDate.getUTCMonth(), referenceDate.getUTCDate() - daysSinceMonday))
+  thisMonday.setUTCDate(thisMonday.getUTCDate() - 7)
+  return thisMonday.toISOString().slice(0, 10)
+}
+
+function shiftDateStr(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function formatWindowLabel(window: ThsWindow) {
+  return `${window.start} – ${window.end}`
+}
+
 export function WellnessDirectorClient({ participants, role }: Props) {
   const isAdmin = role === 'admin'
   const [deptFilter, setDeptFilter] = useState('All')
@@ -109,6 +145,17 @@ export function WellnessDirectorClient({ participants, role }: Props) {
   const [nudgeMessage, setNudgeMessage] = useState('')
   const [nudgeStatus, setNudgeStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [nudgeError, setNudgeError] = useState('')
+
+  // Team Health Score (GH #119) state.
+  const [currentStart, setCurrentStart] = useState<string>(() => mostRecentCompletedMonday())
+  const [teamHealthScore, setTeamHealthScore] = useState<ParticipantScoreResult | null>(null)
+  const [thsLoading, setThsLoading] = useState(false)
+  const [thsError, setThsError] = useState('')
+  const [baselineConfig, setBaselineConfig] = useState<TeamHealthScoreConfig | null>(null)
+  const [baselineLoaded, setBaselineLoaded] = useState(false)
+  const [baselineDraft, setBaselineDraft] = useState({ baseline_start: '', baseline_end: '' })
+  const [baselineStatus, setBaselineStatus] = useState<'idle' | 'dirty' | 'saving' | 'saved' | 'error'>('idle')
+  const [baselineError, setBaselineError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -138,6 +185,27 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     setNudgeError('')
   }, [personFilter])
 
+  // Loads the admin-configured Team Health Score baseline window (cohort-wide),
+  // read-only for Wellness Directors, editable for admins below.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/admin/team-health-score-config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled) return
+        const config = data?.config
+        if (config) {
+          setBaselineConfig({ baselineStart: config.baselineStart, baselineEnd: config.baselineEnd })
+          setBaselineDraft({ baseline_start: config.baselineStart, baseline_end: config.baselineEnd })
+        }
+        setBaselineLoaded(true)
+      })
+      .catch(() => {
+        if (!cancelled) setBaselineLoaded(true)
+      })
+    return () => { cancelled = true }
+  }, [])
+
   const departments = useMemo(() => ['All', ...Array.from(new Set(participants.map((e) => e.department))).sort()], [participants])
   const filtered = useMemo(() => {
     let result = [...participants]
@@ -165,6 +233,37 @@ export function WellnessDirectorClient({ participants, role }: Props) {
 
   const cohortAverages = useMemo(() => computeAverages(scopedParticipants), [scopedParticipants])
   const selectedAverages = useMemo(() => (selected ? computeAverages([selected]) : null), [selected])
+
+  // Recomputes the selected participant's Team Health Score whenever they change
+  // or the WD navigates to a different reporting week.
+  useEffect(() => {
+    if (!selected) {
+      setTeamHealthScore(null)
+      setThsError('')
+      return
+    }
+    let cancelled = false
+    setThsLoading(true)
+    setThsError('')
+    fetch(`/api/admin/team-health-score?participantId=${encodeURIComponent(selected.id)}&currentStart=${currentStart}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => null)
+        if (cancelled) return
+        if (!response.ok) {
+          setThsError(data?.error ?? 'Failed to load Team Health Score.')
+          setTeamHealthScore(null)
+          return
+        }
+        setTeamHealthScore(data.score)
+      })
+      .catch(() => {
+        if (!cancelled) setThsError('Failed to load Team Health Score. Check your connection and try again.')
+      })
+      .finally(() => {
+        if (!cancelled) setThsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [selected, currentStart])
 
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
     const response = await fetch('/api/admin/wellness-director-overrides', {
@@ -197,6 +296,33 @@ export function WellnessDirectorClient({ participants, role }: Props) {
     }
     setConfigStatus('saved')
     return response.json()
+  }
+
+  const baselineDraftValid = baselineDraft.baseline_start !== '' && baselineDraft.baseline_end !== '' && baselineDraft.baseline_start <= baselineDraft.baseline_end
+
+  const persistBaseline = async () => {
+    setBaselineStatus('saving')
+    setBaselineError('')
+    try {
+      const response = await fetch('/api/admin/team-health-score-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(baselineDraft),
+      })
+      const data = await response.json().catch(() => null) as { config?: { baseline_start: string; baseline_end: string }; error?: string } | null
+      if (!response.ok) {
+        setBaselineStatus('error')
+        setBaselineError(data?.error ?? 'Failed to save baseline window.')
+        return
+      }
+      if (data?.config) {
+        setBaselineConfig({ baselineStart: data.config.baseline_start, baselineEnd: data.config.baseline_end })
+      }
+      setBaselineStatus('saved')
+    } catch {
+      setBaselineStatus('error')
+      setBaselineError('Failed to save baseline window. Check your connection and try again.')
+    }
   }
 
   const sendNudge = async (participantId: string) => {
@@ -390,6 +516,129 @@ export function WellnessDirectorClient({ participants, role }: Props) {
          )}
          <div>{!configLoaded ? <LoadingNotice>Loading weights…</LoadingNotice> : ''}</div>
        </Card>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+        <Card title="Team Health Score Trend" badge={teamHealthScore?.current.lowConfidence ? <Badge variant="amber">low confidence</Badge> : undefined}>
+          {!selected ? (
+            <div>Choose a participant to view their Team Health Score trend.</div>
+          ) : thsLoading ? (
+            <ChartSkeleton height={210} />
+          ) : thsError ? (
+            <div style={{ color: '#ff6b6b', fontSize: 12 }}>{thsError}</div>
+          ) : teamHealthScore ? (
+            <>
+              <WellnessDirectorCharts
+                type="recovery"
+                seriesName="Team Health Score"
+                data={[
+                  { name: 'Baseline', value: teamHealthScore.baseline.composite ?? 0, color: teamHealthScore.baseline.composite != null ? recoveryColor(teamHealthScore.baseline.composite) : NO_DATA_COLOR },
+                  { name: 'Last Week', value: teamHealthScore.lastWeek.composite ?? 0, color: teamHealthScore.lastWeek.composite != null ? recoveryColor(teamHealthScore.lastWeek.composite) : NO_DATA_COLOR },
+                  { name: 'Current', value: teamHealthScore.current.composite ?? 0, color: teamHealthScore.current.composite != null ? recoveryColor(teamHealthScore.current.composite) : NO_DATA_COLOR },
+                ]}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <button className="btn-primary" type="button" onClick={() => setCurrentStart((d) => shiftDateStr(d, -7))}>◀ Prev week</button>
+                <div style={{ fontSize: 11, color: '#A5ACAF' }}>Current window: {formatWindowLabel(teamHealthScore.current.window)}</div>
+                <button className="btn-primary" type="button" onClick={() => setCurrentStart((d) => shiftDateStr(d, 7))}>Next week ▶</button>
+              </div>
+              {teamHealthScore.current.missingComponents.length > 0 && (
+                <div style={{ color: '#FFA500', fontSize: 11, marginTop: 8 }}>
+                  Missing data this window: {teamHealthScore.current.missingComponents.map((key) => THS_COMPONENT_LABELS[key]).join(', ')}. The composite score above reflects only the components with data.
+                </div>
+              )}
+              {teamHealthScore.current.lowConfidence && (
+                <div style={{ color: '#FFA500', fontSize: 11, marginTop: 4 }}>
+                  Low confidence: device worn only {teamHealthScore.current.coveragePct}% of days this window.
+                </div>
+              )}
+            </>
+          ) : null}
+        </Card>
+        <Card title="5-Metric Breakdown">
+          {!selected ? (
+            <div>Choose a participant to view their 5-metric breakdown.</div>
+          ) : thsLoading ? (
+            <TableSkeleton columns={2} rows={5} />
+          ) : thsError ? (
+            <div style={{ color: '#ff6b6b', fontSize: 12 }}>{thsError}</div>
+          ) : teamHealthScore ? (
+            <>
+              <WellnessDirectorCharts
+                type="recovery"
+                seriesName="Score"
+                data={THS_COMPONENT_KEYS.map((key) => {
+                  const value = teamHealthScore.current[key]
+                  return {
+                    name: THS_COMPONENT_LABELS[key],
+                    value: value ?? 0,
+                    color: value != null ? recoveryColor(value) : NO_DATA_COLOR,
+                  }
+                })}
+              />
+              <div style={{ marginTop: 8, fontSize: 12, color: '#fff' }}>
+                Composite: <strong>{teamHealthScore.current.composite != null ? teamHealthScore.current.composite : 'No data this window'}</strong>
+                {teamHealthScore.current.band && <span style={{ color: '#A5ACAF' }}> · {teamHealthScore.current.band}</span>}
+              </div>
+            </>
+          ) : null}
+        </Card>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <Card title="Team Health Score baseline window" badge={!isAdmin ? <Badge variant="wolf">view only</Badge> : undefined}>
+          {!baselineLoaded ? (
+            <LoadingNotice>Loading baseline window…</LoadingNotice>
+          ) : !isAdmin ? (
+            <>
+              <div style={{ color: '#fff', fontSize: 12 }}>
+                {baselineConfig ? formatWindowLabel({ start: baselineConfig.baselineStart, end: baselineConfig.baselineEnd }) : '—'}
+              </div>
+              <div style={{ color: '#A5ACAF', fontSize: 11, marginTop: 8 }}>
+                Set by an admin, applies to the whole cohort. Contact an admin to request a change.
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <label style={{ fontSize: 11, color: '#A5ACAF', display: 'grid', gap: 4 }}>
+                  Start
+                  <input
+                    aria-label="baseline start date"
+                    className="form-control-dark"
+                    type="date"
+                    value={baselineDraft.baseline_start}
+                    onChange={(e) => { setBaselineDraft((d) => ({ ...d, baseline_start: e.target.value })); setBaselineStatus('dirty') }}
+                  />
+                </label>
+                <label style={{ fontSize: 11, color: '#A5ACAF', display: 'grid', gap: 4 }}>
+                  End
+                  <input
+                    aria-label="baseline end date"
+                    className="form-control-dark"
+                    type="date"
+                    value={baselineDraft.baseline_end}
+                    onChange={(e) => { setBaselineDraft((d) => ({ ...d, baseline_end: e.target.value })); setBaselineStatus('dirty') }}
+                  />
+                </label>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                <button
+                  className="btn-primary"
+                  type="button"
+                  disabled={!baselineDraftValid || baselineStatus === 'saving'}
+                  onClick={() => persistBaseline()}
+                  style={{ opacity: !baselineDraftValid || baselineStatus === 'saving' ? 0.6 : 1 }}
+                >
+                  {baselineStatus === 'saving' ? 'Saving…' : 'Save baseline window'}
+                </button>
+                <div style={{ color: baselineStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
+                  {baselineStatus === 'saved' ? 'Saved' : baselineStatus === 'dirty' ? 'Unsaved changes' : baselineStatus === 'error' ? baselineError : ''}
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
       </div>
 
       {selected && (

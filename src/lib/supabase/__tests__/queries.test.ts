@@ -4,6 +4,9 @@ import {
   getParticipantImportBatches,
   getRecentlyResolvedInterventions,
   getTeamDashboard,
+  getTeamHealthScoreConfig,
+  getWorkoutHistoryForParticipants,
+  getTeamHealthScore,
 } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
@@ -918,3 +921,58 @@ describe('getTeamDashboard', () => {
     jest.useRealTimers()
   })
 })
+
+describe('getTeamHealthScoreConfig', () => {
+  test('returns the default window when no config row is saved', async () => {
+    const supabase = makeTableClient({ team_health_score_config: [] })
+    const config = await getTeamHealthScoreConfig(supabase as never)
+    expect(config).toEqual({ baselineStart: '2026-07-02', baselineEnd: '2026-07-27' })
+  })
+
+  test('returns the persisted, normalized window', async () => {
+    const supabase = makeTableClient({
+      team_health_score_config: [{ id: 'current', baseline_start: '2026-01-01', baseline_end: '2026-01-31' }],
+    })
+    const config = await getTeamHealthScoreConfig(supabase as never)
+    expect(config).toEqual({ baselineStart: '2026-01-01', baselineEnd: '2026-01-31' })
+  })
+})
+
+describe('getWorkoutHistoryForParticipants', () => {
+  test('returns an empty array for an empty participant list without querying', async () => {
+    const supabase = makeTableClient({ workouts: [{ id: 'w1', participant_id: 'P1', date: '2026-08-11' }] })
+    const result = await getWorkoutHistoryForParticipants([], '2026-08-01', supabase as never)
+    expect(result).toEqual([])
+  })
+
+  test('fetches workouts for the given participants since the given date', async () => {
+    const supabase = makeTableClient({
+      workouts: [
+        { id: 'w1', participant_id: 'P1', date: '2026-08-11' },
+        { id: 'w2', participant_id: 'P1', date: '2026-07-01' }, // before sinceDate, excluded
+        { id: 'w3', participant_id: 'P2', date: '2026-08-12' }, // different participant, excluded
+      ],
+    })
+    const result = await getWorkoutHistoryForParticipants(['P1'], '2026-08-01', supabase as never)
+    expect(result).toEqual([{ id: 'w1', participant_id: 'P1', date: '2026-08-11' }])
+  })
+})
+
+describe('getTeamHealthScore', () => {
+  test('scores a participant using their wellness/workout history and the configured baseline window', async () => {
+    const supabase = makeTableClient({
+      team_health_score_config: [{ id: 'current', baseline_start: '2026-07-02', baseline_end: '2026-07-27' }],
+      daily_wellness: [
+        { participant_id: 'P1', date: '2026-08-18', sleep_onset_time: null, sleep_hrs: 7.5, hrv_ms: 60, recovery_score: 70 },
+      ],
+      workouts: [],
+    })
+
+    const result = await getTeamHealthScore('P1', '2026-08-17', supabase as never)
+
+    expect(result.current.window).toEqual({ start: '2026-08-17', end: '2026-08-23' })
+    expect(result.current.sleep).toBe(100.0)
+    expect(result.baseline.window).toEqual({ start: '2026-07-02', end: '2026-07-27' })
+  })
+})
+

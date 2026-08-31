@@ -24,6 +24,10 @@ export interface RawStressRow {
   'Cycle start time'?: string
   'Cycle end time'?: string
   'Cycle timezone'?: string
+  // Raw WHOOP sleep-onset timestamp, present in the export alongside "Wake
+  // onset" but not previously read/stored. Needed for the Team Health Score
+  // (GH #119) night-mapping rule; not used by resolveWellnessDate().
+  'Sleep onset'?: string
   'Recovery score %'?: string | number
   'Resting heart rate (bpm)'?: string | number
   'Heart rate variability (ms)'?: string | number
@@ -81,6 +85,10 @@ export interface WhoopWorkout {
 export interface WhoopWellness {
   participant_id: string
   date: string
+  // Raw sleep-onset timestamp (ISO 8601), used by the Team Health Score
+  // (GH #119) night-mapping rule. Null for rows imported before this field
+  // was captured, or when the source row had no parsable "Sleep onset" value.
+  sleep_onset_time: string | null
   recovery_score: number | null
   hrv_ms: number | null
   resting_hr: number | null

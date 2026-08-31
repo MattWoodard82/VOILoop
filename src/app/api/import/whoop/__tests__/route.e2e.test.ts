@@ -134,6 +134,7 @@ describe('WHOOP import e2e flow (route-level)', () => {
         {
           participant_id: 'E1',
           date: '2024-01-15',
+          sleep_onset_time: null,
           recovery_score: 70,
           hrv_ms: 80,
           resting_hr: 55,
