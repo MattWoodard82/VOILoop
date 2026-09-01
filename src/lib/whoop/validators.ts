@@ -267,6 +267,7 @@ export function validateExerciseRow(
 export interface ValidatedWellnessRow {
   participantId: string
   date: string
+  sleepOnsetIso: string | null
   recoveryScore: number | null
   hrvMs: number | null
   restingHr: number | null
@@ -314,6 +315,11 @@ export function validateWellnessRow(
   return {
     participantId,
     date,
+    // Read exactly like "Wake onset" already is: neither is declared on
+    // RawStressRow's required-column list, both are read dynamically off the
+    // row. Kept as a full ISO timestamp (not just an hour) because the Team
+    // Health Score's night-mapping rule needs both the date and the hour.
+    sleepOnsetIso: toISOString(row['Sleep onset']),
     recoveryScore: clampPct(toInt(row['Recovery score %'])),
     hrvMs: nonNegative(toInt(row['Heart rate variability (ms)'])),
     restingHr: nonNegative(toInt(row['Resting heart rate (bpm)'])),

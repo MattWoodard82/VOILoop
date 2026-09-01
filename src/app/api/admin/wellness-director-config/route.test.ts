@@ -95,4 +95,31 @@ describe('admin wellness director config route', () => {
       weights,
     }, { onConflict: 'id' })
   })
+
+  test('PUT rejects a saved-looking row with an out-of-range negative weight even though it sums to 100', async () => {
+    mockRequireAdmin.mockResolvedValue({ session: { user: { id: 'admin-1' } }, role: 'admin' } as never)
+    const upsert = jest.fn()
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({ upsert })),
+    } as never)
+
+    const response = await PUT(new Request('http://localhost/api/admin/wellness-director-config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        weights: {
+          submission_consistency: -10,
+          device_wear_consistency: 40,
+          pulse_completion: 30,
+          nudge_response: 20,
+          workout_volume: 20,
+        },
+      }),
+    }))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toMatch(/0-100/)
+    expect(upsert).not.toHaveBeenCalled()
+  })
 })

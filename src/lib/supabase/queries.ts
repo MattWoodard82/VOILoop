@@ -1,6 +1,9 @@
 import { createClient } from './client'
 import { createAdminSupabaseClient } from './admin'
 import { createServerSupabaseClient } from './server'
+import { DEFAULT_ENGAGEMENT_WEIGHTS, normalizeEngagementWeights, type EngagementWeights } from '@/lib/wellness-director-config'
+import { DEFAULT_TEAM_HEALTH_SCORE_CONFIG, normalizeTeamHealthScoreConfig, type TeamHealthScoreConfig } from '@/lib/team-health-score-config'
+import { scoreParticipant, toNightInputs, toWorkoutInputs, type ParticipantScoreResult } from '@/lib/team-health-score'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -137,6 +140,47 @@ function computeWorkoutVolumeVsBaseline(
   return Math.max(0, Math.min(100, Math.round(ratio * 100)))
 }
 
+// Average minutes spent in each HR zone (1-5) per workout, over a trailing window.
+// WHOOP only reports zone percentages + total duration per workout (not raw zone minutes),
+// so each workout's zone minutes are approximated as duration_min * (zoneN_pct / 100).
+// Returns null for a zone (or the whole result) when there isn't enough data in the window.
+function computeAverageZoneMinutes(
+  workouts: Workout[],
+  windowDays: number,
+  referenceDate: Date,
+): { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } | null {
+  const windowStart = new Date(referenceDate)
+  windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
+  const windowStartKey = toDateKey(windowStart)
+  const windowEndKey = toDateKey(referenceDate)
+
+  // Bound the window on both ends: without the upper bound, future-dated or
+  // otherwise out-of-order imported workouts (dated after referenceDate) would
+  // still be included and could inflate the trailing-window averages.
+  const windowed = workouts.filter((w) => {
+    const dateKey = w.date.slice(0, 10)
+    return dateKey >= windowStartKey && dateKey <= windowEndKey
+  })
+  if (windowed.length === 0) return null
+
+  const zoneKeys = ['zone1_pct', 'zone2_pct', 'zone3_pct', 'zone4_pct', 'zone5_pct'] as const
+  const resultKeys = ['zone1', 'zone2', 'zone3', 'zone4', 'zone5'] as const
+  const result: { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } = {
+    zone1: null, zone2: null, zone3: null, zone4: null, zone5: null,
+  }
+
+  zoneKeys.forEach((zoneKey, i) => {
+    const minutes = windowed
+      .map((w) => (w.duration_min != null && w[zoneKey] != null ? w.duration_min * ((w[zoneKey] as number) / 100) : null))
+      .filter((v): v is number => v !== null)
+    if (minutes.length > 0) {
+      result[resultKeys[i]] = Math.round((minutes.reduce((a, b) => a + b, 0) / minutes.length) * 10) / 10
+    }
+  })
+
+  return result
+}
+
 interface NudgeRecord { id: string; week_of: string }
 interface NudgeTargetRecord { nudge_id: string; target_type: string; target_label: string | null; participant_id: string | null }
 interface NudgeAcknowledgementRecord { nudge_id: string; participant_id: string }
@@ -230,7 +274,7 @@ export async function getParticipants(supabase = getQueryClient()): Promise<Part
     .from('participants')
     .select('*')
     .eq('status', 'Active')
-    .order('last_name')
+    .order('first_name')
   if (error) throw error
   return data ?? []
 }
@@ -564,6 +608,30 @@ export async function getPulseHistoryForParticipants(
   )
 }
 
+// Fetches full workouts history (not just the latest date's snapshot) for a set
+// of participants, optionally since a given date. Used by getTeamHealthScore
+// (GH #119), which needs every workout back to the fixed baseline window, and by
+// getTeamDashboard's workout-volume/zone-minutes averages, which need the full
+// history (no lower bound) so computeWorkoutVolumeVsBaseline can still see each
+// participant's pre-window baseline rate - a bounded page from getLatestWorkouts
+// can silently truncate that once a cohort's total workout rows cross
+// PostgREST's page cap (see HISTORY_PAGE_SIZE above).
+export async function getWorkoutHistoryForParticipants(
+  participantIds: string[],
+  sinceDate?: string,
+  supabase = getQueryClient(),
+): Promise<Workout[]> {
+  if (participantIds.length === 0) return []
+  return fetchAllPages<Workout>((from, to) => {
+    let query = supabase
+      .from('workouts')
+      .select('*')
+      .in('participant_id', participantIds)
+    if (sinceDate) query = query.gte('date', sinceDate)
+    return query.order('date', { ascending: true }).range(from, to)
+  })
+}
+
 // Fetches the nudge/target/acknowledgement data needed to compute nudge response
 // rate (trailing 21d) for a set of participants, per DECISION-2 in issue #66.
 export async function getNudgeEngagementData(
@@ -595,6 +663,63 @@ export async function getNudgeEngagementData(
   return { nudges: nudges ?? [], targets: targets ?? [], acknowledgements: acknowledgements ?? [] }
 }
 
+// Reads the admin-configured FR-13 engagement-score weights so getTeamDashboard's score
+// calculation reflects whatever the admin actually saved, instead of a fixed default that
+// silently ignores the "Engagement-score weights" card. Falls back to defaults when no
+// config row has been saved yet, or when the read fails for any reason (dashboard should
+// never hard-fail just because the config table is unreachable).
+export async function getEngagementWeights(supabase = getQueryClient()): Promise<EngagementWeights> {
+  const { data, error } = await supabase
+    .from('wellness_director_config')
+    .select('weights')
+    .eq('id', 'current')
+    .maybeSingle()
+  if (error || !data) return DEFAULT_ENGAGEMENT_WEIGHTS
+  return normalizeEngagementWeights(data.weights)
+}
+
+// Reads the admin-configured Team Health Score baseline window (GH #119). Separate
+// table/config from FR-13's engagement weights above — this is a date range, not
+// scoring weights, and applies cohort-wide. Falls back to Matt's original fixed
+// window when no row has been saved yet or the read fails.
+export async function getTeamHealthScoreConfig(supabase = getQueryClient()): Promise<TeamHealthScoreConfig> {
+  const { data, error } = await supabase
+    .from('team_health_score_config')
+    .select('baseline_start, baseline_end')
+    .eq('id', 'current')
+    .maybeSingle()
+  if (error || !data) return DEFAULT_TEAM_HEALTH_SCORE_CONFIG
+  return normalizeTeamHealthScoreConfig(data)
+}
+
+// Computes one participant's Team Health Score (baseline/last-week/current windows)
+// per Matt's spec in GH #119. Fetches wellness + workout history back to the earlier
+// of the configured baseline start or the requested current window, then runs the
+// pure scoring engine in team-health-score.ts.
+export async function getTeamHealthScore(
+  participantId: string,
+  currentStart: string,
+  supabase = getQueryClient(),
+): Promise<ParticipantScoreResult> {
+  const config = await getTeamHealthScoreConfig(supabase)
+  // scoreParticipant also needs the full "last week" window (the 7 days immediately
+  // before currentStart) even when the configured baseline starts on or after
+  // currentStart (e.g. after navigating to a week before the baseline). Anchor the
+  // fetch to whichever of baselineStart or (currentStart - 7 days) is earliest so
+  // lastWeekWindow's rows are never excluded.
+  const lastWeekSinceDate = toDateKey(new Date(new Date(`${currentStart}T00:00:00Z`).getTime() - 7 * MS_PER_DAY))
+  const historySinceDate = [config.baselineStart, lastWeekSinceDate].sort()[0]
+
+  const [wellnessRows, workoutRows] = await Promise.all([
+    getWellnessHistoryForParticipants([participantId], historySinceDate, supabase),
+    getWorkoutHistoryForParticipants([participantId], historySinceDate, supabase),
+  ])
+
+  const nights = toNightInputs(wellnessRows)
+  const workouts = toWorkoutInputs(workoutRows)
+  return scoreParticipant(nights, workouts, currentStart, config)
+}
+
 export async function getTeamDashboard(): Promise<{
   participants: ParticipantWithWellness[]
   stats: TeamStats
@@ -619,7 +744,7 @@ export async function getTeamDashboard(): Promise<{
   // directly as the query's hard boundary with no further downstream trimming, so an
   // off-by-one here would leak an extra day's nudges into the result.
   const nudgeSinceDate = toDateKey(new Date(now.getTime() - 20 * MS_PER_DAY))
-  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, nudgeData] = await Promise.all([
+  const [wellness, workouts, habits, pulse, interventions, riskFlags, wellnessHistory, pulseHistory, workoutHistory, nudgeData, engagementWeights] = await Promise.all([
     getLatestWellness(undefined, participantIds, supabase),
     getLatestWorkouts(undefined, supabase),
     getLatestHabits(undefined, supabase),
@@ -628,7 +753,17 @@ export async function getTeamDashboard(): Promise<{
     getRiskFlagsForParticipantGroup(participantIds, privilegedSupabase),
     getWellnessHistoryForParticipants(participantIds, historySinceDate, supabase),
     getPulseHistoryForParticipants(participantIds, historySinceDate, supabase),
+    // Trailing-window workout metrics (workoutVolume/avgZoneMinutes below) need
+    // every workout ever logged for every participant (computeWorkoutVolumeVsBaseline
+    // compares the trailing window against each participant's own pre-window
+    // historical rate, with no fixed lookback limit). getLatestWorkouts above is
+    // unpaginated and globally ordered by date/start_time, so once a cohort's total
+    // workout row count crosses PostgREST's page cap it silently truncates to the
+    // most-recent rows only - which can drop an entire participant's history. Use
+    // the paginated, per-participant-filtered fetch instead for these metrics.
+    getWorkoutHistoryForParticipants(participantIds, undefined, supabase),
     getNudgeEngagementData(nudgeSinceDate, supabase),
+    getEngagementWeights(supabase),
   ])
 
   const wellnessMap = Object.fromEntries(wellness.map((w) => [w.participant_id, w]))
@@ -648,7 +783,7 @@ export async function getTeamDashboard(): Promise<{
     // components reflect real variation instead of a single-point snapshot.
     const wellnessRows = wellnessHistory.filter((row) => row.participant_id === emp.id).sort((a, b) => a.date.localeCompare(b.date))
     const pulseRows = pulseHistory.filter((row) => row.participant_id === emp.id)
-    const workoutRows = workouts.filter((row) => row.participant_id === emp.id)
+    const workoutRows = workoutHistory.filter((row) => row.participant_id === emp.id)
 
     // FR-13 component formulas (GH issue #66): each is participant-scoped, uses its
     // own defined window, and returns null (not a flattened default) when there's
@@ -661,6 +796,7 @@ export async function getTeamDashboard(): Promise<{
     const pulseCompletion = computeWeeklyConsistency(pulseRows, recentWeeks, enrolledDate, () => true)
     const nudgeResponse = computeNudgeResponseRate(emp, nudgeData.nudges, nudgeData.targets, nudgeData.acknowledgements)
     const workoutVolume = computeWorkoutVolumeVsBaseline(workoutRows, 21, now)
+    const avgZoneMinutes = computeAverageZoneMinutes(workoutRows, 21, now)
     const engagementComponents: Record<string, number> = {
       submission_consistency: submissionConsistency ?? 0,
       device_wear_consistency: deviceWearConsistency ?? 0,
@@ -668,13 +804,15 @@ export async function getTeamDashboard(): Promise<{
       nudge_response: nudgeResponse ?? 0,
       workout_volume: workoutVolume ?? 0,
     }
-    const engagementScore: number = [
-      submissionConsistency != null ? Math.round((submissionConsistency * 25) / 100) : 0,
-      deviceWearConsistency != null ? Math.round((deviceWearConsistency * 20) / 100) : 0,
-      pulseCompletion != null ? Math.round((pulseCompletion * 20) / 100) : 0,
-      nudgeResponse != null ? Math.round((nudgeResponse * 15) / 100) : 0,
-      workoutVolume != null ? Math.round((workoutVolume * 20) / 100) : 0,
-    ].reduce((sum, part) => sum + part, 0)
+    const engagementScore: number = Math.round(
+      [
+        submissionConsistency != null ? (submissionConsistency * engagementWeights.submission_consistency) / 100 : 0,
+        deviceWearConsistency != null ? (deviceWearConsistency * engagementWeights.device_wear_consistency) / 100 : 0,
+        pulseCompletion != null ? (pulseCompletion * engagementWeights.pulse_completion) / 100 : 0,
+        nudgeResponse != null ? (nudgeResponse * engagementWeights.nudge_response) / 100 : 0,
+        workoutVolume != null ? (workoutVolume * engagementWeights.workout_volume) / 100 : 0,
+      ].reduce((sum, part) => sum + part, 0),
+    )
     const baselineState = enrolledDays != null && enrolledDays < 21 ? 'building' : 'ready'
     const trendCompare = (rows: DailyWellness[], field: keyof DailyWellness) => {
       const last21 = rows.slice(-21)
@@ -709,6 +847,7 @@ export async function getTeamDashboard(): Promise<{
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
       engagement_score: engagementScore,
       engagement_score_components: engagementComponents,
+      avg_zone_minutes: avgZoneMinutes,
       physiological_trend: physiologicalTrend,
       physiological_trend_metrics: physiologicalMetrics,
       risk_tier_label: riskLevel === 'High' ? 'High concern' : riskLevel === 'Medium' ? 'Watch' : 'Stable',

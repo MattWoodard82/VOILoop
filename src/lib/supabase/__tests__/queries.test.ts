@@ -5,6 +5,9 @@ import {
   getParticipantImportBatches,
   getRecentlyResolvedInterventions,
   getTeamDashboard,
+  getTeamHealthScoreConfig,
+  getWorkoutHistoryForParticipants,
+  getTeamHealthScore,
 } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
@@ -96,6 +99,10 @@ function makeTableClient(tables: Record<string, any[]>) {
         return builder
       }),
       single: jest.fn(async () => {
+        const resultRows = runQuery(rows, filters, orders, limitCount)
+        return { data: resultRows[0] ?? null, error: null }
+      }),
+      maybeSingle: jest.fn(async () => {
         const resultRows = runQuery(rows, filters, orders, limitCount)
         return { data: resultRows[0] ?? null, error: null }
       }),
@@ -805,6 +812,65 @@ describe('getTeamDashboard', () => {
     jest.useRealTimers()
   })
 
+  test('uses the admin-saved non-default weights (not the hardcoded 25/20/20/15/20 defaults) when computing engagement score', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Hana', last_name: 'High', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    // P1 has one pulse survey in each of the last 3 calendar weeks (100% pulse
+    // completion) and nothing else - no daily_wellness rows, no workouts, no nudge
+    // acknowledgements - so submission_consistency, device_wear_consistency,
+    // nudge_response, and workout_volume all resolve to 0.
+    const pulseSurveys = [
+      { id: 'pulse-p1-w0', participant_id: 'P1', date: '2026-08-17', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w1', participant_id: 'P1', date: '2026-08-12', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+      { id: 'pulse-p1-w2', participant_id: 'P1', date: '2026-08-03', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: [], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+        // Non-default weights: pulse_completion (the only component P1 scores 100 on)
+        // is weighted at 70 instead of the default 20, with the remaining 30 spread
+        // across the other components (all of which P1 scores 0 on). If this saved
+        // config were ignored in favor of the hardcoded defaults, the score would be
+        // 20 instead of 70.
+        wellness_director_config: [
+          {
+            id: 'current',
+            weights: {
+              submission_consistency: 10,
+              device_wear_consistency: 10,
+              pulse_completion: 70,
+              nudge_response: 5,
+              workout_volume: 5,
+            },
+          },
+        ],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participant = dashboard.participants.find((p) => p.id === 'P1')
+
+    expect(participant?.engagement_score_components?.pulse_completion).toBe(100)
+    // pulse_completion(100) * 70% + everything else at 0 = 70.
+    expect(participant?.engagement_score).toBe(70)
+
+    jest.useRealTimers()
+  })
+
   test('pulse completion is computed per participant across the last 3 weeks, not diluted by another participant\u2019s row volume', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
 
@@ -916,6 +982,60 @@ describe('getTeamDashboard', () => {
   })
 })
 
+describe('getTeamHealthScoreConfig', () => {
+  test('returns the default window when no config row is saved', async () => {
+    const supabase = makeTableClient({ team_health_score_config: [] })
+    const config = await getTeamHealthScoreConfig(supabase as never)
+    expect(config).toEqual({ baselineStart: '2026-07-02', baselineEnd: '2026-07-27' })
+  })
+
+  test('returns the persisted, normalized window', async () => {
+    const supabase = makeTableClient({
+      team_health_score_config: [{ id: 'current', baseline_start: '2026-01-01', baseline_end: '2026-01-31' }],
+    })
+    const config = await getTeamHealthScoreConfig(supabase as never)
+    expect(config).toEqual({ baselineStart: '2026-01-01', baselineEnd: '2026-01-31' })
+  })
+})
+
+describe('getWorkoutHistoryForParticipants', () => {
+  test('returns an empty array for an empty participant list without querying', async () => {
+    const supabase = makeTableClient({ workouts: [{ id: 'w1', participant_id: 'P1', date: '2026-08-11' }] })
+    const result = await getWorkoutHistoryForParticipants([], '2026-08-01', supabase as never)
+    expect(result).toEqual([])
+  })
+
+  test('fetches workouts for the given participants since the given date', async () => {
+    const supabase = makeTableClient({
+      workouts: [
+        { id: 'w1', participant_id: 'P1', date: '2026-08-11' },
+        { id: 'w2', participant_id: 'P1', date: '2026-07-01' }, // before sinceDate, excluded
+        { id: 'w3', participant_id: 'P2', date: '2026-08-12' }, // different participant, excluded
+      ],
+    })
+    const result = await getWorkoutHistoryForParticipants(['P1'], '2026-08-01', supabase as never)
+    expect(result).toEqual([{ id: 'w1', participant_id: 'P1', date: '2026-08-11' }])
+  })
+})
+
+describe('getTeamHealthScore', () => {
+  test('scores a participant using their wellness/workout history and the configured baseline window', async () => {
+    const supabase = makeTableClient({
+      team_health_score_config: [{ id: 'current', baseline_start: '2026-07-02', baseline_end: '2026-07-27' }],
+      daily_wellness: [
+        { participant_id: 'P1', date: '2026-08-18', sleep_onset_time: null, sleep_hrs: 7.5, hrv_ms: 60, recovery_score: 70 },
+      ],
+      workouts: [],
+    })
+
+    const result = await getTeamHealthScore('P1', '2026-08-17', supabase as never)
+
+    expect(result.current.window).toEqual({ start: '2026-08-17', end: '2026-08-23' })
+    expect(result.current.sleep).toBe(100.0)
+    expect(result.baseline.window).toEqual({ start: '2026-07-02', end: '2026-07-27' })
+  })
+})
+
 describe('getCurrentWeekPulse', () => {
   const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
 
@@ -964,3 +1084,4 @@ describe('getCurrentWeekPulse', () => {
     expect(result.filter((row) => row.participant_id === 'P1')).toHaveLength(3)
   })
 })
+

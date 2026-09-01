@@ -68,7 +68,7 @@ function getRecoverySummary(score: number | null) {
   }
 
   if (score >= 34) {
-    return { label: 'Yellow recovery', detail: 'Moderate readiness. Keep an eye on sleep debt and strain.' }
+    return { label: 'Orange recovery', detail: 'Moderate readiness. Keep an eye on sleep debt and strain.' }
   }
 
   return { label: 'Red recovery', detail: 'Recovery is low today. Prioritize rest and lower-intensity activity.' }

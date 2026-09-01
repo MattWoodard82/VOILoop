@@ -255,6 +255,7 @@ describe('persistWhoopImport', () => {
         wellness: [{
           participant_id: 'EMP901',
           date: '2026-07-02',
+          sleep_onset_time: null,
           recovery_score: 76,
           hrv_ms: 55,
           resting_hr: 58,
@@ -292,6 +293,7 @@ describe('persistWhoopImport', () => {
         wellness: [{
           participant_id: 'EMP901',
           date: '2026-07-02',
+          sleep_onset_time: null,
           recovery_score: 79,
           hrv_ms: 57,
           resting_hr: 57,
@@ -350,6 +352,7 @@ describe('persistWhoopImport', () => {
     const wellness: WhoopWellness = {
       participant_id: 'EMP900',
       date: '2026-07-01',
+      sleep_onset_time: null,
       recovery_score: 78,
       hrv_ms: 52,
       resting_hr: 56,

@@ -5,6 +5,8 @@ import { getParticipants } from '@/lib/supabase/queries'
 import { WhoopImportClient } from './import/WhoopImportClient'
 import { AccountProvisioningClient } from './accounts/AccountProvisioningClient'
 import { ChallengesAdminClient } from './challenges/ChallengesAdminClient'
+import { EngagementWeightsAdminClient } from './EngagementWeightsAdminClient'
+import { TeamHealthScoreBaselineAdminClient } from './TeamHealthScoreBaselineAdminClient'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import type { Participant } from '@/types'
 import Link from 'next/link'
@@ -82,6 +84,26 @@ export default async function AdminPage() {
             Rewards rollout
           </div>
           <ChallengesAdminClient />
+        </section>
+
+        <section id="engagement-score-weights" className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+            Engagement-score weights
+          </div>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 14 }}>
+            Set the FR-13 engagement-score component weights for the whole cohort. Wellness Directors see these values read-only on their dashboard.
+          </div>
+          <EngagementWeightsAdminClient />
+        </section>
+
+        <section id="team-health-score-baseline" className="card">
+          <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
+            Team Health Score baseline window
+          </div>
+          <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 14 }}>
+            Set the baseline comparison window used for the Team Health Score Trend and 5-Metric Breakdown, for the whole cohort. Wellness Directors see this window read-only on their dashboard.
+          </div>
+          <TeamHealthScoreBaselineAdminClient />
         </section>
 
         <section id="events-nudges" className="card">

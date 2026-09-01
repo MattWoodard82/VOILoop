@@ -24,7 +24,7 @@ export const METRIC_DEFINITIONS = {
   recoveryScore: {
     label: 'Recovery Score',
     category: 'Sleep & Recovery',
-    whatItIs: "Think of it like a daily battery level for your body. It's calculated from your sleep, HRV, and how much you've pushed yourself lately, and shows up as green (recharged), yellow (take it easy), or red (rest up).",
+    whatItIs: "Think of it like a daily battery level for your body. It's calculated from your sleep, HRV, and how much you've pushed yourself lately, and shows up as green (recharged), orange (take it easy), or red (rest up).",
     whyItMatters: "It's a quick daily check on whether today is a good day to go hard or a good day to ease off.",
     isSensitive: false,
   },
