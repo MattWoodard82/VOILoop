@@ -17,7 +17,7 @@ export default async function WellnessDirectorPage({
   searchParams,
 }: {
   searchParams?: { [key: string]: string | string[] | undefined }
-} = {}) {
+}) {
   const access = await requireAuth()
   if ('redirect' in access && access.redirect) redirect(access.redirect)
   if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')

@@ -307,7 +307,7 @@ describe('WellnessDirectorClient', () => {
       ],
     })
 
-    const page = await WellnessDirectorPage()
+    const page = await WellnessDirectorPage({})
     const markup = renderToStaticMarkup(page as React.ReactElement)
 
     expect(markup).toContain('Department intervention summary')
