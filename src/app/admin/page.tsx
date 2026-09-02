@@ -8,6 +8,7 @@ import { ChallengesAdminClient } from './challenges/ChallengesAdminClient'
 import { EngagementWeightsAdminClient } from './EngagementWeightsAdminClient'
 import { TeamHealthScoreBaselineAdminClient } from './TeamHealthScoreBaselineAdminClient'
 import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import { getAuthEmailsByUserId } from '@/lib/supabase/auth-emails'
 import type { Participant } from '@/types'
 import Link from 'next/link'
 
@@ -15,27 +16,10 @@ async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return new Map()
   }
+  if (!authUserIds.length) return new Map()
 
-  const idSet = new Set(authUserIds)
-  if (!idSet.size) return new Map()
-
-  const emailByUserId = new Map<string, string>()
   const adminClient = createAdminSupabaseClient()
-  for (const authUserId of Array.from(idSet)) {
-    const { data, error } = await adminClient.auth.admin.getUserById(authUserId)
-    if (error) {
-      const lowerMessage = error.message.toLowerCase()
-      if (lowerMessage.includes('not found') || lowerMessage.includes('does not exist')) {
-        continue
-      }
-      throw error
-    }
-    if (data.user?.email) {
-      emailByUserId.set(authUserId, data.user.email)
-    }
-  }
-
-  return emailByUserId
+  return getAuthEmailsByUserId(adminClient, authUserIds)
 }
 
 export const metadata = { title: 'Admin — VOILoop' }

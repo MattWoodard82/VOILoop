@@ -4,6 +4,8 @@ import { createServerSupabaseClient } from './server'
 import { DEFAULT_ENGAGEMENT_WEIGHTS, normalizeEngagementWeights, type EngagementWeights } from '@/lib/wellness-director-config'
 import { DEFAULT_TEAM_HEALTH_SCORE_CONFIG, normalizeTeamHealthScoreConfig, type TeamHealthScoreConfig } from '@/lib/team-health-score-config'
 import { scoreParticipant, toNightInputs, toWorkoutInputs, type ParticipantScoreResult } from '@/lib/team-health-score'
+import { isTestAccountEmail } from '@/lib/test-accounts'
+import { getAuthEmailsByUserId } from './auth-emails'
 import type {
   Participant, DailyWellness, Workout, Habit,
   PulseSurvey, Intervention, ParticipantWithWellness, TeamStats, ParticipantRankContext, LeaderboardMetric,
@@ -277,6 +279,34 @@ export async function getParticipants(supabase = getQueryClient()): Promise<Part
     .order('first_name')
   if (error) throw error
   return data ?? []
+}
+
+// Excludes pilot/test participant accounts (emails matching isTestAccountEmail,
+// e.g. test3@user.com) from cohort-wide Wellness Director dashboard calculations
+// (Average Weighted Score, KPI stats, dropdowns/filters). Resolves each
+// participant's auth.users email via the service-role admin client.
+//
+// MUST fail open: if service-role credentials are unavailable or the email
+// lookup errors for any reason, this returns the unfiltered list rather than
+// throwing - the dashboard should never break because pilot-account filtering
+// couldn't run.
+export async function excludeTestAccountParticipants(participants: Participant[]): Promise<Participant[]> {
+  const authUserIds = participants
+    .map((participant) => participant.auth_user_id)
+    .filter((value): value is string => Boolean(value))
+
+  if (!authUserIds.length) return participants
+
+  try {
+    const adminClient = createAdminSupabaseClient()
+    const emailByUserId = await getAuthEmailsByUserId(adminClient, authUserIds)
+    return participants.filter((participant) => {
+      const email = participant.auth_user_id ? emailByUserId.get(participant.auth_user_id) : undefined
+      return !email || !isTestAccountEmail(email)
+    })
+  } catch {
+    return participants
+  }
 }
 
 export async function getLatestWellness(
@@ -727,7 +757,7 @@ export async function getTeamDashboard(): Promise<{
 }> {
   const supabase = getQueryClient()
   const privilegedSupabase = getPrivilegedQueryClient()
-  const participants = await getParticipants(supabase)
+  const participants = await excludeTestAccountParticipants(await getParticipants(supabase))
   const participantIds = participants.map((participant) => participant.id)
   const now = new Date()
   // 28-day lookback comfortably covers both the trailing-21-day windows (device wear,
