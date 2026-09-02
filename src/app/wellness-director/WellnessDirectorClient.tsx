@@ -375,6 +375,12 @@ export function WellnessDirectorClient({ participants }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card title="Baseline / overrides">
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>
+            &quot;Baseline&quot; shows whether this participant has enough logged history to power
+            trend/risk comparisons yet. &quot;Override&quot; lets you snooze or dismiss an
+            automatic risk flag for a set number of days (e.g. after you&apos;ve already
+            followed up) without changing the participant&apos;s underlying data or scores.
+          </div>
           {selected ? (
             <>
               <div>{selected.baseline_state === 'building' ? `Baseline building (${selected.baseline_days_remaining} days remaining)` : 'Baseline ready'}</div>
