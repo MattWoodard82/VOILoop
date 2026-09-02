@@ -92,4 +92,31 @@ describe('AdminEventsClient', () => {
     expect(markup).toContain('Upcoming events')
     expect(markup).toContain('skeleton-block')
   })
+
+  test('shows full participant text on hover for truncated nudge-target options', async () => {
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([[], jest.fn()]) // nudges
+      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
+      .mockReturnValueOnce(['nudge', jest.fn()]) // tab
+      .mockReturnValueOnce([false, jest.fn()]) // saving
+      .mockReturnValueOnce([false, jest.fn()]) // saved
+      .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // loading
+      .mockReturnValueOnce([{ title: '', description: '', event_date: '', event_time: '', location: '', event_type: 'general', recurring: false, recurrence: '' }, jest.fn()]) // newEvent
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeMsg
+      .mockReturnValueOnce(['Heather Simpson', jest.fn()]) // nudgeAuthor
+      .mockReturnValueOnce(['participant', jest.fn()]) // nudgeTargetType
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeTargetLabel
+      .mockReturnValueOnce(['p-1', jest.fn()]) // nudgeParticipantId
+
+    const participants = [
+      { id: 'p-1', label: 'Jane Doe Extremely Long Name That Truncates', meta: 'jane.doe.extremely.long@example.com' },
+    ]
+
+    const { AdminEventsClient } = await import('../AdminEventsClient')
+    const markup = renderToStaticMarkup(React.createElement(AdminEventsClient, { participants, role: 'admin' }))
+
+    expect(markup).toContain('title="Jane Doe Extremely Long Name That Truncates · jane.doe.extremely.long@example.com · p-1"')
+  })
 })

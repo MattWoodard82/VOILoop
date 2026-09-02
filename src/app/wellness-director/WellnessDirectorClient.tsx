@@ -71,6 +71,9 @@ function AveragesBlock({ title, averages }: { title: string; averages: Averages 
           </strong>
         </div>
         <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>Avg steps: not available (no WHOOP steps data source).</div>
+        <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
+          Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.
+        </div>
       </div>
     </div>
   )
@@ -375,6 +378,14 @@ export function WellnessDirectorClient({ participants }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card title="Baseline / overrides">
+          <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>
+            &quot;Baseline&quot; shows whether it has been at least 21 days since this participant
+            enrolled — the point at which there&apos;s enough logged history to power
+            trend/risk comparisons. &quot;Override&quot; lets you snooze a risk flag for a
+            chosen number of days, or dismiss it indefinitely (until you manually
+            clear it), either way without changing the participant&apos;s underlying data
+            or scores.
+          </div>
           {selected ? (
             <>
               <div>{selected.baseline_state === 'building' ? `Baseline building (${selected.baseline_days_remaining} days remaining)` : 'Baseline ready'}</div>
@@ -428,7 +439,7 @@ export function WellnessDirectorClient({ participants }: Props) {
        </Card>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+      <div style={{ marginTop: 14 }}>
         <Card title="Team Health Score Trend" badge={teamHealthScore?.current.lowConfidence ? <Badge variant="amber">low confidence</Badge> : undefined}>
           {!selected ? (
             <div>Choose a participant to view their Team Health Score trend.</div>
@@ -465,6 +476,9 @@ export function WellnessDirectorClient({ participants }: Props) {
             </>
           ) : null}
         </Card>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
         <Card title="5-Metric Breakdown">
           {!selected ? (
             <div>Choose a participant to view their 5-metric breakdown.</div>

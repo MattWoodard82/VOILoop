@@ -11,6 +11,7 @@ import {
 } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
+import { createAdminSupabaseClient } from '../admin'
 
 jest.mock('../client', () => ({
   createClient: jest.fn(),
@@ -19,6 +20,12 @@ jest.mock('../client', () => ({
 jest.mock('../server', () => ({
   createServerSupabaseClient: jest.fn(() => {
     throw new Error('Server client unavailable in unit test')
+  }),
+}))
+
+jest.mock('../admin', () => ({
+  createAdminSupabaseClient: jest.fn(() => {
+    throw new Error('Admin client unavailable in unit test')
   }),
 }))
 
@@ -398,11 +405,15 @@ describe('getRecentlyResolvedInterventions', () => {
 describe('getTeamDashboard', () => {
   const mockCreateClient = createClient as jest.MockedFunction<typeof createClient>
   const mockCreateServerSupabaseClient = createServerSupabaseClient as jest.MockedFunction<typeof createServerSupabaseClient>
+  const mockCreateAdminSupabaseClient = createAdminSupabaseClient as jest.MockedFunction<typeof createAdminSupabaseClient>
 
   beforeEach(() => {
     jest.clearAllMocks()
     mockCreateServerSupabaseClient.mockImplementation(() => {
       throw new Error('Server client unavailable in unit test')
+    })
+    mockCreateAdminSupabaseClient.mockImplementation(() => {
+      throw new Error('Admin client unavailable in unit test')
     })
   })
 
@@ -979,6 +990,160 @@ describe('getTeamDashboard', () => {
     expect(workoutVolume).toBeLessThan(100)
 
     jest.useRealTimers()
+  })
+
+  test('excludes pilot/test accounts (auth email matching /^test\\d+@/i) from participants and cohort stats', async () => {
+    const participants = [
+      {
+        id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+      {
+        id: 'P2', auth_user_id: 'auth-2', first_name: 'Pilot', last_name: 'Tester', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Tester', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2024-06-08', recovery_score: 80, hrv_ms: 70, sleep_perf: 90, sleep_debt: 0 },
+      // P2's (test account) recovery score is wildly different so it would visibly
+      // skew avg_recovery if it weren't excluded.
+      { id: 'w2', participant_id: 'P2', date: '2024-06-08', recovery_score: 10, hrv_ms: 10, sleep_perf: 10, sleep_debt: 0 },
+    ]
+
+    // One pulse response from the real participant and one from the excluded test
+    // account - participation_rate must be computed against retained participants
+    // only, both in the numerator (pulse responses) and denominator (headcount).
+    const pulseSurveys = [
+      { id: 'pulse1', participant_id: 'P1', date: '2024-06-08', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+      { id: 'pulse2', participant_id: 'P2', date: '2024-06-08', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: pulseSurveys,
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      ...makeTableClient({ risk_flags: [] }),
+      auth: {
+        admin: {
+          getUserById: jest.fn(async (userId: string) => {
+            const emailByUserId: Record<string, string> = {
+              'auth-1': 'alice.able@user.com',
+              'auth-2': 'test3@user.com',
+            }
+            return { data: { user: { email: emailByUserId[userId] } }, error: null }
+          }),
+        },
+      },
+    } as never)
+
+    const dashboard = await getTeamDashboard()
+
+    expect(dashboard.participants.map((p) => p.id)).toEqual(['P1'])
+    expect(dashboard.stats.total_participants).toBe(1)
+    expect(dashboard.stats.avg_recovery).toBe(80)
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(false)
+    // Only P1's pulse response should count toward participation - P2's must not
+    // inflate the numerator once P2 itself has been excluded from the denominator.
+    expect(dashboard.stats.participation_rate).toBe(100)
+  })
+
+  test('fails open (keeps all participants) when the auth email lookup throws, and flags cohort metrics as unavailable', async () => {
+    const participants = [
+      {
+        id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+      {
+        id: 'P2', auth_user_id: 'auth-2', first_name: 'Pilot', last_name: 'Tester', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Tester', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      ...makeTableClient({ risk_flags: [] }),
+      auth: {
+        admin: {
+          getUserById: jest.fn(async () => {
+            throw new Error('boom')
+          }),
+        },
+      },
+    } as never)
+
+    const dashboard = await getTeamDashboard()
+
+    expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
+    expect(dashboard.stats.total_participants).toBe(2)
+    // The dashboard must not silently present a fully-unfiltered cohort as if
+    // filtering succeeded - callers/UI need to know filtering is degraded.
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(true)
+  })
+
+  test('fails open (keeps all participants) when service-role credentials are unavailable, and flags cohort metrics as unavailable', async () => {
+    const participants = [
+      {
+        id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+      {
+        id: 'P2', auth_user_id: 'auth-2', first_name: 'Pilot', last_name: 'Tester', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Tester', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    // mockCreateAdminSupabaseClient keeps beforeEach's default "throws" implementation,
+    // simulating missing NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY.
+    const dashboard = await getTeamDashboard()
+
+    expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
+    expect(dashboard.stats.total_participants).toBe(2)
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(true)
   })
 })
 

@@ -8,11 +8,12 @@ const config: Config = {
   },
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', {
+    '^.+\\.(tsx?|jsx?)$': ['ts-jest', {
       tsconfig: {
         module: 'commonjs',
         esModuleInterop: true,
         jsx: 'react-jsx',
+        allowJs: true,
       },
     }],
   },

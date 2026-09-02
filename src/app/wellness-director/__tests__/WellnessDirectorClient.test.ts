@@ -150,6 +150,42 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Avg wear consistency')
   })
 
+  test('explains that the Avg weighted score is retained real participants only, excluding test accounts', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('retained, non-test participants')
+    expect(markup).toContain('pilot/test accounts are excluded')
+  })
+
+  test('describes Baseline/overrides accurately: baseline is enrollment-age based, and dismiss is indefinite (not day-limited)', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('21 days since')
+    expect(markup).toContain('enrolled')
+    expect(markup).toContain('dismiss')
+    expect(markup).toContain('indefinitely')
+  })
+
+  test('Team Health Score Trend and 5-Metric Breakdown each get their own full-width row (GH #120 item #5)', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    const trendIdx = markup.indexOf('data-title="Team Health Score Trend"')
+    const metricIdx = markup.indexOf('data-title="5-Metric Breakdown"')
+    expect(trendIdx).toBeGreaterThan(-1)
+    expect(metricIdx).toBeGreaterThan(-1)
+    // Each card's nearest wrapping <div style="..."> must not be the cramped
+    // shared two-column grid (grid-template-columns:1fr 1fr) the two cards
+    // used to be squeezed into.
+    const styleBefore = (idx: number) => {
+      const before = markup.slice(0, idx)
+      const matches = Array.from(before.matchAll(/<div style="([^"]*)">/g))
+      return matches.at(-1)?.[1]
+    }
+    const trendWrapperStyle = styleBefore(trendIdx)
+    const metricWrapperStyle = styleBefore(metricIdx)
+    expect(trendWrapperStyle).toBeDefined()
+    expect(metricWrapperStyle).toBeDefined()
+    expect(trendWrapperStyle).not.toContain('1fr 1fr')
+    expect(metricWrapperStyle).not.toContain('1fr 1fr')
+  })
+
   test('engagement-score weights are always read-only on the WD dashboard (edited only in the Admin Console)', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('view only')
@@ -203,6 +239,7 @@ describe('WellnessDirectorClient', () => {
         high_risk_count: 0,
         total_participants: 1,
         participation_rate: 100,
+        test_account_filtering_unavailable: false,
       },
       interventions: [
         {
@@ -231,5 +268,57 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Logged triggers: Recovery Score')
     expect(markup).toContain('Logged interventions')
     expect(markup).not.toContain('Suggested interventions by department')
+  })
+
+  test('warns when pilot/test-account filtering failed open, so cohort metrics are not silently presented as clean', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+        test_account_filtering_unavailable: true,
+      },
+      interventions: [],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).toContain('Pilot/test-account filtering is temporarily unavailable')
+  })
+
+  test('does not show the filtering-unavailable warning when test-account filtering succeeded', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+        test_account_filtering_unavailable: false,
+      },
+      interventions: [],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).not.toContain('Pilot/test-account filtering is temporarily unavailable')
   })
 })

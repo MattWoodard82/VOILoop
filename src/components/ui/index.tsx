@@ -65,7 +65,7 @@ export function BarRow({ label, value, max = 100, color = '#69BE28', suffix = ''
   const pct = Math.min((value / max) * 100, 100)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <span style={{ width: labelWidth, fontSize: 11, color: '#A5ACAF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <span title={label} style={{ width: labelWidth, fontSize: 11, color: '#A5ACAF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {label}
       </span>
       <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
