@@ -86,10 +86,12 @@ function renderClientMarkup(
     deptFilter = 'All',
     personFilter = 'All',
     configLoaded = true,
+    teamHealthScore = null,
   }: {
     deptFilter?: string
     personFilter?: string
     configLoaded?: boolean
+    teamHealthScore?: unknown
   } = {},
 ) {
   const useStateSpy = jest.spyOn(React, 'useState')
@@ -97,8 +99,9 @@ function renderClientMarkup(
 
   // Hook call order in WellnessDirectorClient: deptFilter, personFilter, weights,
   // overrides, overrideNotes, snoozeDays, configLoaded, nudgeMessage, nudgeStatus,
-  // nudgeError, ... Only the ones the tests need to control are overridden; the
-  // rest pass through to the real useState so they keep their real defaults.
+  // nudgeError, currentStart, teamHealthScore, thsLoading, thsError, ... Only the
+  // ones the tests need to control are overridden; the rest pass through to the
+  // real useState so they keep their real defaults.
   useStateSpy
     .mockImplementationOnce(() => [deptFilter, jest.fn()]) // deptFilter
     .mockImplementationOnce(() => [personFilter, jest.fn()]) // personFilter
@@ -107,6 +110,13 @@ function renderClientMarkup(
     .mockImplementationOnce(originalUseState as typeof React.useState) // overrideNotes
     .mockImplementationOnce(originalUseState as typeof React.useState) // snoozeDays
     .mockImplementationOnce(() => [configLoaded, jest.fn()]) // configLoaded
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeMessage
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeStatus
+    .mockImplementationOnce(originalUseState as typeof React.useState) // nudgeError
+    .mockImplementationOnce(originalUseState as typeof React.useState) // currentStart
+    .mockImplementationOnce(() => [teamHealthScore, jest.fn()]) // teamHealthScore
+    .mockImplementationOnce(originalUseState as typeof React.useState) // thsLoading
+    .mockImplementationOnce(originalUseState as typeof React.useState) // thsError
 
   try {
     return renderToStaticMarkup(React.createElement(WellnessDirectorClient, { participants }))
@@ -131,7 +141,7 @@ describe('WellnessDirectorClient', () => {
   test('renders explainability, score breakdown, and selected participant controls when config is loaded', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('Engagement score')
-    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('Flag actions')
     expect(markup).toContain('aria-label="override note"')
     expect(markup).toContain('Snooze')
     expect(markup).toContain('Dismiss')
@@ -139,6 +149,24 @@ describe('WellnessDirectorClient', () => {
     expect(markup).not.toContain('table-skeleton')
     expect(markup).toContain('WHOOP/CSV submission consistency')
     expect(markup).toContain('Send a nudge to Alex Able')
+  })
+
+  test('shows Team Health Score Trend baseline/last-week/current summary row, with a baseline-building message while a participant is still forming a baseline', () => {
+    const teamHealthScore = {
+      baseline: { window: { start: '2026-06-01', end: '2026-06-14' }, sleep: 65, hrv: 60, zone2: 55, recovery: 68, strain: 62, composite: 63.6, band: 'Good', coveragePct: 100, lowConfidence: false, missingComponents: [] },
+      lastWeek: { window: { start: '2026-07-28', end: '2026-08-03' }, sleep: 60, hrv: 58, zone2: 50, recovery: 65, strain: 60, composite: 61.1, band: 'Fair', coveragePct: 90, lowConfidence: false, missingComponents: [] },
+      current: { window: { start: '2026-08-04', end: '2026-08-10' }, sleep: null, hrv: 55, zone2: 40, recovery: 50, strain: 45, composite: null, band: null, coveragePct: 0, lowConfidence: false, missingComponents: ['sleep'] },
+    }
+    const markup = renderClientMarkup([participant], { personFilter: 'P1', teamHealthScore })
+    expect(markup).toContain('Baseline building (13 days remaining)')
+    expect(markup).toContain('61.1')
+    expect(markup).toContain('No data yet')
+    expect(markup).toContain('--')
+    expect(markup).toContain('No data this window')
+
+    const readyParticipant = { ...participant, baseline_state: 'ready' } as ParticipantWithWellness
+    const readyMarkup = renderClientMarkup([readyParticipant], { personFilter: 'P1', teamHealthScore })
+    expect(readyMarkup).toContain('63.6')
   })
 
   test('shows cohort and selected-participant averages, and flags steps as unavailable', () => {
@@ -165,8 +193,8 @@ describe('WellnessDirectorClient', () => {
       personFilter: 'All',
     })
     expect(markup).toContain('Bea Able')
-    expect(markup).toContain('Choose a participant to review baseline status and overrides.')
-    expect(markup).toContain('Choose a participant to view risk tier.')
+    expect(markup).toContain('Choose a participant to view risk tier, or review the cohort risk composition below.')
+    expect(markup).toContain('Stable:2')
     expect(markup).toContain('Cohort averages')
     expect(markup).not.toContain('Send a nudge')
   })
@@ -184,7 +212,7 @@ describe('WellnessDirectorClient', () => {
       deptFilter: 'ER',
       personFilter: 'P1',
     })
-    expect(outOfScopeMarkup).toContain('Choose a participant to review baseline status and overrides.')
+    expect(outOfScopeMarkup).toContain('Choose a participant to view risk tier, or review the cohort risk composition below.')
     expect(outOfScopeMarkup).not.toContain('Send a nudge')
   })
 

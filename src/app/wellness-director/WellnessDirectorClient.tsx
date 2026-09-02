@@ -109,6 +109,15 @@ const THS_COMPONENT_LABELS: Record<TeamHealthComponentKey, string> = {
 const THS_COMPONENT_KEYS = Object.keys(THS_COMPONENT_LABELS) as TeamHealthComponentKey[]
 const NO_DATA_COLOR = '#3a4550'
 
+// Risk tier buckets for the cohort-wide composition breakdown shown on the Risk
+// tier card when no participant is selected. Mirrors the risk_level ->
+// risk_tier_label mapping used server-side (see queries.ts getTeamDashboard).
+const RISK_TIER_BUCKETS: { level: ParticipantWithWellness['risk_level']; label: string; color: string }[] = [
+  { level: 'High', label: 'High concern', color: '#ff6b6b' },
+  { level: 'Medium', label: 'Watch', color: '#FFA500' },
+  { level: 'Low', label: 'Stable', color: '#69BE28' },
+]
+
 // Default "Current" window: the Monday of the most recently FULLY COMPLETED
 // Monday-Sunday week (not the still-in-progress current week), matching
 // Matt's report cadence. Prev/Next navigation moves in 7-day steps from here.
@@ -223,6 +232,13 @@ export function WellnessDirectorClient({ participants }: Props) {
     }))
 
   const cohortAverages = useMemo(() => computeAverages(scopedParticipants), [scopedParticipants])
+  const riskComposition = useMemo(
+    () => RISK_TIER_BUCKETS.map((bucket) => ({
+      ...bucket,
+      count: scopedParticipants.filter((participant) => participant.risk_level === bucket.level).length,
+    })),
+    [scopedParticipants],
+  )
   const selectedAverages = useMemo(() => (selected ? computeAverages([selected]) : null), [selected])
 
   // Recomputes the selected participant's Team Health Score whenever they change,
@@ -368,42 +384,49 @@ export function WellnessDirectorClient({ participants }: Props) {
                 <Badge variant={selected.risk_level === 'High' ? 'red' : selected.risk_level === 'Medium' ? 'amber' : 'green'}>{selected.risk_tier_label ?? selected.risk_level}</Badge>
               )}
               <div>{selected.risk_trigger_reasons && selected.risk_trigger_reasons.length > 0 ? selected.risk_trigger_reasons.join(' · ') : selected.baseline_state === 'building' ? 'Baseline still forming' : 'No triggers'}</div>
-            </>
-          ) : <div>Choose a participant to view risk tier.</div>}
-        </Card>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <Card title="Baseline / overrides">
-          {selected ? (
-            <>
-              <div>{selected.baseline_state === 'building' ? `Baseline building (${selected.baseline_days_remaining} days remaining)` : 'Baseline ready'}</div>
-              <div>Override: {overrideLabel(overrides[selected.id] ?? selected.override_state)}</div>
-              <input
-                aria-label="override note"
-                className="form-control-dark"
-                value={overrideNotes[selected.id] ?? ''}
-                onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
-                placeholder="Optional note"
-              />
-              <input
-                aria-label="snooze days"
-                className="form-control-dark"
-                type="number"
-                min={1}
-                max={30}
-                value={snoozeDays[selected.id] ?? 7}
-                onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
-                <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#fff', marginBottom: 8 }}>Flag actions</div>
+                <div>Override: {overrideLabel(overrides[selected.id] ?? selected.override_state)}</div>
+                <input
+                  aria-label="override note"
+                  className="form-control-dark"
+                  value={overrideNotes[selected.id] ?? ''}
+                  onChange={(e) => setOverrideNotes((current) => ({ ...current, [selected.id]: e.target.value }))}
+                  placeholder="Optional note"
+                />
+                <input
+                  aria-label="snooze days"
+                  className="form-control-dark"
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={snoozeDays[selected.id] ?? 7}
+                  onChange={(e) => setSnoozeDays((current) => ({ ...current, [selected.id]: Number(e.target.value) }))}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'snooze')}>Snooze</button>
+                  <button className="btn-primary" type="button" onClick={() => persistOverride(selected.id, 'dismiss')}>Dismiss</button>
+                </div>
               </div>
             </>
           ) : (
-            <div>Choose a participant to review baseline status and overrides.</div>
+            <div>
+              <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 10 }}>Choose a participant to view risk tier, or review the cohort risk composition below.</div>
+              {riskComposition.map((bucket) => (
+                <BarRow
+                  key={bucket.level}
+                  label={bucket.label}
+                  value={bucket.count}
+                  max={Math.max(scopedParticipants.length, 1)}
+                  color={bucket.color}
+                />
+              ))}
+            </div>
           )}
         </Card>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14 }}>
        <Card title="Engagement-score weights" badge={<Badge variant="wolf">view only</Badge>}>
          {!configLoaded ? (
            <div style={{ display: 'grid', gap: 12, minHeight: 180 }}>
@@ -428,7 +451,7 @@ export function WellnessDirectorClient({ participants }: Props) {
        </Card>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+      <div style={{ marginTop: 14 }}>
         <Card title="Team Health Score Trend" badge={teamHealthScore?.current.lowConfidence ? <Badge variant="amber">low confidence</Badge> : undefined}>
           {!selected ? (
             <div>Choose a participant to view their Team Health Score trend.</div>
@@ -438,6 +461,24 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div style={{ color: '#ff6b6b', fontSize: 12 }}>{thsError}</div>
           ) : teamHealthScore ? (
             <>
+              <div style={{ display: 'grid', gap: 4, marginBottom: 12, fontSize: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#A5ACAF' }}>Baseline</span>
+                  <span style={{ color: '#fff' }}>
+                    {selected.baseline_state === 'building'
+                      ? `Baseline building (${selected.baseline_days_remaining} days remaining)`
+                      : teamHealthScore.baseline.composite != null ? teamHealthScore.baseline.composite : 'No data yet'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#A5ACAF' }}>Last week</span>
+                  <span style={{ color: '#fff' }}>{teamHealthScore.lastWeek.composite != null ? teamHealthScore.lastWeek.composite : 'No data yet'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#A5ACAF' }}>Current</span>
+                  <span style={{ color: '#fff' }}>{teamHealthScore.current.composite != null ? teamHealthScore.current.composite : 'No data yet'}</span>
+                </div>
+              </div>
               <WellnessDirectorCharts
                 type="recovery"
                 seriesName="Team Health Score"
@@ -465,6 +506,9 @@ export function WellnessDirectorClient({ participants }: Props) {
             </>
           ) : null}
         </Card>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
         <Card title="5-Metric Breakdown">
           {!selected ? (
             <div>Choose a participant to view their 5-metric breakdown.</div>
@@ -474,18 +518,30 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div style={{ color: '#ff6b6b', fontSize: 12 }}>{thsError}</div>
           ) : teamHealthScore ? (
             <>
-              <WellnessDirectorCharts
-                type="recovery"
-                seriesName="Score"
-                data={THS_COMPONENT_KEYS.map((key) => {
-                  const value = teamHealthScore.current[key]
-                  return {
-                    name: THS_COMPONENT_LABELS[key],
-                    value: value ?? 0,
-                    color: value != null ? recoveryColor(value) : NO_DATA_COLOR,
-                  }
-                })}
-              />
+              {THS_COMPONENT_KEYS.filter((key) => teamHealthScore.current[key] != null).length > 0 && (
+                <WellnessDirectorCharts
+                  type="recovery"
+                  seriesName="Score"
+                  data={THS_COMPONENT_KEYS.filter((key) => teamHealthScore.current[key] != null).map((key) => {
+                    const value = teamHealthScore.current[key] as number
+                    return {
+                      name: THS_COMPONENT_LABELS[key],
+                      value,
+                      color: recoveryColor(value),
+                    }
+                  })}
+                />
+              )}
+              {THS_COMPONENT_KEYS.filter((key) => teamHealthScore.current[key] == null).length > 0 && (
+                <div style={{ display: 'grid', gap: 6, marginTop: 8 }}>
+                  {THS_COMPONENT_KEYS.filter((key) => teamHealthScore.current[key] == null).map((key) => (
+                    <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                      <span style={{ color: '#A5ACAF' }}>{THS_COMPONENT_LABELS[key]}</span>
+                      <span style={{ color: '#fff' }}>-- <span style={{ color: '#A5ACAF', fontStyle: 'italic' }}>(No data this window)</span></span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ marginTop: 8, fontSize: 12, color: '#fff' }}>
                 Composite: <strong>{teamHealthScore.current.composite != null ? teamHealthScore.current.composite : 'No data this window'}</strong>
                 {teamHealthScore.current.band && <span style={{ color: '#A5ACAF' }}> · {teamHealthScore.current.band}</span>}
