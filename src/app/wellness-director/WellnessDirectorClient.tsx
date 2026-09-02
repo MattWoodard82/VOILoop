@@ -434,7 +434,7 @@ export function WellnessDirectorClient({ participants }: Props) {
        </Card>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+      <div style={{ marginTop: 14 }}>
         <Card title="Team Health Score Trend" badge={teamHealthScore?.current.lowConfidence ? <Badge variant="amber">low confidence</Badge> : undefined}>
           {!selected ? (
             <div>Choose a participant to view their Team Health Score trend.</div>
@@ -471,6 +471,9 @@ export function WellnessDirectorClient({ participants }: Props) {
             </>
           ) : null}
         </Card>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
         <Card title="5-Metric Breakdown">
           {!selected ? (
             <div>Choose a participant to view their 5-metric breakdown.</div>

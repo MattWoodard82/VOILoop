@@ -150,6 +150,28 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Avg wear consistency')
   })
 
+  test('Team Health Score Trend and 5-Metric Breakdown each get their own full-width row (GH #120 item #5)', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    const trendIdx = markup.indexOf('data-title="Team Health Score Trend"')
+    const metricIdx = markup.indexOf('data-title="5-Metric Breakdown"')
+    expect(trendIdx).toBeGreaterThan(-1)
+    expect(metricIdx).toBeGreaterThan(-1)
+    // Each card's nearest wrapping <div style="..."> must not be the cramped
+    // shared two-column grid (grid-template-columns:1fr 1fr) the two cards
+    // used to be squeezed into.
+    const styleBefore = (idx: number) => {
+      const before = markup.slice(0, idx)
+      const matches = Array.from(before.matchAll(/<div style="([^"]*)">/g))
+      return matches.at(-1)?.[1]
+    }
+    const trendWrapperStyle = styleBefore(trendIdx)
+    const metricWrapperStyle = styleBefore(metricIdx)
+    expect(trendWrapperStyle).toBeDefined()
+    expect(metricWrapperStyle).toBeDefined()
+    expect(trendWrapperStyle).not.toContain('1fr 1fr')
+    expect(metricWrapperStyle).not.toContain('1fr 1fr')
+  })
+
   test('engagement-score weights are always read-only on the WD dashboard (edited only in the Admin Console)', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('view only')
