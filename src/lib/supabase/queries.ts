@@ -750,14 +750,20 @@ export async function getTeamHealthScore(
   return scoreParticipant(nights, workouts, currentStart, config)
 }
 
-export async function getTeamDashboard(): Promise<{
+export async function getTeamDashboard(options?: { includeTestAccounts?: boolean }): Promise<{
   participants: ParticipantWithWellness[]
   stats: TeamStats
   interventions: Intervention[]
 }> {
   const supabase = getQueryClient()
   const privilegedSupabase = getPrivilegedQueryClient()
-  const participants = await excludeTestAccountParticipants(await getParticipants(supabase))
+  const allParticipants = await getParticipants(supabase)
+  // The Wellness Director's header toggle defaults to "excluded" (current/default
+  // behavior). Passing includeTestAccounts: true lets the WD explicitly opt out of
+  // that exclusion for this request, skipping the admin-email lookup entirely.
+  const participants = options?.includeTestAccounts
+    ? allParticipants
+    : await excludeTestAccountParticipants(allParticipants)
   const participantIds = participants.map((participant) => participant.id)
   const now = new Date()
   // 28-day lookback comfortably covers both the trailing-21-day windows (device wear,
