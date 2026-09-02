@@ -152,6 +152,9 @@ export interface TeamStats {
   high_risk_count: number
   total_participants: number
   participation_rate: number
+  // True when pilot/test-account filtering (excludeTestAccountParticipants)
+  // failed open and cohort metrics below may therefore include test accounts.
+  test_account_filtering_unavailable: boolean
 }
 
 export type LeaderboardMetric = 'recovery' | 'workouts_logged' | 'points_earned' | 'consistency_streak'

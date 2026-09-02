@@ -1013,13 +1013,21 @@ describe('getTeamDashboard', () => {
       { id: 'w2', participant_id: 'P2', date: '2024-06-08', recovery_score: 10, hrv_ms: 10, sleep_perf: 10, sleep_debt: 0 },
     ]
 
+    // One pulse response from the real participant and one from the excluded test
+    // account - participation_rate must be computed against retained participants
+    // only, both in the numerator (pulse responses) and denominator (headcount).
+    const pulseSurveys = [
+      { id: 'pulse1', participant_id: 'P1', date: '2024-06-08', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+      { id: 'pulse2', participant_id: 'P2', date: '2024-06-08', confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+    ]
+
     mockCreateClient.mockReturnValue(
       makeTableClient({
         participants,
         daily_wellness: dailyWellness,
         workouts: [],
         habits: [],
-        pulse_surveys: [],
+        pulse_surveys: pulseSurveys,
         interventions: [],
         weekly_nudges: [],
         nudge_targets: [],
@@ -1047,9 +1055,13 @@ describe('getTeamDashboard', () => {
     expect(dashboard.participants.map((p) => p.id)).toEqual(['P1'])
     expect(dashboard.stats.total_participants).toBe(1)
     expect(dashboard.stats.avg_recovery).toBe(80)
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(false)
+    // Only P1's pulse response should count toward participation - P2's must not
+    // inflate the numerator once P2 itself has been excluded from the denominator.
+    expect(dashboard.stats.participation_rate).toBe(100)
   })
 
-  test('fails open (keeps all participants) when the auth email lookup throws', async () => {
+  test('fails open (keeps all participants) when the auth email lookup throws, and flags cohort metrics as unavailable', async () => {
     const participants = [
       {
         id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
@@ -1092,9 +1104,12 @@ describe('getTeamDashboard', () => {
 
     expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
     expect(dashboard.stats.total_participants).toBe(2)
+    // The dashboard must not silently present a fully-unfiltered cohort as if
+    // filtering succeeded - callers/UI need to know filtering is degraded.
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(true)
   })
 
-  test('fails open (keeps all participants) when service-role credentials are unavailable', async () => {
+  test('fails open (keeps all participants) when service-role credentials are unavailable, and flags cohort metrics as unavailable', async () => {
     const participants = [
       {
         id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
@@ -1128,6 +1143,7 @@ describe('getTeamDashboard', () => {
 
     expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
     expect(dashboard.stats.total_participants).toBe(2)
+    expect(dashboard.stats.test_account_filtering_unavailable).toBe(true)
   })
 })
 

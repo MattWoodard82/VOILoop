@@ -150,6 +150,20 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Avg wear consistency')
   })
 
+  test('explains that the Avg weighted score is retained real participants only, excluding test accounts', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('retained, non-test participants')
+    expect(markup).toContain('pilot/test accounts are excluded')
+  })
+
+  test('describes Baseline/overrides accurately: baseline is enrollment-age based, and dismiss is indefinite (not day-limited)', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('21 days since')
+    expect(markup).toContain('enrolled')
+    expect(markup).toContain('dismiss')
+    expect(markup).toContain('indefinitely')
+  })
+
   test('Team Health Score Trend and 5-Metric Breakdown each get their own full-width row (GH #120 item #5)', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     const trendIdx = markup.indexOf('data-title="Team Health Score Trend"')
@@ -225,6 +239,7 @@ describe('WellnessDirectorClient', () => {
         high_risk_count: 0,
         total_participants: 1,
         participation_rate: 100,
+        test_account_filtering_unavailable: false,
       },
       interventions: [
         {
@@ -253,5 +268,57 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Logged triggers: Recovery Score')
     expect(markup).toContain('Logged interventions')
     expect(markup).not.toContain('Suggested interventions by department')
+  })
+
+  test('warns when pilot/test-account filtering failed open, so cohort metrics are not silently presented as clean', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+        test_account_filtering_unavailable: true,
+      },
+      interventions: [],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).toContain('Pilot/test-account filtering is temporarily unavailable')
+  })
+
+  test('does not show the filtering-unavailable warning when test-account filtering succeeded', async () => {
+    ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
+      session: { user: { id: 'wd-1' } },
+      role: 'wellness_director',
+      mustChangePassword: false,
+    } as never)
+    ;(getTeamDashboard as jest.MockedFunction<typeof getTeamDashboard>).mockResolvedValue({
+      participants: [participant],
+      stats: {
+        avg_recovery: 72,
+        avg_hrv: 66,
+        avg_sleep_perf: 84,
+        high_risk_count: 0,
+        total_participants: 1,
+        participation_rate: 100,
+        test_account_filtering_unavailable: false,
+      },
+      interventions: [],
+    })
+
+    const page = await WellnessDirectorPage()
+    const markup = renderToStaticMarkup(page as React.ReactElement)
+
+    expect(markup).not.toContain('Pilot/test-account filtering is temporarily unavailable')
   })
 })

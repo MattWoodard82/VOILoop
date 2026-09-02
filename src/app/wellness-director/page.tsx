@@ -53,6 +53,11 @@ export default async function WellnessDirectorPage() {
           {highRisk.map(e => `${e.first_name} ${e.last_name} (Recovery ${e.latest_wellness?.recovery_score ?? '–'})`).join(' · ')} — require immediate Wellness Director review.
         </Alert>
       )}
+      {stats.test_account_filtering_unavailable && (
+        <Alert variant="warn" icon={<AlertTriangle size={14} />}>
+          Pilot/test-account filtering is temporarily unavailable — the cohort metrics below may include test accounts.
+        </Alert>
+      )}
       <div className="sec-label">Workforce snapshot — {participants.length} participants</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
         <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_participants} participants tracked`} deltaDir="neutral" />

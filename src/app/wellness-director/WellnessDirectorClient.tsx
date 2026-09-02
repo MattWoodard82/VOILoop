@@ -71,6 +71,9 @@ function AveragesBlock({ title, averages }: { title: string; averages: Averages 
           </strong>
         </div>
         <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>Avg steps: not available (no WHOOP steps data source).</div>
+        <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
+          Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.
+        </div>
       </div>
     </div>
   )
@@ -376,10 +379,12 @@ export function WellnessDirectorClient({ participants }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card title="Baseline / overrides">
           <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>
-            &quot;Baseline&quot; shows whether this participant has enough logged history to power
-            trend/risk comparisons yet. &quot;Override&quot; lets you snooze or dismiss an
-            automatic risk flag for a set number of days (e.g. after you&apos;ve already
-            followed up) without changing the participant&apos;s underlying data or scores.
+            &quot;Baseline&quot; shows whether it has been at least 21 days since this participant
+            enrolled — the point at which there&apos;s enough logged history to power
+            trend/risk comparisons. &quot;Override&quot; lets you snooze a risk flag for a
+            chosen number of days, or dismiss it indefinitely (until you manually
+            clear it), either way without changing the participant&apos;s underlying data
+            or scores.
           </div>
           {selected ? (
             <>

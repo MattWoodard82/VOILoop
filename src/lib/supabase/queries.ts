@@ -289,23 +289,27 @@ export async function getParticipants(supabase = getQueryClient()): Promise<Part
 // MUST fail open: if service-role credentials are unavailable or the email
 // lookup errors for any reason, this returns the unfiltered list rather than
 // throwing - the dashboard should never break because pilot-account filtering
-// couldn't run.
-export async function excludeTestAccountParticipants(participants: Participant[]): Promise<Participant[]> {
+// couldn't run. Callers MUST check `filteringUnavailable` rather than assume
+// the returned list was actually filtered - presenting a fully-unfiltered
+// cohort as if filtering succeeded would silently reintroduce test-account
+// pollution into cohort aggregates.
+export async function excludeTestAccountParticipants(participants: Participant[]): Promise<{ participants: Participant[]; filteringUnavailable: boolean }> {
   const authUserIds = participants
     .map((participant) => participant.auth_user_id)
     .filter((value): value is string => Boolean(value))
 
-  if (!authUserIds.length) return participants
+  if (!authUserIds.length) return { participants, filteringUnavailable: false }
 
   try {
     const adminClient = createAdminSupabaseClient()
     const emailByUserId = await getAuthEmailsByUserId(adminClient, authUserIds)
-    return participants.filter((participant) => {
+    const filtered = participants.filter((participant) => {
       const email = participant.auth_user_id ? emailByUserId.get(participant.auth_user_id) : undefined
       return !email || !isTestAccountEmail(email)
     })
+    return { participants: filtered, filteringUnavailable: false }
   } catch {
-    return participants
+    return { participants, filteringUnavailable: true }
   }
 }
 
@@ -757,7 +761,8 @@ export async function getTeamDashboard(): Promise<{
 }> {
   const supabase = getQueryClient()
   const privilegedSupabase = getPrivilegedQueryClient()
-  const participants = await excludeTestAccountParticipants(await getParticipants(supabase))
+  const allParticipants = await getParticipants(supabase)
+  const { participants, filteringUnavailable: testAccountFilteringUnavailable } = await excludeTestAccountParticipants(allParticipants)
   const participantIds = participants.map((participant) => participant.id)
   const now = new Date()
   // 28-day lookback comfortably covers both the trailing-21-day windows (device wear,
@@ -916,7 +921,11 @@ export async function getTeamDashboard(): Promise<{
   const recoveries = enriched.map((e) => e.latest_wellness?.recovery_score ?? null)
   const hrvs = enriched.map((e) => e.latest_wellness?.hrv_ms ?? null)
   const sleeps = enriched.map((e) => e.latest_wellness?.sleep_perf ?? null)
-  const pulseResponded = pulse.length
+  // getLatestPulse() is not participant-scoped, so it can include rows for
+  // excluded test accounts - count only responses from retained participants,
+  // otherwise participation_rate's numerator can exceed its denominator.
+  const participantIdSet = new Set(participantIds)
+  const pulseResponded = pulse.filter((p) => participantIdSet.has(p.participant_id)).length
 
   const stats: TeamStats = {
     avg_recovery: avg(recoveries),
@@ -927,6 +936,7 @@ export async function getTeamDashboard(): Promise<{
     participation_rate: participants.length > 0
       ? Math.round((pulseResponded / participants.length) * 100)
       : 0,
+    test_account_filtering_unavailable: testAccountFilteringUnavailable,
   }
 
   return { participants: enriched, stats, interventions }
