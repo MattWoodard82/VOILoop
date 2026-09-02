@@ -1330,6 +1330,53 @@ describe('getNudgeHistoryForParticipant', () => {
       { nudge_id: 'n1', week_of: '2026-08-10', message: 'Check in please', created_at: '2026-08-10T00:00:00Z', responded: true, responded_at: '2026-08-11T09:00:00Z' },
     ])
   })
+
+  // A nudge sent via target_type='all' is treated as participant-visible everywhere
+  // else in the app (computeNudgeResponseRate, the participant events route's
+  // isParticipantTarget) - the history card should agree, not just show individually
+  // targeted ('participant') nudges.
+  test('includes cohort-wide (target_type=all) nudges in the history', async () => {
+    const supabase = makeTableClient({
+      participants: [{ id: 'P1', cohort: null }],
+      nudge_targets: [
+        { nudge_id: 'n1', participant_id: null, target_type: 'all', target_label: '' },
+      ],
+      weekly_nudges: [
+        { id: 'n1', week_of: '2026-08-10', message: 'Everyone check in', created_at: '2026-08-10T00:00:00Z' },
+      ],
+      nudge_acknowledgements: [],
+    })
+
+    const result = await getNudgeHistoryForParticipant('P1', 10, supabase as never)
+
+    expect(result).toEqual([
+      { nudge_id: 'n1', week_of: '2026-08-10', message: 'Everyone check in', created_at: '2026-08-10T00:00:00Z', responded: false, responded_at: null },
+    ])
+  })
+
+  // A nudge sent via target_type='subgroup' targeting the participant's own cohort is
+  // also participant-visible elsewhere (same two call sites as above), and should
+  // resolve the participant's cohort to decide whether it applies to them.
+  test('includes subgroup nudges targeting the participant\'s own cohort in the history', async () => {
+    const supabase = makeTableClient({
+      participants: [{ id: 'P1', cohort: 'night-shift' }],
+      nudge_targets: [
+        { nudge_id: 'n1', participant_id: null, target_type: 'subgroup', target_label: 'night-shift' },
+        { nudge_id: 'n2', participant_id: null, target_type: 'subgroup', target_label: 'day-shift' }, // different cohort, excluded
+      ],
+      weekly_nudges: [
+        { id: 'n1', week_of: '2026-08-10', message: 'Night shift check in', created_at: '2026-08-10T00:00:00Z' },
+        { id: 'n2', week_of: '2026-08-10', message: 'Day shift check in', created_at: '2026-08-10T00:00:00Z' },
+      ],
+      nudge_acknowledgements: [],
+    })
+
+    const result = await getNudgeHistoryForParticipant('P1', 10, supabase as never)
+
+    expect(result).toEqual([
+      { nudge_id: 'n1', week_of: '2026-08-10', message: 'Night shift check in', created_at: '2026-08-10T00:00:00Z', responded: false, responded_at: null },
+    ])
+  })
 })
 
 describe('getWeeklyResponseRate', () => {
@@ -1356,6 +1403,71 @@ describe('getWeeklyResponseRate', () => {
       { participant_id: 'P1', days: [true, false, true, false, false, false, true], week_pct: 43 },
       { participant_id: 'P2', days: [false, false, false, false, false, false, false], week_pct: 0 },
     ])
+  })
+
+  // Simulates PostgREST/Supabase's default ~1000-row response cap: returns at most
+  // `cap` rows unless the query calls `.range()`, in which case it honors the exact
+  // requested slice - the same shape of mock used to validate the other paginated
+  // history helpers' underlying fetchAllPages behavior. Without paging via
+  // fetchAllPages, a matching row that lands past the cap gets silently dropped,
+  // which is exactly the PostgREST behavior GH review comment #1 on PR #121 flags.
+  function makeCappedTableClient(tables: Record<string, any[]>, cap = 1000) {
+    const from = jest.fn((table: string) => {
+      const rows = [...(tables[table] ?? [])]
+      const filters: Array<{ kind: 'in' | 'gte' | 'lte'; column: string; value: any }> = []
+      let rangeBounds: { from: number; to: number } | null = null
+
+      const builder: any = {
+        select: jest.fn(() => builder),
+        in: jest.fn((column: string, value: any[]) => {
+          filters.push({ kind: 'in', column, value })
+          return builder
+        }),
+        gte: jest.fn((column: string, value: any) => {
+          filters.push({ kind: 'gte', column, value })
+          return builder
+        }),
+        lte: jest.fn((column: string, value: any) => {
+          filters.push({ kind: 'lte', column, value })
+          return builder
+        }),
+        order: jest.fn(() => builder),
+        range: jest.fn((from: number, to: number) => {
+          rangeBounds = { from, to }
+          return builder
+        }),
+        then: (resolve: (value: QueryResult<any[]>) => void, reject: (reason: unknown) => void) => {
+          let result = rows
+          for (const filter of filters) {
+            if (filter.kind === 'in') result = result.filter((row) => filter.value.includes(row[filter.column]))
+            if (filter.kind === 'gte') result = result.filter((row) => row[filter.column] >= filter.value)
+            if (filter.kind === 'lte') result = result.filter((row) => row[filter.column] <= filter.value)
+          }
+          result = rangeBounds ? result.slice(rangeBounds.from, rangeBounds.to + 1) : result.slice(0, cap)
+          return Promise.resolve({ data: result, error: null }).then(resolve, reject)
+        },
+      }
+
+      return builder
+    })
+
+    return { from }
+  }
+
+  test('pages through results so a matching row past PostgREST default 1000-row cap is not silently dropped', async () => {
+    const filler = Array.from({ length: 1000 }, () => ({ participant_id: 'P1', date: '2026-08-17' })) // Mon
+    const supabase = makeCappedTableClient({
+      daily_wellness: [
+        ...filler,
+        { participant_id: 'P2', date: '2026-08-19' }, // Wed — the 1001st matching row, past the default cap
+      ],
+    })
+
+    const result = await getWeeklyResponseRate('2026-08-17', ['P1', 'P2'], supabase as never)
+
+    const p2 = result.find((row) => row.participant_id === 'P2')
+    expect(p2?.days).toEqual([false, false, true, false, false, false, false])
+    expect(p2?.week_pct).toBe(14)
   })
 })
 

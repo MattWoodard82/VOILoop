@@ -1,6 +1,6 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { WellnessDirectorClient } from '../WellnessDirectorClient'
+import { WellnessDirectorClient, paginateRows, getNextComboboxActiveIndex } from '../WellnessDirectorClient'
 import WellnessDirectorPage from '../page'
 import { requireAuth } from '@/lib/supabase/server'
 import { getTeamDashboard } from '@/lib/supabase/queries'
@@ -242,6 +242,19 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('ER')
   })
 
+  test('wires the participant combobox with ARIA relationship/expanded state and stable option ids for keyboard operability', () => {
+    const bea = { ...participant, id: 'P2', first_name: 'Bea', last_name: 'Bell', department: 'ER' }
+    const markup = renderClientMarkup([participant, bea], { personFilter: 'All' })
+    expect(markup).toMatch(/<input[^>]*role="combobox"[^>]*>/)
+    expect(markup).toMatch(/<input[^>]*aria-expanded="false"[^>]*>/)
+    expect(markup).toMatch(/<input[^>]*aria-controls="wd-participant-listbox"[^>]*>/)
+    expect(markup).toMatch(/<input[^>]*aria-autocomplete="list"[^>]*>/)
+    expect(markup).toContain('id="wd-participant-listbox"')
+    // Every option must have a stable, unique id so aria-activedescendant can point at it.
+    expect(markup).toMatch(/<div role="option" id="combo-option-0"/)
+    expect(markup).toMatch(/<div role="option" id="combo-option-1"/)
+  })
+
   test('renders a Recent nudges & responses card next to the send-a-nudge card with a Full history link', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('Recent nudges &amp; responses')
@@ -260,16 +273,26 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Weekly response rate')
     expect(markup).toContain('Mon')
     expect(markup).toContain('Sun')
-    expect(markup).toContain('Showing 1 of 1')
+    expect(markup).toContain('Showing 1-1 of 1')
     expect(markup).toContain('Export full list (1)')
   })
 
-  test('shows a "view all" link in the weekly response rate table when there are more than 8 participants', () => {
+  test('shows Previous/Next pagination controls in the weekly response rate table when there are more than 8 participants, with Previous disabled on page 1', () => {
     const many = Array.from({ length: 10 }, (_, i) => ({ ...participant, id: `P${i}`, first_name: `Person${i}` }))
     const markup = renderClientMarkup(many, { personFilter: 'All' })
-    expect(markup).toContain('Showing 8 of 10')
-    expect(markup).toContain('view all 10')
+    expect(markup).toContain('Showing 1-8 of 10')
+    expect(markup).toContain('Page 1 of 2')
+    expect(markup).not.toContain('view all 10')
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>\s*Previous\s*<\/button>/)
+    expect(markup).toMatch(/<button(?![^>]*disabled)[^>]*>\s*Next\s*<\/button>/)
     expect(markup).toContain('Export full list (10)')
+  })
+
+  test('does not show pagination controls in the weekly response rate table when 8 or fewer participants', () => {
+    const eight = Array.from({ length: 8 }, (_, i) => ({ ...participant, id: `P${i}`, first_name: `Person${i}` }))
+    const markup = renderClientMarkup(eight, { personFilter: 'All' })
+    expect(markup).toContain('Showing 1-8 of 8')
+    expect(markup).not.toContain('Page 1 of')
   })
 
   test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
@@ -315,5 +338,71 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Logged triggers: Recovery Score')
     expect(markup).toContain('Logged interventions')
     expect(markup).not.toContain('Suggested interventions by department')
+  })
+})
+
+describe('paginateRows', () => {
+  test('returns the first page and correct hasPrev/hasNext when there are multiple pages', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => i)
+    const result = paginateRows(rows, 0, 8)
+    expect(result).toEqual({ rows: [0, 1, 2, 3, 4, 5, 6, 7], page: 0, totalPages: 2, hasPrev: false, hasNext: true })
+  })
+
+  test('returns the last (partial) page and correct hasPrev/hasNext', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => i)
+    const result = paginateRows(rows, 1, 8)
+    expect(result).toEqual({ rows: [8, 9], page: 1, totalPages: 2, hasPrev: true, hasNext: false })
+  })
+
+  test('reports a single page (no pagination needed) when rows fit within one page', () => {
+    const rows = Array.from({ length: 8 }, (_, i) => i)
+    const result = paginateRows(rows, 0, 8)
+    expect(result).toEqual({ rows, page: 0, totalPages: 1, hasPrev: false, hasNext: false })
+  })
+
+  test('clamps an out-of-range page back into bounds', () => {
+    const rows = Array.from({ length: 10 }, (_, i) => i)
+    expect(paginateRows(rows, 5, 8)).toEqual({ rows: [8, 9], page: 1, totalPages: 2, hasPrev: true, hasNext: false })
+    expect(paginateRows(rows, -1, 8)).toEqual({ rows: [0, 1, 2, 3, 4, 5, 6, 7], page: 0, totalPages: 2, hasPrev: false, hasNext: true })
+  })
+
+  test('handles an empty row set as a single empty page', () => {
+    expect(paginateRows([], 0, 8)).toEqual({ rows: [], page: 0, totalPages: 1, hasPrev: false, hasNext: false })
+  })
+})
+
+describe('getNextComboboxActiveIndex', () => {
+  test('ArrowDown moves to the first option when nothing is active', () => {
+    expect(getNextComboboxActiveIndex(-1, 'ArrowDown', 3)).toBe(0)
+  })
+
+  test('ArrowDown advances to the next option', () => {
+    expect(getNextComboboxActiveIndex(0, 'ArrowDown', 3)).toBe(1)
+  })
+
+  test('ArrowDown wraps from the last option back to the first', () => {
+    expect(getNextComboboxActiveIndex(2, 'ArrowDown', 3)).toBe(0)
+  })
+
+  test('ArrowUp moves to the last option when nothing is active', () => {
+    expect(getNextComboboxActiveIndex(-1, 'ArrowUp', 3)).toBe(2)
+  })
+
+  test('ArrowUp moves to the previous option', () => {
+    expect(getNextComboboxActiveIndex(2, 'ArrowUp', 3)).toBe(1)
+  })
+
+  test('ArrowUp wraps from the first option back to the last', () => {
+    expect(getNextComboboxActiveIndex(0, 'ArrowUp', 3)).toBe(2)
+  })
+
+  test('other keys leave the active index unchanged', () => {
+    expect(getNextComboboxActiveIndex(1, 'a', 3)).toBe(1)
+    expect(getNextComboboxActiveIndex(-1, 'Enter', 3)).toBe(-1)
+  })
+
+  test('always returns -1 when there are no options', () => {
+    expect(getNextComboboxActiveIndex(0, 'ArrowDown', 0)).toBe(-1)
+    expect(getNextComboboxActiveIndex(-1, 'ArrowUp', 0)).toBe(-1)
   })
 })

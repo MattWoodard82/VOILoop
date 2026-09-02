@@ -1295,23 +1295,52 @@ export interface NudgeHistoryEntry {
   responded_at: string | null
 }
 
-// Fetches the individually-targeted nudge history for one participant (i.e. nudges
-// sent via target_type='participant', which is what the WD dashboard's "Send a
-// nudge to {name}" action creates), paired with whether/when the participant
-// acknowledged each one via nudge_acknowledgements.
+// A nudge target row is visible to a participant if it was sent directly to them
+// (target_type='participant'), to everyone (target_type='all'), or to their cohort
+// via a matching subgroup label (target_type='subgroup') - the same three targeting
+// rules used by computeNudgeResponseRate above and by isParticipantTarget in
+// src/app/api/participant/events/route.ts, kept in sync here so "no history" doesn't
+// wrongly hide cohort-wide nudges the participant actually received/acknowledged.
+function isNudgeTargetVisibleToParticipant(
+  target: { target_type: string; target_label: string | null; participant_id: string | null },
+  participantId: string,
+  cohort: string | null,
+): boolean {
+  if (target.target_type === 'all') return true
+  if (target.target_type === 'participant') return target.participant_id === participantId
+  if (target.target_type === 'subgroup') return !!cohort && target.target_label === cohort
+  return false
+}
+
+// Fetches the participant-visible nudge history for one participant - nudges sent
+// directly to them (target_type='participant', which is what the WD dashboard's
+// "Send a nudge to {name}" action creates), to the whole cohort (target_type='all'),
+// or to their matching subgroup (target_type='subgroup') - paired with whether/when
+// the participant acknowledged each one via nudge_acknowledgements.
 export async function getNudgeHistoryForParticipant(
   participantId: string,
   limit = 10,
   supabase = getQueryClient(),
 ): Promise<NudgeHistoryEntry[]> {
+  const { data: participantRow, error: participantError } = await supabase
+    .from('participants')
+    .select('cohort')
+    .eq('id', participantId)
+    .maybeSingle()
+  if (participantError) throw participantError
+  const cohort = (participantRow?.cohort as string | null | undefined) ?? null
+
   const { data: targets, error: targetsError } = await supabase
     .from('nudge_targets')
-    .select('nudge_id')
-    .eq('participant_id', participantId)
-    .eq('target_type', 'participant')
+    .select('nudge_id, target_type, target_label, participant_id')
+    .in('target_type', ['all', 'participant', 'subgroup'])
   if (targetsError) throw targetsError
 
-  const nudgeIds = Array.from(new Set((targets ?? []).map((row) => row.nudge_id as string)))
+  const nudgeIds = Array.from(new Set(
+    (targets ?? [])
+      .filter((target) => isNudgeTargetVisibleToParticipant(target, participantId, cohort))
+      .map((row) => row.nudge_id as string),
+  ))
   if (nudgeIds.length === 0) return []
 
   const { data: nudges, error: nudgesError } = await supabase
@@ -1372,16 +1401,21 @@ export async function getWeeklyResponseRate(
   if (participantIds.length === 0) return []
   const weekEnd = shiftDateStrUTC(weekStart, 6)
 
-  const { data, error } = await supabase
-    .from('daily_wellness')
-    .select('participant_id, date')
-    .in('participant_id', participantIds)
-    .gte('date', weekStart)
-    .lte('date', weekEnd)
-  if (error) throw error
+  // Paged via fetchAllPages: a large cohort's Mon-Sun submission rows can exceed
+  // PostgREST's default ~1000-row cap, which would otherwise silently drop rows and
+  // make omitted participants/days look like missed submissions.
+  const data = await fetchAllPages<{ participant_id: string; date: string }>((from, to) =>
+    supabase
+      .from('daily_wellness')
+      .select('participant_id, date')
+      .in('participant_id', participantIds)
+      .gte('date', weekStart)
+      .lte('date', weekEnd)
+      .range(from, to)
+  )
 
   const datesByParticipant = new Map<string, Set<string>>()
-  for (const row of data ?? []) {
+  for (const row of data) {
     const set = datesByParticipant.get(row.participant_id) ?? new Set<string>()
     set.add(row.date.slice(0, 10))
     datesByParticipant.set(row.participant_id, set)

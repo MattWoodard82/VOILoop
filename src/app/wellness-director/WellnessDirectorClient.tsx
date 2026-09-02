@@ -130,10 +130,53 @@ function mostRecentCompletedMonday(referenceDate = new Date()): string {
   return thisMonday.toISOString().slice(0, 10)
 }
 
+// Pure keyboard-navigation helper for the participant search combobox (no React
+// state) so Arrow Up/Down wraparound behavior can be unit tested directly.
+// Returns the next active option index for the given key, or the unchanged index
+// for keys that don't affect option navigation (Enter/Escape/typing are handled by
+// the component itself, since they need access to the currently active option).
+export function getNextComboboxActiveIndex(activeIndex: number, key: string, optionCount: number): number {
+  if (optionCount === 0) return -1
+  if (key === 'ArrowDown') return activeIndex < 0 || activeIndex >= optionCount - 1 ? 0 : activeIndex + 1
+  if (key === 'ArrowUp') return activeIndex <= 0 ? optionCount - 1 : activeIndex - 1
+  return activeIndex
+}
+
+// Builds the DOM id for the combobox option at the given index, shared by the
+// option's rendered id and the input's aria-activedescendant.
+function comboOptionId(index: number): string {
+  return `combo-option-${index}`
+}
+
 function shiftDateStr(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00.000Z`)
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
+}
+
+// Fixed page size for the "Weekly response rate" table's Previous/Next pagination
+// (GH review comment on PR #121: an unbounded "view all" expansion doesn't scale
+// to large cohorts).
+const WEEKLY_RESPONSE_RATE_PAGE_SIZE = 8
+
+// Pure pagination helper (no React state) so the slicing/bounds-clamping logic used
+// by the weekly response rate table's Previous/Next controls can be unit tested
+// directly, and reused if another table needs the same behavior.
+export function paginateRows<T>(
+  rows: T[],
+  page: number,
+  pageSize: number,
+): { rows: T[]; page: number; totalPages: number; hasPrev: boolean; hasNext: boolean } {
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  const clampedPage = Math.min(Math.max(page, 0), totalPages - 1)
+  const start = clampedPage * pageSize
+  return {
+    rows: rows.slice(start, start + pageSize),
+    page: clampedPage,
+    totalPages,
+    hasPrev: clampedPage > 0,
+    hasNext: clampedPage < totalPages - 1,
+  }
 }
 
 function formatWindowLabel(window: ThsWindow) {
@@ -177,6 +220,10 @@ export function WellnessDirectorClient({ participants }: Props) {
   // it's only a different input UI/UX layer on top of the existing filtering.
   const [comboQuery, setComboQuery] = useState('')
   const [comboOpen, setComboOpen] = useState(false)
+  // Index of the keyboard-active option within the combined listbox (departments +
+  // "All participants" + participant matches, in the same order they render),
+  // -1 meaning no option is active. Drives aria-activedescendant.
+  const [comboActiveIndex, setComboActiveIndex] = useState(-1)
 
   // Recent nudges & responses (per-participant nudge history) state.
   const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryEntry[]>([])
@@ -187,7 +234,7 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [weeklyResponseRate, setWeeklyResponseRate] = useState<WeeklyResponseRateRow[]>([])
   const [weeklyResponseRateLoading, setWeeklyResponseRateLoading] = useState(true)
   const [weeklyResponseRateError, setWeeklyResponseRateError] = useState('')
-  const [weeklyShowAll, setWeeklyShowAll] = useState(false)
+  const [weeklyPage, setWeeklyPage] = useState(0)
 
   // Both the engagement-score weights and the Team Health Score baseline window
   // are admin-only settings, editable only from the Admin Console (whole-cohort
@@ -281,11 +328,39 @@ export function WellnessDirectorClient({ participants }: Props) {
     return pool.slice(0, 8)
   }, [scopedParticipants, comboQuery])
 
+  // Flattened, render-order list of every selectable option in the combobox
+  // listbox (department filters, "All participants", then participant matches).
+  // Keyboard (Arrow/Enter) and mouse activation share this one source of truth;
+  // each option's DOM id is its index (comboOptionId), which aria-activedescendant
+  // points at.
+  const comboOptions = useMemo(() => {
+    const options: Array<{ select: () => void }> = departments.map((d) => ({
+      select: () => { setDeptFilter(d); setPersonFilter('All') },
+    }))
+    options.push({ select: () => setPersonFilter('All') })
+    comboMatches.forEach((p) => {
+      options.push({
+        select: () => { setPersonFilter(p.id); setComboQuery(`${p.first_name} ${p.last_name}`); setComboOpen(false) },
+      })
+    })
+    return options
+  }, [departments, comboMatches])
+
   const weeklyResponseRateByParticipant = useMemo(
     () => new Map(weeklyResponseRate.map((row) => [row.participant_id, row])),
     [weeklyResponseRate],
   )
-  const weeklyRowsToShow = weeklyShowAll ? scopedParticipants : scopedParticipants.slice(0, 8)
+  const weeklyPagination = useMemo(
+    () => paginateRows(scopedParticipants, weeklyPage, WEEKLY_RESPONSE_RATE_PAGE_SIZE),
+    [scopedParticipants, weeklyPage],
+  )
+  const weeklyRowsToShow = weeklyPagination.rows
+
+  // Reset back to page 1 whenever the scoped cohort changes (e.g. department
+  // filter), so the page index can't point past the end of a newly-narrowed list.
+  useEffect(() => {
+    setWeeklyPage(0)
+  }, [deptFilter])
 
 
   // Recomputes the selected participant's Team Health Score whenever they change,
@@ -437,15 +512,36 @@ export function WellnessDirectorClient({ participants }: Props) {
         <div style={{ position: 'relative', flex: '1 1 320px', maxWidth: 420 }}>
           <input
             aria-label="Search or choose a participant"
+            role="combobox"
+            aria-expanded={comboOpen}
+            aria-controls="wd-participant-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={comboOpen && comboActiveIndex >= 0 ? comboOptionId(comboActiveIndex) : undefined}
             className="form-control-dark"
             style={{ width: '100%', boxSizing: 'border-box' }}
             placeholder="Search or choose a participant to drill in..."
             value={comboQuery}
             onFocus={() => setComboOpen(true)}
-            onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true) }}
-            onBlur={() => setTimeout(() => setComboOpen(false), 150)}
+            onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true); setComboActiveIndex(-1) }}
+            onBlur={() => setTimeout(() => { setComboOpen(false); setComboActiveIndex(-1) }, 150)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault()
+                setComboOpen(true)
+                setComboActiveIndex((current) => getNextComboboxActiveIndex(current, e.key, comboOptions.length))
+              } else if (e.key === 'Enter') {
+                if (comboOpen && comboActiveIndex >= 0 && comboOptions[comboActiveIndex]) {
+                  e.preventDefault()
+                  comboOptions[comboActiveIndex].select()
+                }
+              } else if (e.key === 'Escape') {
+                setComboOpen(false)
+                setComboActiveIndex(-1)
+              }
+            }}
           />
           <div
+            id="wd-participant-listbox"
             role="listbox"
             aria-hidden={!comboOpen}
             style={{
@@ -464,13 +560,14 @@ export function WellnessDirectorClient({ participants }: Props) {
             }}
           >
             <div style={{ padding: '6px 10px', fontSize: 11, color: '#A5ACAF' }}>Filter by department</div>
-            {departments.map((d) => (
+            {departments.map((d, index) => (
               <div
                 key={d}
                 role="option"
+                id={comboOptionId(index)}
                 aria-selected={deptFilter === d}
-                onMouseDown={() => { setDeptFilter(d); setPersonFilter('All') }}
-                style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: deptFilter === d ? '#fff' : '#A5ACAF' }}
+                onMouseDown={() => comboOptions[index].select()}
+                style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: deptFilter === d ? '#fff' : '#A5ACAF', background: comboActiveIndex === index ? '#0a3560' : 'transparent' }}
               >
                 {d}
               </div>
@@ -478,23 +575,28 @@ export function WellnessDirectorClient({ participants }: Props) {
             <div style={{ padding: '6px 10px', fontSize: 11, color: '#A5ACAF', borderTop: '1px solid #0a3560' }}>Participants</div>
             <div
               role="option"
+              id={comboOptionId(departments.length)}
               aria-selected={personFilter === 'All'}
-              onMouseDown={() => setPersonFilter('All')}
-              style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === 'All' ? '#fff' : '#A5ACAF' }}
+              onMouseDown={() => comboOptions[departments.length].select()}
+              style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === 'All' ? '#fff' : '#A5ACAF', background: comboActiveIndex === departments.length ? '#0a3560' : 'transparent' }}
             >
               All participants
             </div>
-            {comboMatches.map((p) => (
-              <div
-                key={p.id}
-                role="option"
-                aria-selected={personFilter === p.id}
-                onMouseDown={() => { setPersonFilter(p.id); setComboQuery(`${p.first_name} ${p.last_name}`); setComboOpen(false) }}
-                style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === p.id ? '#fff' : '#A5ACAF' }}
-              >
-                {p.first_name} {p.last_name} <span style={{ color: '#6b7580' }}>· {p.department}</span>
-              </div>
-            ))}
+            {comboMatches.map((p, matchIndex) => {
+              const optionIndex = departments.length + 1 + matchIndex
+              return (
+                <div
+                  key={p.id}
+                  role="option"
+                  id={comboOptionId(optionIndex)}
+                  aria-selected={personFilter === p.id}
+                  onMouseDown={() => comboOptions[optionIndex].select()}
+                  style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === p.id ? '#fff' : '#A5ACAF', background: comboActiveIndex === optionIndex ? '#0a3560' : 'transparent' }}
+                >
+                  {p.first_name} {p.last_name} <span style={{ color: '#6b7580' }}>· {p.department}</span>
+                </div>
+              )
+            })}
             {comboMatches.length === 0 && (
               <div style={{ padding: '6px 10px', fontSize: 12, color: '#6b7580' }}>No matching participants.</div>
             )}
@@ -812,17 +914,28 @@ export function WellnessDirectorClient({ participants }: Props) {
                 </tbody>
               </table>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ fontSize: 11, color: '#A5ACAF' }}>
-                  Showing {weeklyRowsToShow.length} of {scopedParticipants.length}
-                  {!weeklyShowAll && scopedParticipants.length > weeklyRowsToShow.length && (
+                <div style={{ fontSize: 11, color: '#A5ACAF', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span>
+                    Showing {scopedParticipants.length === 0 ? 0 : weeklyPagination.page * WEEKLY_RESPONSE_RATE_PAGE_SIZE + 1}-{weeklyPagination.page * WEEKLY_RESPONSE_RATE_PAGE_SIZE + weeklyRowsToShow.length} of {scopedParticipants.length}
+                  </span>
+                  {weeklyPagination.totalPages > 1 && (
                     <>
-                      {' — '}
                       <button
                         type="button"
-                        onClick={() => setWeeklyShowAll(true)}
-                        style={{ background: 'none', border: 'none', color: '#69BE28', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                        onClick={() => setWeeklyPage((page) => page - 1)}
+                        disabled={!weeklyPagination.hasPrev}
+                        style={{ background: 'none', border: '1px solid #0a3560', borderRadius: 4, color: weeklyPagination.hasPrev ? '#69BE28' : '#6b7580', cursor: weeklyPagination.hasPrev ? 'pointer' : 'default', padding: '2px 8px', font: 'inherit' }}
                       >
-                        view all {scopedParticipants.length}
+                        Previous
+                      </button>
+                      <span>Page {weeklyPagination.page + 1} of {weeklyPagination.totalPages}</span>
+                      <button
+                        type="button"
+                        onClick={() => setWeeklyPage((page) => page + 1)}
+                        disabled={!weeklyPagination.hasNext}
+                        style={{ background: 'none', border: '1px solid #0a3560', borderRadius: 4, color: weeklyPagination.hasNext ? '#69BE28' : '#6b7580', cursor: weeklyPagination.hasNext ? 'pointer' : 'default', padding: '2px 8px', font: 'inherit' }}
+                      >
+                        Next
                       </button>
                     </>
                   )}
