@@ -384,11 +384,14 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
                     {participants.length === 0 ? (
                       <option value="">No participants available</option>
                     ) : (
-                      participants.map((participant) => (
-                        <option key={participant.id} value={participant.id}>
-                          {[participant.label, participant.meta, participant.id].filter(Boolean).join(' · ')}
-                        </option>
-                      ))
+                      participants.map((participant) => {
+                        const fullText = [participant.label, participant.meta, participant.id].filter(Boolean).join(' · ')
+                        return (
+                          <option key={participant.id} value={participant.id} title={fullText}>
+                            {fullText}
+                          </option>
+                        )
+                      })
                     )}
                   </select>
                 ) : (
