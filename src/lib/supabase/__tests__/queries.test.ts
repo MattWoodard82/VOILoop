@@ -1094,6 +1094,57 @@ describe('getTeamDashboard', () => {
     expect(dashboard.stats.total_participants).toBe(2)
   })
 
+  test('includeTestAccounts: true opts out of exclusion so pilot/test accounts are kept', async () => {
+    const participants = [
+      {
+        id: 'P1', auth_user_id: 'auth-1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+      {
+        id: 'P2', auth_user_id: 'auth-2', first_name: 'Pilot', last_name: 'Tester', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Tester', device_id: null, consent: true,
+        enrolled_date: null, status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      ...makeTableClient({ risk_flags: [] }),
+      auth: {
+        admin: {
+          getUserById: jest.fn(async (userId: string) => {
+            const emailByUserId: Record<string, string> = {
+              'auth-1': 'alice.able@user.com',
+              'auth-2': 'test3@user.com',
+            }
+            return { data: { user: { email: emailByUserId[userId] } }, error: null }
+          }),
+        },
+      },
+    } as never)
+
+    const dashboard = await getTeamDashboard({ includeTestAccounts: true })
+
+    // Since includeTestAccounts is true, excludeTestAccountParticipants should never
+    // even be consulted - the pilot/test account (P2) stays in the result.
+    expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
+    expect(dashboard.stats.total_participants).toBe(2)
+  })
+
   test('fails open (keeps all participants) when service-role credentials are unavailable', async () => {
     const participants = [
       {

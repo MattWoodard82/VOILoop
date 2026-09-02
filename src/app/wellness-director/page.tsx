@@ -1,19 +1,31 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getTeamDashboard } from '@/lib/supabase/queries'
-import { KpiCard, Alert } from '@/components/ui'
+import { KpiCard, Badge } from '@/components/ui'
 import { AlertTriangle } from 'lucide-react'
 import { WellnessDirectorClient } from './WellnessDirectorClient'
+import { TestAccountsToggle } from './TestAccountsToggle'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
-export default async function WellnessDirectorPage() {
+// Anchor id for the participant picker section below, so the flagged-participants
+// banner's "Review all" control can scroll straight to it.
+const PARTICIPANTS_SECTION_ID = 'wd-participants'
+
+export default async function WellnessDirectorPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined }
+} = {}) {
   const access = await requireAuth()
   if ('redirect' in access && access.redirect) redirect(access.redirect)
   if (!access.role || !['admin', 'wellness_director'].includes(access.role)) redirect('/my')
 
-  const { participants, stats, interventions } = await getTeamDashboard()
+  // The header toggle defaults to "excluded" (checked) — includeTestAccounts is
+  // only true once the WD explicitly opts out via ?includeTestAccounts=1.
+  const includeTestAccounts = searchParams?.includeTestAccounts === '1'
+  const { participants, stats, interventions } = await getTeamDashboard({ includeTestAccounts })
   const highRisk = participants.filter(e => e.risk_level === 'High')
 
   // Build a live department summary from logged intervention records. Computed
@@ -46,12 +58,35 @@ export default async function WellnessDirectorPage() {
   })
 
   return (
-    <DashboardShell title="Wellness Director Dashboard">
+    <DashboardShell title="Wellness Director Dashboard" actions={<TestAccountsToggle />}>
       {highRisk.length > 0 && (
-        <Alert variant="warn" icon={<AlertTriangle size={14} />}>
-          <strong style={{ color: '#fff' }}>{highRisk.length} participant{highRisk.length > 1 ? 's' : ''} flagged: </strong>
-          {highRisk.map(e => `${e.first_name} ${e.last_name} (Recovery ${e.latest_wellness?.recovery_score ?? '–'})`).join(' · ')} — require immediate Wellness Director review.
-        </Alert>
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={14} color="#ff6b6b" />
+              <strong style={{ color: '#fff', fontSize: 12 }}>
+                {highRisk.length} participant{highRisk.length > 1 ? 's' : ''} flagged for immediate Wellness Director review
+              </strong>
+            </div>
+            <a href={`#${PARTICIPANTS_SECTION_ID}`} className="btn-primary" style={{ fontSize: 11, padding: '4px 10px', whiteSpace: 'nowrap' }}>
+              Review all
+            </a>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {highRisk.map(e => (
+              <div
+                key={e.id}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  background: '#001a33', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 8, padding: '8px 12px',
+                }}
+              >
+                <span style={{ fontSize: 12, color: '#fff', fontWeight: 600 }}>{e.first_name} {e.last_name}</span>
+                <Badge variant="red">Recovery {e.latest_wellness?.recovery_score ?? '–'}</Badge>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
       <div className="sec-label">Workforce snapshot — {participants.length} participants</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
@@ -61,7 +96,9 @@ export default async function WellnessDirectorPage() {
         <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${participants.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
       </div>
 
-      <WellnessDirectorClient participants={participants} />
+      <div id={PARTICIPANTS_SECTION_ID}>
+        <WellnessDirectorClient participants={participants} />
+      </div>
 
       {deptSuggestions.length > 0 && (
         <div style={{ marginTop: 24 }}>
