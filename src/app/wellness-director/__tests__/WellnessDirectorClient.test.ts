@@ -188,6 +188,62 @@ describe('WellnessDirectorClient', () => {
     expect(outOfScopeMarkup).not.toContain('Send a nudge')
   })
 
+  test('renders a participant header with name, risk badge, department, and engagement score delta vs. cohort average', () => {
+    const bea = { ...participant, id: 'P2', first_name: 'Bea', last_name: 'Bell', department: 'ER', engagement_score: 50 }
+    const markup = renderClientMarkup([participant, bea], { personFilter: 'P1' })
+    // cohort avg = round((68 + 50) / 2 * 10) / 10 = 59; delta = round(68 - 59) = +9
+    expect(markup).toContain('Alex Able')
+    expect(markup).toContain('Ops')
+    expect(markup).toContain('ENGAGEMENT SCORE')
+    expect(markup).toContain('+9 vs. cohort avg (59)')
+  })
+
+  test('does not render the participant header when no participant is selected', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'All' })
+    expect(markup).not.toContain('ENGAGEMENT SCORE')
+  })
+
+  test('replaces the department/person selects with a single searchable participant combobox', () => {
+    const bea = { ...participant, id: 'P2', first_name: 'Bea', last_name: 'Bell', department: 'ER' }
+    const markup = renderClientMarkup([participant, bea], { personFilter: 'All' })
+    expect(markup).toContain('Search or choose a participant to drill in')
+    expect(markup).not.toContain('class="form-select"')
+    expect(markup).toContain('Alex Able')
+    expect(markup).toContain('Bea Bell')
+    expect(markup).toContain('Ops')
+    expect(markup).toContain('ER')
+  })
+
+  test('renders a Recent nudges & responses card next to the send-a-nudge card with a Full history link', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'P1' })
+    expect(markup).toContain('Recent nudges &amp; responses')
+    expect(markup).toContain('No nudges sent to this participant yet.')
+    expect(markup).toContain('Full history')
+    expect(markup).toContain('href="/wellness-director/events"')
+  })
+
+  test('does not render the nudge history card when no participant is selected', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'All' })
+    expect(markup).not.toContain('Recent nudges &amp; responses')
+  })
+
+  test('renders a Weekly response rate card with a Mon-Sun grid, pagination text, and export button', () => {
+    const markup = renderClientMarkup([participant], { personFilter: 'All' })
+    expect(markup).toContain('Weekly response rate')
+    expect(markup).toContain('Mon')
+    expect(markup).toContain('Sun')
+    expect(markup).toContain('Showing 1 of 1')
+    expect(markup).toContain('Export full list (1)')
+  })
+
+  test('shows a "view all" link in the weekly response rate table when there are more than 8 participants', () => {
+    const many = Array.from({ length: 10 }, (_, i) => ({ ...participant, id: `P${i}`, first_name: `Person${i}` }))
+    const markup = renderClientMarkup(many, { personFilter: 'All' })
+    expect(markup).toContain('Showing 8 of 10')
+    expect(markup).toContain('view all 10')
+    expect(markup).toContain('Export full list (10)')
+  })
+
   test('wellness director page frames department cards as a live summary and marks computed recommendations coming soon', async () => {
     ;(requireAuth as jest.MockedFunction<typeof requireAuth>).mockResolvedValue({
       session: { user: { id: 'wd-1' } },

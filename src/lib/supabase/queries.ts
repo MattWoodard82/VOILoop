@@ -1247,3 +1247,114 @@ export async function saveLeaderboardSnapshot(
   if (error) throw error
   return data
 }
+
+// --- Recent nudges & responses (WD dashboard "Recent nudges & responses" card) ---
+
+export interface NudgeHistoryEntry {
+  nudge_id: string
+  week_of: string
+  message: string
+  created_at: string
+  responded: boolean
+  responded_at: string | null
+}
+
+// Fetches the individually-targeted nudge history for one participant (i.e. nudges
+// sent via target_type='participant', which is what the WD dashboard's "Send a
+// nudge to {name}" action creates), paired with whether/when the participant
+// acknowledged each one via nudge_acknowledgements.
+export async function getNudgeHistoryForParticipant(
+  participantId: string,
+  limit = 10,
+  supabase = getQueryClient(),
+): Promise<NudgeHistoryEntry[]> {
+  const { data: targets, error: targetsError } = await supabase
+    .from('nudge_targets')
+    .select('nudge_id')
+    .eq('participant_id', participantId)
+    .eq('target_type', 'participant')
+  if (targetsError) throw targetsError
+
+  const nudgeIds = Array.from(new Set((targets ?? []).map((row) => row.nudge_id as string)))
+  if (nudgeIds.length === 0) return []
+
+  const { data: nudges, error: nudgesError } = await supabase
+    .from('weekly_nudges')
+    .select('id, week_of, message, created_at')
+    .in('id', nudgeIds)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (nudgesError) throw nudgesError
+
+  const { data: acks, error: acksError } = await supabase
+    .from('nudge_acknowledgements')
+    .select('nudge_id, acknowledged_at')
+    .eq('participant_id', participantId)
+    .in('nudge_id', nudgeIds)
+  if (acksError) throw acksError
+
+  const ackByNudgeId = new Map((acks ?? []).map((row) => [row.nudge_id as string, row.acknowledged_at as string]))
+
+  return (nudges ?? []).map((nudge) => ({
+    nudge_id: nudge.id,
+    week_of: nudge.week_of,
+    message: nudge.message,
+    created_at: nudge.created_at,
+    responded: ackByNudgeId.has(nudge.id),
+    responded_at: ackByNudgeId.get(nudge.id) ?? null,
+  }))
+}
+
+// --- Weekly response rate (WD dashboard "Weekly response rate" card) -------------
+
+export interface WeeklyResponseRateRow {
+  participant_id: string
+  // Mon..Sun submission presence for the requested week.
+  days: boolean[]
+  week_pct: number
+}
+
+// Date-only, UTC-anchored day shift, mirroring the shiftDateStr convention used in
+// WellnessDirectorClient (and getTeamHealthScore's Mon-Sun windowing, GH #119/PR
+// #117) so all Mon-Sun windowing in this codebase stays consistent.
+function shiftDateStrUTC(date: string, days: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// Returns, for each requested participant, which of the 7 days (Mon-Sun) of the
+// given week had at least one daily_wellness row (i.e. a submitted CSV/WHOOP
+// entry), plus the resulting week completion percentage. `weekStart` must be the
+// Monday of the target week (see mostRecentCompletedMonday in
+// WellnessDirectorClient for the "most recently completed week" convention).
+export async function getWeeklyResponseRate(
+  weekStart: string,
+  participantIds: string[],
+  supabase = getQueryClient(),
+): Promise<WeeklyResponseRateRow[]> {
+  if (participantIds.length === 0) return []
+  const weekEnd = shiftDateStrUTC(weekStart, 6)
+
+  const { data, error } = await supabase
+    .from('daily_wellness')
+    .select('participant_id, date')
+    .in('participant_id', participantIds)
+    .gte('date', weekStart)
+    .lte('date', weekEnd)
+  if (error) throw error
+
+  const datesByParticipant = new Map<string, Set<string>>()
+  for (const row of data ?? []) {
+    const set = datesByParticipant.get(row.participant_id) ?? new Set<string>()
+    set.add(row.date.slice(0, 10))
+    datesByParticipant.set(row.participant_id, set)
+  }
+
+  return participantIds.map((participantId) => {
+    const dates = datesByParticipant.get(participantId) ?? new Set<string>()
+    const days = Array.from({ length: 7 }, (_, i) => dates.has(shiftDateStrUTC(weekStart, i)))
+    const week_pct = Math.round((days.filter(Boolean).length / 7) * 100)
+    return { participant_id: participantId, days, week_pct }
+  })
+}

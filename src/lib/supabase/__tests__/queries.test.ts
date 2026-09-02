@@ -8,6 +8,8 @@ import {
   getTeamHealthScoreConfig,
   getWorkoutHistoryForParticipants,
   getTeamHealthScore,
+  getNudgeHistoryForParticipant,
+  getWeeklyResponseRate,
 } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
@@ -53,7 +55,7 @@ function makeTableClient(tables: Record<string, any[]>) {
     const filters: Array<
       | { kind: 'eq' | 'in'; column: string; value: any }
       | { kind: 'or-not-null'; columns: string[] }
-      | { kind: 'gte'; column: string; value: any }
+      | { kind: 'gte' | 'lte'; column: string; value: any }
     > = []
     const orders: Array<{ column: string; ascending: boolean }> = []
     let limitCount: number | null = null
@@ -75,6 +77,10 @@ function makeTableClient(tables: Record<string, any[]>) {
       }),
       gte: jest.fn((column: string, value: any) => {
         filters.push({ kind: 'gte', column, value })
+        return builder
+      }),
+      lte: jest.fn((column: string, value: any) => {
+        filters.push({ kind: 'lte', column, value })
         return builder
       }),
       or: jest.fn((expression: string) => {
@@ -126,7 +132,7 @@ function runQuery(
   filters: Array<
     | { kind: 'eq' | 'in'; column: string; value: any }
     | { kind: 'or-not-null'; columns: string[] }
-    | { kind: 'gte'; column: string; value: any }
+    | { kind: 'gte' | 'lte'; column: string; value: any }
   >,
   orders: Array<{ column: string; ascending: boolean }>,
   limitCount: number | null
@@ -144,6 +150,10 @@ function runQuery(
     }
     if (filter.kind === 'gte') {
       result = result.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined && row[filter.column] >= filter.value)
+      continue
+    }
+    if (filter.kind === 'lte') {
+      result = result.filter((row) => row[filter.column] !== null && row[filter.column] !== undefined && row[filter.column] <= filter.value)
       continue
     }
     result = result.filter((row) => filter.value.includes(row[filter.column]))
@@ -1082,6 +1092,70 @@ describe('getCurrentWeekPulse', () => {
 
     expect(result).toHaveLength(3)
     expect(result.filter((row) => row.participant_id === 'P1')).toHaveLength(3)
+  })
+})
+
+describe('getNudgeHistoryForParticipant', () => {
+  test('returns an empty array when the participant has no individually-targeted nudges', async () => {
+    const supabase = makeTableClient({
+      nudge_targets: [{ nudge_id: 'n1', participant_id: 'P2', target_type: 'participant' }],
+      weekly_nudges: [{ id: 'n1', week_of: '2026-08-10', message: 'hi', created_at: '2026-08-10T00:00:00Z' }],
+      nudge_acknowledgements: [],
+    })
+    const result = await getNudgeHistoryForParticipant('P1', 10, supabase as never)
+    expect(result).toEqual([])
+  })
+
+  test('pairs each targeted nudge with its response status, most recent first', async () => {
+    const supabase = makeTableClient({
+      nudge_targets: [
+        { nudge_id: 'n1', participant_id: 'P1', target_type: 'participant' },
+        { nudge_id: 'n2', participant_id: 'P1', target_type: 'participant' },
+        { nudge_id: 'n3', participant_id: 'P1', target_type: 'subgroup' }, // wrong target_type, excluded
+        { nudge_id: 'n4', participant_id: 'P2', target_type: 'participant' }, // different participant, excluded
+      ],
+      weekly_nudges: [
+        { id: 'n1', week_of: '2026-08-10', message: 'Check in please', created_at: '2026-08-10T00:00:00Z' },
+        { id: 'n2', week_of: '2026-08-17', message: 'How are you feeling?', created_at: '2026-08-17T00:00:00Z' },
+      ],
+      nudge_acknowledgements: [
+        { nudge_id: 'n1', participant_id: 'P1', acknowledged_at: '2026-08-11T09:00:00Z' },
+      ],
+    })
+
+    const result = await getNudgeHistoryForParticipant('P1', 10, supabase as never)
+
+    expect(result).toEqual([
+      { nudge_id: 'n2', week_of: '2026-08-17', message: 'How are you feeling?', created_at: '2026-08-17T00:00:00Z', responded: false, responded_at: null },
+      { nudge_id: 'n1', week_of: '2026-08-10', message: 'Check in please', created_at: '2026-08-10T00:00:00Z', responded: true, responded_at: '2026-08-11T09:00:00Z' },
+    ])
+  })
+})
+
+describe('getWeeklyResponseRate', () => {
+  test('returns an empty array for an empty participant list without querying', async () => {
+    const supabase = makeTableClient({ daily_wellness: [{ participant_id: 'P1', date: '2026-08-17' }] })
+    const result = await getWeeklyResponseRate('2026-08-17', [], supabase as never)
+    expect(result).toEqual([])
+  })
+
+  test('marks Mon-Sun days with a submitted daily_wellness row and computes the week percentage', async () => {
+    const supabase = makeTableClient({
+      daily_wellness: [
+        { participant_id: 'P1', date: '2026-08-17' }, // Mon
+        { participant_id: 'P1', date: '2026-08-19' }, // Wed
+        { participant_id: 'P1', date: '2026-08-23' }, // Sun
+        { participant_id: 'P1', date: '2026-08-24' }, // next week Monday, excluded
+        { participant_id: 'P2', date: '2026-08-16' }, // prior week Sunday, excluded
+      ],
+    })
+
+    const result = await getWeeklyResponseRate('2026-08-17', ['P1', 'P2'], supabase as never)
+
+    expect(result).toEqual([
+      { participant_id: 'P1', days: [true, false, true, false, false, false, true], week_pct: 43 },
+      { participant_id: 'P2', days: [false, false, false, false, false, false, false], week_pct: 0 },
+    ])
   })
 })
 
