@@ -6,6 +6,7 @@ import { recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 import type { ParticipantScoreResult, TeamHealthComponentKey, Window as ThsWindow } from '@/lib/team-health-score'
 import type { TeamHealthScoreConfig } from '@/lib/team-health-score-config'
+import type { NudgeHistoryEntry, WeeklyResponseRateRow } from '@/lib/supabase/queries'
 
 interface Props {
   participants: ParticipantWithWellness[]
@@ -139,6 +140,18 @@ function formatWindowLabel(window: ThsWindow) {
   return `${window.start} – ${window.end}`
 }
 
+// Formats the participant-header engagement-score delta vs. the cohort average,
+// e.g. "+11 vs. cohort avg (27)". Omitted (empty string) when either side of the
+// comparison is null, since there's nothing meaningful to render.
+function engagementDeltaLabel(score: number | null | undefined, cohortAvg: number | null | undefined): string {
+  if (score == null || cohortAvg == null) return ''
+  const delta = Math.round(score - cohortAvg)
+  const sign = delta >= 0 ? '+' : '-'
+  return `${sign}${Math.abs(delta)} vs. cohort avg (${Math.round(cohortAvg)})`
+}
+
+const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
@@ -158,6 +171,23 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [thsError, setThsError] = useState('')
   const [baselineConfig, setBaselineConfig] = useState<TeamHealthScoreConfig | null>(null)
   const [baselineLoaded, setBaselineLoaded] = useState(false)
+
+  // Searchable participant combobox (replaces the separate department/person
+  // <select> dropdowns) - drives the same deptFilter/personFilter state above,
+  // it's only a different input UI/UX layer on top of the existing filtering.
+  const [comboQuery, setComboQuery] = useState('')
+  const [comboOpen, setComboOpen] = useState(false)
+
+  // Recent nudges & responses (per-participant nudge history) state.
+  const [nudgeHistory, setNudgeHistory] = useState<NudgeHistoryEntry[]>([])
+  const [nudgeHistoryLoading, setNudgeHistoryLoading] = useState(false)
+  const [nudgeHistoryError, setNudgeHistoryError] = useState('')
+
+  // Weekly response rate (Mon-Sun submission grid) state.
+  const [weeklyResponseRate, setWeeklyResponseRate] = useState<WeeklyResponseRateRow[]>([])
+  const [weeklyResponseRateLoading, setWeeklyResponseRateLoading] = useState(true)
+  const [weeklyResponseRateError, setWeeklyResponseRateError] = useState('')
+  const [weeklyShowAll, setWeeklyShowAll] = useState(false)
 
   // Both the engagement-score weights and the Team Health Score baseline window
   // are admin-only settings, editable only from the Admin Console (whole-cohort
@@ -241,6 +271,23 @@ export function WellnessDirectorClient({ participants }: Props) {
   )
   const selectedAverages = useMemo(() => (selected ? computeAverages([selected]) : null), [selected])
 
+  // Participant matches for the search combobox, scoped by the current department
+  // filter (mirrors scopedParticipants) and narrowed by the typed query.
+  const comboMatches = useMemo(() => {
+    const query = comboQuery.trim().toLowerCase()
+    const pool = query
+      ? scopedParticipants.filter((p) => `${p.first_name} ${p.last_name}`.toLowerCase().includes(query))
+      : scopedParticipants
+    return pool.slice(0, 8)
+  }, [scopedParticipants, comboQuery])
+
+  const weeklyResponseRateByParticipant = useMemo(
+    () => new Map(weeklyResponseRate.map((row) => [row.participant_id, row])),
+    [weeklyResponseRate],
+  )
+  const weeklyRowsToShow = weeklyShowAll ? scopedParticipants : scopedParticipants.slice(0, 8)
+
+
   // Recomputes the selected participant's Team Health Score whenever they change,
   // the WD navigates to a different reporting week, or the admin saves a new
   // baseline window - otherwise both the trend chart and 5-metric breakdown below
@@ -274,6 +321,66 @@ export function WellnessDirectorClient({ participants }: Props) {
       })
     return () => { cancelled = true }
   }, [selected, currentStart, baselineConfig])
+
+  // Loads the selected participant's history of individually-targeted nudges +
+  // response status for the "Recent nudges & responses" card, following the same
+  // fetch-on-selection-change pattern as the Team Health Score effect above.
+  useEffect(() => {
+    if (!selected) {
+      setNudgeHistory([])
+      setNudgeHistoryError('')
+      return
+    }
+    let cancelled = false
+    setNudgeHistoryLoading(true)
+    setNudgeHistoryError('')
+    fetch(`/api/admin/nudge-history?participantId=${encodeURIComponent(selected.id)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => null)
+        if (cancelled) return
+        if (!response.ok) {
+          setNudgeHistoryError(data?.error ?? 'Failed to load nudge history.')
+          setNudgeHistory([])
+          return
+        }
+        setNudgeHistory(data.history ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setNudgeHistoryError('Failed to load nudge history. Check your connection and try again.')
+      })
+      .finally(() => {
+        if (!cancelled) setNudgeHistoryLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [selected])
+
+  // Loads the whole cohort's Mon-Sun submission grid for the "Weekly response
+  // rate" card. Uses the most recently completed week (same convention as
+  // mostRecentCompletedMonday) rather than currentStart, since this card reports
+  // on submission completeness independent of the WD's THS week navigation.
+  useEffect(() => {
+    let cancelled = false
+    setWeeklyResponseRateLoading(true)
+    setWeeklyResponseRateError('')
+    fetch(`/api/admin/weekly-response-rate?weekStart=${mostRecentCompletedMonday()}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => null)
+        if (cancelled) return
+        if (!response.ok) {
+          setWeeklyResponseRateError(data?.error ?? 'Failed to load weekly response rate.')
+          setWeeklyResponseRate([])
+          return
+        }
+        setWeeklyResponseRate(data.rows ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setWeeklyResponseRateError('Failed to load weekly response rate. Check your connection and try again.')
+      })
+      .finally(() => {
+        if (!cancelled) setWeeklyResponseRateLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const persistOverride = async (participantId: string, action: 'snooze' | 'dismiss') => {
     const response = await fetch('/api/admin/wellness-director-overrides', {
@@ -327,18 +434,117 @@ export function WellnessDirectorClient({ participants }: Props) {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <select
-          value={deptFilter}
-          onChange={(e) => { setDeptFilter(e.target.value); setPersonFilter('All') }}
-          className="form-select"
-        >
-          {departments.map((d) => <option key={d}>{d}</option>)}
-        </select>
-        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="form-select">
-          <option value="All">All participants</option>
-          {participants.filter((e) => deptFilter === 'All' || e.department === deptFilter).map((e) => <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>)}
-        </select>
+        <div style={{ position: 'relative', flex: '1 1 320px', maxWidth: 420 }}>
+          <input
+            aria-label="Search or choose a participant"
+            className="form-control-dark"
+            style={{ width: '100%', boxSizing: 'border-box' }}
+            placeholder="Search or choose a participant to drill in..."
+            value={comboQuery}
+            onFocus={() => setComboOpen(true)}
+            onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true) }}
+            onBlur={() => setTimeout(() => setComboOpen(false), 150)}
+          />
+          <div
+            role="listbox"
+            aria-hidden={!comboOpen}
+            style={{
+              display: comboOpen ? 'block' : 'none',
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 10,
+              background: '#001a33',
+              border: '1px solid #0a3560',
+              borderRadius: 8,
+              marginTop: 4,
+              maxHeight: 280,
+              overflowY: 'auto',
+            }}
+          >
+            <div style={{ padding: '6px 10px', fontSize: 11, color: '#A5ACAF' }}>Filter by department</div>
+            {departments.map((d) => (
+              <div
+                key={d}
+                role="option"
+                aria-selected={deptFilter === d}
+                onMouseDown={() => { setDeptFilter(d); setPersonFilter('All') }}
+                style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: deptFilter === d ? '#fff' : '#A5ACAF' }}
+              >
+                {d}
+              </div>
+            ))}
+            <div style={{ padding: '6px 10px', fontSize: 11, color: '#A5ACAF', borderTop: '1px solid #0a3560' }}>Participants</div>
+            <div
+              role="option"
+              aria-selected={personFilter === 'All'}
+              onMouseDown={() => setPersonFilter('All')}
+              style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === 'All' ? '#fff' : '#A5ACAF' }}
+            >
+              All participants
+            </div>
+            {comboMatches.map((p) => (
+              <div
+                key={p.id}
+                role="option"
+                aria-selected={personFilter === p.id}
+                onMouseDown={() => { setPersonFilter(p.id); setComboQuery(`${p.first_name} ${p.last_name}`); setComboOpen(false) }}
+                style={{ padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: personFilter === p.id ? '#fff' : '#A5ACAF' }}
+              >
+                {p.first_name} {p.last_name} <span style={{ color: '#6b7580' }}>· {p.department}</span>
+              </div>
+            ))}
+            {comboMatches.length === 0 && (
+              <div style={{ padding: '6px 10px', fontSize: 12, color: '#6b7580' }}>No matching participants.</div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {selected && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
+            background: '#001a33',
+            border: '1px solid #0a3560',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 14,
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>{selected.first_name} {selected.last_name}</span>
+              {selected.baseline_state === 'building' ? (
+                <Badge variant="wolf">Building baseline</Badge>
+              ) : (
+                <Badge variant={selected.risk_level === 'High' ? 'red' : selected.risk_level === 'Medium' ? 'amber' : 'green'}>
+                  {selected.risk_tier_label ?? selected.risk_level}
+                </Badge>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: '#A5ACAF', marginTop: 4 }}>
+              {[selected.department, selected.title].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Badge variant="wolf">ENGAGEMENT SCORE</Badge>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#fff', marginTop: 4 }}>
+              {selected.engagement_score ?? '—'}
+              {engagementDeltaLabel(selected.engagement_score, cohortAverages.avgWeightedScore) && (
+                <span style={{ fontSize: 12, fontWeight: 500, color: '#A5ACAF', marginLeft: 8 }}>
+                  {engagementDeltaLabel(selected.engagement_score, cohortAverages.avgWeightedScore)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
         <Card title="Engagement score" badge={<Badge variant="wolf">weighted</Badge>}>
@@ -568,8 +774,70 @@ export function WellnessDirectorClient({ participants }: Props) {
         </Card>
       </div>
 
+      <div style={{ marginTop: 14 }}>
+        <Card
+          title="Weekly response rate"
+          badge={<Badge variant="wolf">{formatWindowLabel({ start: mostRecentCompletedMonday(), end: shiftDateStr(mostRecentCompletedMonday(), 6) })}</Badge>}
+        >
+          {weeklyResponseRateError ? (
+            <div style={{ color: '#ff6b6b', fontSize: 12 }}>{weeklyResponseRateError}</div>
+          ) : (
+            <>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', color: '#A5ACAF', fontWeight: 600, padding: '4px 6px' }}>Participant</th>
+                    {WEEKDAY_LABELS.map((day) => (
+                      <th key={day} style={{ color: '#A5ACAF', fontWeight: 600, padding: '4px 6px' }}>{day}</th>
+                    ))}
+                    <th style={{ color: '#A5ACAF', fontWeight: 600, padding: '4px 6px' }}>Week %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weeklyRowsToShow.map((p) => {
+                    const row = weeklyResponseRateByParticipant.get(p.id)
+                    const days = row?.days ?? Array.from<boolean | null>({ length: 7 }).fill(null)
+                    return (
+                      <tr key={p.id}>
+                        <td style={{ padding: '4px 6px', color: '#fff' }}>{p.first_name} {p.last_name}</td>
+                        {days.map((present, index) => (
+                          <td key={index} style={{ textAlign: 'center', padding: '4px 6px', color: present ? '#69BE28' : '#6b7580' }}>
+                            {present == null ? (weeklyResponseRateLoading ? '···' : '—') : present ? '✓' : '·'}
+                          </td>
+                        ))}
+                        <td style={{ textAlign: 'center', padding: '4px 6px', color: '#fff' }}>{row ? `${row.week_pct}%` : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 11, color: '#A5ACAF' }}>
+                  Showing {weeklyRowsToShow.length} of {scopedParticipants.length}
+                  {!weeklyShowAll && scopedParticipants.length > weeklyRowsToShow.length && (
+                    <>
+                      {' — '}
+                      <button
+                        type="button"
+                        onClick={() => setWeeklyShowAll(true)}
+                        style={{ background: 'none', border: 'none', color: '#69BE28', cursor: 'pointer', padding: 0, font: 'inherit' }}
+                      >
+                        view all {scopedParticipants.length}
+                      </button>
+                    </>
+                  )}
+                </div>
+                <button className="btn-primary" type="button" disabled title="Export coming soon">
+                  Export full list ({scopedParticipants.length})
+                </button>
+              </div>
+            </>
+          )}
+        </Card>
+      </div>
+
       {selected && (
-        <div style={{ marginTop: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
           <Card title={`Send a nudge to ${selected.first_name} ${selected.last_name}`}>
             <textarea
               aria-label="nudge message"
@@ -593,6 +861,30 @@ export function WellnessDirectorClient({ participants }: Props) {
               <div role="status" aria-live="polite" style={{ color: nudgeStatus === 'error' ? '#ff6b6b' : '#A5ACAF', fontSize: 11 }}>
                 {nudgeStatus === 'sent' ? 'Sent' : nudgeStatus === 'error' ? nudgeError : ''}
               </div>
+            </div>
+          </Card>
+          <Card title="Recent nudges & responses">
+            {nudgeHistoryLoading ? (
+              <TableSkeleton columns={2} rows={3} />
+            ) : nudgeHistoryError ? (
+              <div style={{ color: '#ff6b6b', fontSize: 12 }}>{nudgeHistoryError}</div>
+            ) : nudgeHistory.length === 0 ? (
+              <div>No nudges sent to this participant yet.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 8 }}>
+                {nudgeHistory.map((entry) => (
+                  <div key={entry.nudge_id} style={{ borderBottom: '1px solid #0a3560', paddingBottom: 6 }}>
+                    <div style={{ fontSize: 12, color: '#fff' }}>{entry.message}</div>
+                    <div style={{ fontSize: 11, color: '#A5ACAF', display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                      <span>Week of {entry.week_of}</span>
+                      <Badge variant={entry.responded ? 'green' : 'amber'}>{entry.responded ? 'Replied' : 'No response yet'}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: 10 }}>
+              <a href="/wellness-director/events" style={{ fontSize: 12, color: '#69BE28' }}>Full history →</a>
             </div>
           </Card>
         </div>
