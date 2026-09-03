@@ -150,10 +150,10 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Avg wear consistency')
   })
 
-  test('explains that the Avg weighted score is retained real participants only, excluding test accounts', () => {
+  test('shows Avg weighted score explanation only for cohort averages, not selected participant averages', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
-    expect(markup).toContain('retained, non-test participants')
-    expect(markup).toContain('pilot/test accounts are excluded')
+    const explanation = 'Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.'
+    expect(markup.match(new RegExp(explanation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))?.length ?? 0).toBe(1)
   })
 
   test('describes Baseline/overrides accurately: baseline is enrollment-age based, and dismiss is indefinite (not day-limited)', () => {
