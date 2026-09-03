@@ -57,7 +57,15 @@ function formatStat(value: number | null, suffix = '') {
 // Renders one averages block (either the whole cohort/department scope, or a single
 // selected participant) beneath the Engagement score chart. Avg steps is intentionally
 // omitted: WHOOP does not report step count anywhere in the CSV export or our schema.
-function AveragesBlock({ title, averages }: { title: string; averages: Averages }) {
+function AveragesBlock({
+  title,
+  averages,
+  showWeightedScoreExplanation = false,
+}: {
+  title: string
+  averages: Averages
+  showWeightedScoreExplanation?: boolean
+}) {
   return (
     <div style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{title}</div>
@@ -71,9 +79,11 @@ function AveragesBlock({ title, averages }: { title: string; averages: Averages 
           </strong>
         </div>
         <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>Avg steps: not available (no WHOOP steps data source).</div>
-        <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
-          Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.
-        </div>
+        {showWeightedScoreExplanation && (
+          <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
+            Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.
+          </div>
+        )}
       </div>
     </div>
   )
@@ -336,7 +346,7 @@ export function WellnessDirectorClient({ participants }: Props) {
           )}
           {configLoaded && (
             <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
-              <AveragesBlock title="Cohort averages" averages={cohortAverages} />
+              <AveragesBlock title="Cohort averages" averages={cohortAverages} showWeightedScoreExplanation />
               {selected && selectedAverages && (
                 <AveragesBlock title={`${selected.first_name} ${selected.last_name}`} averages={selectedAverages} />
               )}
