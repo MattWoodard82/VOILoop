@@ -72,6 +72,18 @@ function shiftIsoDate(date: string, days: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
+// The wearable challenge scenario uses a real-wall-clock date (rather than
+// the fixed 2026-06-09 seed anchor used elsewhere) so that:
+//   1. The window never lands in the past relative to the actual machine
+//      clock, which would otherwise cause the very next recompute to
+//      auto-finalize the challenge as 'completed' before anyone can validate
+//      progress moving from 0/5 -> 1/5.
+//   2. The window doesn't overlap the historical date range used by
+//      `db:seed:team-health-score` (which backfills daily_wellness up
+//      through "today"), so that bulk seed data doesn't inflate every
+//      participant's device-wear-consistency count.
+const CHALLENGE_DATE = shiftIsoDate(new Date().toISOString().slice(0, 10), 1)
+
 // Maps participant id → { email, password }
 // test1@user.com is mapped to Colin Stephenson (EMP005)
 const PARTICIPANT_AUTH: Record<string, { email: string; password: string }> = {
@@ -302,6 +314,122 @@ async function seed() {
     .upsert(habits, { onConflict: 'participant_id,date' })
   if (habErr) { console.error('Habits:', habErr); process.exit(1) }
   console.log('✅ Habits seeded')
+
+  // ── Wearable challenge seed scenario (Colin 0/5 -> 1/5) ───────────────────
+  // This creates a deterministic active device-wear challenge and participant
+  // progress rows, then ensures Colin has exactly one qualifying wear day from
+  // import-shaped daily_wellness data inside the challenge window.
+  // Narrow 5-day window anchored on the dynamic CHALLENGE_DATE (see above) —
+  // wide enough to comfortably contain Colin's single qualifying day without
+  // overlapping team-health-score's historical backfill range.
+  const challengeWindowStart = `${CHALLENGE_DATE}T00:00:00.000Z`
+  const challengeWindowEnd = `${shiftIsoDate(CHALLENGE_DATE, 4)}T23:59:59.000Z`
+
+  const { data: existingActiveChallenge, error: existingActiveChallengeErr } = await supabase
+    .from('challenges')
+    .select('id')
+    .eq('status', 'active')
+    .maybeSingle()
+  if (existingActiveChallengeErr) { console.error('Challenge active lookup:', existingActiveChallengeErr); process.exit(1) }
+
+  if (existingActiveChallenge) {
+    const { error: cancelErr } = await supabase
+      .from('challenges')
+      .update({
+        status: 'cancelled',
+        cancelled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', existingActiveChallenge.id)
+    if (cancelErr) { console.error('Challenge cancel existing active:', cancelErr); process.exit(1) }
+  }
+
+  const challengeName = 'Wearable consistency seed validation'
+  const { data: existingSeedChallenge, error: existingSeedChallengeErr } = await supabase
+    .from('challenges')
+    .select('id,version')
+    .eq('name', challengeName)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existingSeedChallengeErr) { console.error('Challenge seed lookup:', existingSeedChallengeErr); process.exit(1) }
+
+  let challengeId: string
+  if (existingSeedChallenge) {
+    const { data: updatedChallenge, error: updateChallengeErr } = await supabase
+      .from('challenges')
+      .update({
+        description: 'Seeded challenge for CSV wearable progress validation.',
+        status: 'active',
+        metric_type: 'device_wear_consistency',
+        threshold_value: 5,
+        window_start_at: challengeWindowStart,
+        window_end_at: challengeWindowEnd,
+        eligibility_mode: 'all_participants',
+        eligibility_definition: null,
+        activation_at: new Date().toISOString(),
+        completed_at: null,
+        cancelled_at: null,
+        updated_at: new Date().toISOString(),
+        version: existingSeedChallenge.version + 1,
+      })
+      .eq('id', existingSeedChallenge.id)
+      .select('id')
+      .single()
+    if (updateChallengeErr || !updatedChallenge) { console.error('Challenge seed update:', updateChallengeErr); process.exit(1) }
+    challengeId = updatedChallenge.id
+  } else {
+    const { data: insertedChallenge, error: insertChallengeErr } = await supabase
+      .from('challenges')
+      .insert({
+        name: challengeName,
+        description: 'Seeded challenge for CSV wearable progress validation.',
+        status: 'active',
+        metric_type: 'device_wear_consistency',
+        threshold_value: 5,
+        window_start_at: challengeWindowStart,
+        window_end_at: challengeWindowEnd,
+        eligibility_mode: 'all_participants',
+        eligibility_definition: null,
+        activation_at: new Date().toISOString(),
+        version: 1,
+      })
+      .select('id')
+      .single()
+    if (insertChallengeErr || !insertedChallenge) { console.error('Challenge seed insert:', insertChallengeErr); process.exit(1) }
+    challengeId = insertedChallenge.id
+  }
+
+  const challengeParticipants = participantDefs.map((participant) => ({
+    challenge_id: challengeId,
+    participant_id: participant.id,
+    is_eligible: true,
+    eligibility_reason: null,
+    progress_value: 0,
+    completed: false,
+    completed_at: null,
+    completion_source: null,
+    completion_idempotency_key: null,
+    updated_at: new Date().toISOString(),
+  }))
+  const { error: challengeParticipantsErr } = await supabase
+    .from('challenge_participants')
+    .upsert(challengeParticipants, { onConflict: 'challenge_id,participant_id' })
+  if (challengeParticipantsErr) { console.error('Challenge participants seed:', challengeParticipantsErr); process.exit(1) }
+
+  const colinWearSeed = {
+    participant_id: 'EMP005',
+    date: CHALLENGE_DATE,
+    recovery_score: 61,
+    sleep_perf: 83,
+    sleep_hrs: 7.1,
+    source_batch_id: null,
+  }
+  const { error: colinWearSeedErr } = await supabase
+    .from('daily_wellness')
+    .upsert(colinWearSeed, { onConflict: 'participant_id,date' })
+  if (colinWearSeedErr) { console.error('Colin wearable seed daily_wellness:', colinWearSeedErr); process.exit(1) }
+  console.log('✅ Wearable challenge + Colin CSV-shaped seed data configured')
 
   // ── Pulse Surveys ──────────────────────────────────────────────────────────
   const pulse = [
