@@ -209,7 +209,7 @@ export interface ImportRowOutcome {
 }
 
 export type ChallengeStatus = 'draft' | 'active' | 'completed' | 'cancelled'
-export type ChallengeMetricType = 'actions_count'
+export type ChallengeMetricType = 'actions_count' | 'device_wear_consistency'
 export type ChallengeEligibilityMode = 'all_participants' | 'filtered'
 export type ChallengeVisibilityState = 'none' | 'ineligible' | 'eligible'
 

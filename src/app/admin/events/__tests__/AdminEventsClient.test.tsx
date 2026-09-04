@@ -48,7 +48,8 @@ describe('AdminEventsClient', () => {
         ],
       }], jest.fn()])
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -73,7 +74,8 @@ describe('AdminEventsClient', () => {
     mockUseState
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -93,11 +95,52 @@ describe('AdminEventsClient', () => {
     expect(markup).toContain('skeleton-block')
   })
 
+  test('shows the "most recent" note when a nudge has more responses than are displayed', async () => {
+    const group = {
+      nudge_id: 'nud-1',
+      week_of: '2026-08-10',
+      message: 'Hydrate today',
+      author: 'Coach',
+      acknowledgements_total: 63,
+      acknowledgements: Array.from({ length: 50 }, (_, i) => ({
+        participant_id: `p-${i}`,
+        first_name: 'Jane',
+        last_name: `Doe${i}`,
+        acknowledged_at: '2026-08-12T10:00:00Z',
+        response_text: `Response ${i}`,
+      })),
+    }
+
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([[], jest.fn()]) // nudges
+      .mockReturnValueOnce([[group], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(['nud-1']), jest.fn()]) // expandedNudgeIds (expanded)
+      .mockReturnValueOnce(['responses', jest.fn()]) // tab
+      .mockReturnValueOnce([false, jest.fn()]) // saving
+      .mockReturnValueOnce([false, jest.fn()]) // saved
+      .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce([false, jest.fn()]) // loading
+      .mockReturnValueOnce([{ title: '', description: '', event_date: '', event_time: '', location: '', event_type: 'general', recurring: false, recurrence: '' }, jest.fn()]) // newEvent
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeMsg
+      .mockReturnValueOnce(['Heather Simpson', jest.fn()]) // nudgeAuthor
+      .mockReturnValueOnce(['all', jest.fn()]) // nudgeTargetType
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeTargetLabel
+      .mockReturnValueOnce(['', jest.fn()]) // nudgeParticipantId
+
+    const { AdminEventsClient } = await import('../AdminEventsClient')
+    const markup = renderToStaticMarkup(React.createElement(AdminEventsClient, { participants: [], role: 'wellness_director' }))
+
+    expect(markup).toContain('63 responses')
+    expect(markup).toContain('Showing the most recent 50 of 63 responses for this nudge.')
+  })
+
   test('shows full participant text on hover for truncated nudge-target options', async () => {
     mockUseState
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['nudge', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
