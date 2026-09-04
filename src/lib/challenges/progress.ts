@@ -148,8 +148,15 @@ export async function recomputeActiveChallengeProgress(
     const progressValue = Math.max(recomputedCount, participant.progress_value ?? 0)
     const isCompleteNow = progressValue >= activeChallenge.threshold_value
 
+    // Include challenge_id and participant_id even though we're conflicting on
+    // `id`: Postgres validates NOT NULL constraints against the row being
+    // inserted before ON CONFLICT DO UPDATE ever resolves, so omitting these
+    // required columns fails the upsert with a not-null violation on every
+    // recompute (this was silently breaking CSV-triggered progress updates).
     const updatePayload: Record<string, unknown> = {
       id: participant.id,
+      challenge_id: activeChallenge.id,
+      participant_id: participant.participant_id,
       progress_value: progressValue,
       updated_at: now,
     }
