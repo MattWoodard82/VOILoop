@@ -77,6 +77,38 @@ describe('challenge rules', () => {
     })).toEqual({ ok: true })
   })
 
+  test('rejects device_wear_consistency thresholds that exceed the window length', () => {
+    // window is 31 days (Jul 1-31 inclusive); a threshold of 32 can never be reached
+    expect(validateChallengePayload({
+      name: 'Wearables Consistency Challenge',
+      metric_type: 'device_wear_consistency',
+      threshold_value: 32,
+      window_start_at: '2026-07-01T00:00:00.000Z',
+      window_end_at: '2026-07-31T00:00:00.000Z',
+      eligibility_mode: 'all_participants',
+    })).toEqual({ ok: false, code: 'INVALID_THRESHOLD' })
+
+    // threshold equal to the window length is allowed
+    expect(validateChallengePayload({
+      name: 'Wearables Consistency Challenge',
+      metric_type: 'device_wear_consistency',
+      threshold_value: 31,
+      window_start_at: '2026-07-01T00:00:00.000Z',
+      window_end_at: '2026-07-31T00:00:00.000Z',
+      eligibility_mode: 'all_participants',
+    })).toEqual({ ok: true })
+
+    // other metric types are not bound by the window-length check
+    expect(validateChallengePayload({
+      name: 'Actions Challenge',
+      metric_type: 'actions_count',
+      threshold_value: 100,
+      window_start_at: '2026-07-01T00:00:00.000Z',
+      window_end_at: '2026-07-31T00:00:00.000Z',
+      eligibility_mode: 'all_participants',
+    })).toEqual({ ok: true })
+  })
+
   test('rejects unsupported metric types', () => {
     expect(validateChallengePayload({ metric_type: 'points_count' })).toEqual({ ok: false, code: 'INVALID_METRIC_TYPE' })
   })

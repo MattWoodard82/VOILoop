@@ -331,7 +331,7 @@ export function ChallengesAdminClient() {
         badge={activeChallenge ? <Badge variant="green">Active: {activeChallenge.name}</Badge> : <Badge>No active challenge</Badge>}
       >
         {loading ? (
-          <TableSkeleton columns={5} rows={4} />
+          <TableSkeleton columns={6} rows={4} />
         ) : !challenges.length ? (
           <div style={{ fontSize: 12, color: '#A5ACAF' }}>No challenges yet.</div>
         ) : (

@@ -18,6 +18,32 @@ interface RecomputeOptions {
   batchId?: string
 }
 
+// PostgREST (and therefore Supabase's default client) caps a single select
+// response at its configured max rows (1,000 by default). A challenge window
+// can easily span more rows than that across all participants, so every
+// window query below pages through results with `.range()` instead of
+// fetching in one shot, to avoid silently truncating (and thus undercounting)
+// progress.
+const FETCH_PAGE_SIZE = 1000
+
+async function fetchAllRows<T>(
+  buildPage: (rangeStart: number, rangeEnd: number) => Promise<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const rows: T[] = []
+  let offset = 0
+  for (;;) {
+    const { data, error } = await buildPage(offset, offset + FETCH_PAGE_SIZE - 1)
+    if (error) {
+      throw new Error(error.message)
+    }
+    const page = data ?? []
+    rows.push(...page)
+    if (page.length < FETCH_PAGE_SIZE) break
+    offset += FETCH_PAGE_SIZE
+  }
+  return rows
+}
+
 // actions_count metric: counts workouts logged per participant within the
 // challenge window.
 async function countWorkouts(
@@ -25,18 +51,17 @@ async function countWorkouts(
   windowStartAt: string,
   windowEndAt: string,
 ): Promise<Map<string, number>> {
-  const { data: workouts, error: workoutsError } = await supabase
-    .from('workouts')
-    .select('participant_id, start_time')
-    .gte('start_time', windowStartAt)
-    .lte('start_time', windowEndAt)
-
-  if (workoutsError) {
-    throw new Error(workoutsError.message)
-  }
+  const workouts = await fetchAllRows<{ participant_id: string; start_time: string }>((rangeStart, rangeEnd) =>
+    supabase
+      .from('workouts')
+      .select('participant_id, start_time')
+      .gte('start_time', windowStartAt)
+      .lte('start_time', windowEndAt)
+      .range(rangeStart, rangeEnd),
+  )
 
   const counts = new Map<string, number>()
-  for (const workout of workouts ?? []) {
+  for (const workout of workouts) {
     const participantId = String(workout.participant_id ?? '')
     if (!participantId) continue
     counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
@@ -46,29 +71,37 @@ async function countWorkouts(
 
 // device_wear_consistency metric (FR-13, Issue #66): counts days per
 // participant within the challenge window that have valid sleep+recovery
-// data — the same "wore the device" signal used by engagement scoring —
-// rather than counting logged workouts.
+// data — the same "wore the device" signal used by engagement scoring in
+// getWellnessDirectorParticipants() (src/lib/supabase/queries.ts) — rather
+// than counting logged workouts. Kept in sync with that predicate: a valid
+// day requires a recovery score plus either sleep_perf or sleep_hrs, since
+// some wearables only report one of the two sleep fields.
 async function countValidWearDays(
   supabase: SupabaseLike,
   windowStartAt: string,
   windowEndAt: string,
 ): Promise<Map<string, number>> {
-  const { data: wellnessRows, error: wellnessError } = await supabase
-    .from('daily_wellness')
-    .select('participant_id, date, recovery_score, sleep_perf')
-    .gte('date', windowStartAt)
-    .lte('date', windowEndAt)
-
-  if (wellnessError) {
-    throw new Error(wellnessError.message)
-  }
+  const wellnessRows = await fetchAllRows<{
+    participant_id: string
+    date: string
+    recovery_score: number | null
+    sleep_perf: number | null
+    sleep_hrs: number | null
+  }>((rangeStart, rangeEnd) =>
+    supabase
+      .from('daily_wellness')
+      .select('participant_id, date, recovery_score, sleep_perf, sleep_hrs')
+      .gte('date', windowStartAt)
+      .lte('date', windowEndAt)
+      .range(rangeStart, rangeEnd),
+  )
 
   const counts = new Map<string, number>()
-  for (const row of wellnessRows ?? []) {
+  for (const row of wellnessRows) {
     const participantId = String(row.participant_id ?? '')
     if (!participantId) continue
     const hasValidWearData = row.recovery_score !== null && row.recovery_score !== undefined
-      && row.sleep_perf !== null && row.sleep_perf !== undefined
+      && (row.sleep_perf !== null && row.sleep_perf !== undefined || row.sleep_hrs !== null && row.sleep_hrs !== undefined)
     if (!hasValidWearData) continue
     counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
   }

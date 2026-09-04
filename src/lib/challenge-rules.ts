@@ -136,6 +136,21 @@ export function validateChallengePayload(payload: LooseChallengePayload): { ok: 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       return { ok: false, code: 'INVALID_WINDOW' }
     }
+
+    // device_wear_consistency can advance at most once per calendar day
+    // (daily_wellness is unique per participant/date), so a threshold above
+    // the inclusive number of days in the window could never be reached.
+    // Only enforce this when both the metric type and both window bounds are
+    // present in this payload; a partial update that omits metric_type is
+    // validated against threshold_value alone above.
+    const resolvedMetricType = payload.metric_type !== undefined ? String(payload.metric_type) : undefined
+    if (resolvedMetricType === 'device_wear_consistency' && payload.threshold_value !== undefined) {
+      const thresholdValue = Number(payload.threshold_value)
+      const windowDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1
+      if (thresholdValue > windowDays) {
+        return { ok: false, code: 'INVALID_THRESHOLD' }
+      }
+    }
   }
 
   if (payload.eligibility_mode !== undefined) {

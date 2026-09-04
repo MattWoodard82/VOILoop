@@ -132,6 +132,8 @@ describe('admin events routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(nudgesLimit).toHaveBeenCalledWith(10)
+    expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
     expect(body).toEqual({
       events: [{
         id: 'evt-1',
@@ -159,6 +161,70 @@ describe('admin events routes', () => {
         }],
       }],
     })
+  })
+
+  test('GET caps acknowledgements per nudge to 50 while reporting the true total', async () => {
+    mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
+
+    const eventsOrder = jest.fn(async () => ({ data: [], error: null }))
+    const nudgesLimit = jest.fn(async () => ({
+      data: [{ id: 'nud-1', message: 'Hydrate today' }],
+      error: null,
+    }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'events') {
+          return { select: jest.fn(() => ({ gte: jest.fn(() => ({ order: eventsOrder })) })) }
+        }
+        if (table === 'weekly_nudges') {
+          return { select: jest.fn(() => ({ order: jest.fn(() => ({ limit: nudgesLimit })) })) }
+        }
+        throw new Error(`Unexpected table ${table}`)
+      }),
+    } as never)
+
+    const participantsOrder = jest.fn(async () => ({ data: [], error: null }))
+    const eventRsvpsSelect = jest.fn(async () => ({ data: [], error: null }))
+    // 50 acknowledgements returned (the cap), even though the true total is 137.
+    const cappedAcks = Array.from({ length: 50 }, (_, i) => ({
+      participant_id: `p-${i}`,
+      acknowledged_at: '2026-08-12T10:00:00Z',
+      response_text_encrypted: null,
+    }))
+    const acknowledgementsLimit = jest.fn(async () => ({ data: cappedAcks, error: null }))
+    const acknowledgementsCountEq = jest.fn(async () => ({ count: 137, error: null }))
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      from: jest.fn((table: string) => {
+        if (table === 'participants') {
+          return { select: jest.fn(() => ({ eq: jest.fn(() => ({ order: participantsOrder })) })) }
+        }
+        if (table === 'nudge_acknowledgements') {
+          return {
+            select: jest.fn((_columns: string, opts?: { count?: string; head?: boolean }) => {
+              if (opts?.count) {
+                return { eq: acknowledgementsCountEq }
+              }
+              return { eq: jest.fn(() => ({ order: jest.fn(() => ({ limit: acknowledgementsLimit })) })) }
+            }),
+          }
+        }
+        if (table === 'event_rsvps') {
+          return { select: eventRsvpsSelect }
+        }
+        throw new Error(`Unexpected admin table ${table}`)
+      }),
+      rpc: jest.fn(),
+    } as never)
+
+    const response = await GET()
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(nudgesLimit).toHaveBeenCalledWith(10)
+    expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
+    expect(body.nudge_responses).toHaveLength(1)
+    expect(body.nudge_responses[0].acknowledgements_total).toBe(137)
+    expect(body.nudge_responses[0].acknowledgements).toHaveLength(50)
   })
 
   test('POST validates required event fields', async () => {

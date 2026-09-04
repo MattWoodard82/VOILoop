@@ -252,7 +252,7 @@ describe('duplicate event idempotency via recompute', () => {
         }
         if (table === 'workouts') {
           return {
-            select: () => ({ gte: () => ({ lte: async () => ({ data: workouts, error: null }) }) }),
+            select: () => ({ gte: () => ({ lte: () => ({ range: async () => ({ data: workouts, error: null }) }) }) }),
           }
         }
         if (table === 'challenge_audit_log') {

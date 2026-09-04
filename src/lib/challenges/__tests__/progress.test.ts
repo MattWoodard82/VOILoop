@@ -82,13 +82,15 @@ describe('recomputeActiveChallengeProgress', () => {
           return {
             select: () => ({
               gte: () => ({
-                lte: async () => ({
-                  data: [
-                    { participant_id: 'EMP001', start_time: '2026-07-11T08:00:00.000Z' },
-                    { participant_id: 'EMP001', start_time: '2026-07-12T08:00:00.000Z' },
-                    { participant_id: 'EMP002', start_time: '2026-07-11T08:00:00.000Z' },
-                  ],
-                  error: null,
+                lte: () => ({
+                  range: async () => ({
+                    data: [
+                      { participant_id: 'EMP001', start_time: '2026-07-11T08:00:00.000Z' },
+                      { participant_id: 'EMP001', start_time: '2026-07-12T08:00:00.000Z' },
+                      { participant_id: 'EMP002', start_time: '2026-07-11T08:00:00.000Z' },
+                    ],
+                    error: null,
+                  }),
                 }),
               }),
             }),
@@ -191,17 +193,19 @@ describe('recomputeActiveChallengeProgress', () => {
           return {
             select: () => ({
               gte: () => ({
-                lte: async () => ({
-                  data: [
-                    // EMP001: two valid wear days (both recovery_score and sleep_perf present)
-                    { participant_id: 'EMP001', date: '2026-07-11', recovery_score: 60, sleep_perf: 80 },
-                    { participant_id: 'EMP001', date: '2026-07-12', recovery_score: 55, sleep_perf: 70 },
-                    // EMP001: incomplete day (missing sleep_perf) should not count
-                    { participant_id: 'EMP001', date: '2026-07-13', recovery_score: 50, sleep_perf: null },
-                    // EMP002: only one valid wear day
-                    { participant_id: 'EMP002', date: '2026-07-11', recovery_score: 65, sleep_perf: 75 },
-                  ],
-                  error: null,
+                lte: () => ({
+                  range: async () => ({
+                    data: [
+                      // EMP001: two valid wear days (both recovery_score and sleep_perf present)
+                      { participant_id: 'EMP001', date: '2026-07-11', recovery_score: 60, sleep_perf: 80, sleep_hrs: null },
+                      { participant_id: 'EMP001', date: '2026-07-12', recovery_score: 55, sleep_perf: 70, sleep_hrs: null },
+                      // EMP001: incomplete day (missing both sleep fields) should not count
+                      { participant_id: 'EMP001', date: '2026-07-13', recovery_score: 50, sleep_perf: null, sleep_hrs: null },
+                      // EMP002: only one valid wear day, reported via sleep_hrs instead of sleep_perf
+                      { participant_id: 'EMP002', date: '2026-07-11', recovery_score: 65, sleep_perf: null, sleep_hrs: 7.5 },
+                    ],
+                    error: null,
+                  }),
                 }),
               }),
             }),

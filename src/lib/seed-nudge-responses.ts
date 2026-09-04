@@ -106,8 +106,19 @@ async function getOrCreateSyntheticParticipants(count: number): Promise<string[]
   }
 
   const needed = count - existingIds.length
+
+  // Synthetic IDs are numbered NUDGESEEDNNN. Continue numbering after the
+  // highest one already present so reruns with a larger count add new
+  // participants instead of re-upserting (and clobbering timestamps on)
+  // ones created by a previous run.
+  const highestExistingSeedNumber = existingIds.reduce((max, id) => {
+    const match = /^NUDGESEED(\d+)$/.exec(id)
+    if (!match) return max
+    return Math.max(max, Number(match[1]))
+  }, 0)
+
   const syntheticDefs = Array.from({ length: needed }, (_, i) => {
-    const n = i + 1
+    const n = highestExistingSeedNumber + i + 1
     const id = `NUDGESEED${String(n).padStart(3, '0')}`
     return {
       id,
