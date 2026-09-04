@@ -77,6 +77,7 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
   const [events, setEvents] = useState<Event[]>([])
   const [nudges, setNudges] = useState<Nudge[]>([])
   const [nudgeResponses, setNudgeResponses] = useState<NudgeResponseGroup[]>([])
+  const [expandedNudgeIds, setExpandedNudgeIds] = useState<Set<string>>(new Set())
   const [tab, setTab] = useState<'events' | 'nudge' | 'responses'>('events')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -139,7 +140,11 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
     const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; nudge_responses?: NudgeResponseGroup[] }
     setEvents(payload.events ?? [])
     setNudges(payload.nudges ?? [])
-    setNudgeResponses(payload.nudge_responses ?? [])
+    const responses = payload.nudge_responses ?? []
+    setNudgeResponses(responses)
+    // Default to expanding only the most recent nudge on first load; preserve the
+    // user's manual expand/collapse choices on subsequent refreshes.
+    setExpandedNudgeIds((prev) => (prev.size > 0 || responses.length === 0) ? prev : new Set([responses[0].nudge_id]))
     setError('')
     setLoading(false)
   }
@@ -209,6 +214,18 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
   }
 
   const responsesTotal = nudgeResponses.reduce((sum, group) => sum + group.acknowledgements_total, 0)
+
+  const toggleNudgeExpanded = (nudgeId: string) => {
+    setExpandedNudgeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(nudgeId)) {
+        next.delete(nudgeId)
+      } else {
+        next.add(nudgeId)
+      }
+      return next
+    })
+  }
 
   const s = {
     card: { background: '#002244', border: '1px solid #0a3560', borderRadius: 10, padding: '18px 20px', marginBottom: 14 } as React.CSSProperties,
@@ -470,37 +487,54 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
             </div>
           ) : nudgeResponses.length === 0 ? (
             <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '20px 0' }}>No nudges have been sent yet.</div>
-          ) : nudgeResponses.map((group, groupIndex) => (
-            <div key={group.nudge_id} style={{ padding: '14px 0', borderBottom: groupIndex < nudgeResponses.length - 1 ? '1px solid #0a3560' : 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, gap: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#69BE28' }}>Week of {group.week_of}</div>
-                <div style={{ fontSize: 10, color: '#A5ACAF' }}>{group.acknowledgements_total} response{group.acknowledgements_total === 1 ? '' : 's'}</div>
-              </div>
-              <div style={{ fontSize: 11, color: '#A5ACAF', lineHeight: 1.5, marginBottom: 10 }}>{group.message} <span style={{ color: '#69BE28' }}>— {group.author}</span></div>
-              {group.acknowledgements.length === 0 ? (
-                <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '12px 0' }}>No responses yet for this nudge.</div>
-              ) : (
-                <div style={{ display: 'grid', gap: 0, paddingLeft: 10, borderLeft: '2px solid #0a3560' }}>
-                  {group.acknowledgements.map((ack, index) => (
-                    <div key={`${ack.participant_id}-${ack.acknowledged_at}`} style={{ padding: '10px 0 10px 10px', borderBottom: index < group.acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, gap: 10 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{ack.first_name} {ack.last_name}</div>
-                        <div style={{ fontSize: 10, color: '#A5ACAF' }}>
-                          {new Date(ack.acknowledged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{ack.response_text}&rdquo;</div>
+          ) : nudgeResponses.map((group, groupIndex) => {
+            const isExpanded = expandedNudgeIds.has(group.nudge_id)
+            return (
+              <div key={group.nudge_id} style={{ padding: '14px 0', borderBottom: groupIndex < nudgeResponses.length - 1 ? '1px solid #0a3560' : 'none' }}>
+                <button
+                  type="button"
+                  onClick={() => toggleNudgeExpanded(group.nudge_id)}
+                  aria-expanded={isExpanded}
+                  style={{ display: 'flex', width: '100%', flexDirection: 'column', gap: 4, background: 'none', border: 'none', padding: 0, margin: 0, cursor: 'pointer', textAlign: 'left', fontFamily: 'Inter, sans-serif' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#69BE28' }}>
+                      <span style={{ display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
+                      Week of {group.week_of}
                     </div>
-                  ))}
-                </div>
-              )}
-              {group.acknowledgements_total > group.acknowledgements.length && (
-                <div style={{ fontSize: 11, color: '#A5ACAF', textAlign: 'center', padding: '10px 0 0', fontStyle: 'italic' }}>
-                  Showing the most recent {group.acknowledgements.length} of {group.acknowledgements_total} responses for this nudge.
-                </div>
-              )}
-            </div>
-          ))}
+                    <div style={{ fontSize: 10, color: '#A5ACAF' }}>{group.acknowledgements_total} response{group.acknowledgements_total === 1 ? '' : 's'}</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#A5ACAF', lineHeight: 1.5, paddingLeft: 16 }}>{group.message} <span style={{ color: '#69BE28' }}>— {group.author}</span></div>
+                </button>
+                {isExpanded && (
+                  <div style={{ marginTop: 10 }}>
+                    {group.acknowledgements.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#A5ACAF', textAlign: 'center', padding: '12px 0' }}>No responses yet for this nudge.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 0, paddingLeft: 10, borderLeft: '2px solid #0a3560' }}>
+                        {group.acknowledgements.map((ack, index) => (
+                          <div key={`${ack.participant_id}-${ack.acknowledged_at}`} style={{ padding: '10px 0 10px 10px', borderBottom: index < group.acknowledgements.length - 1 ? '1px solid #0a3560' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, gap: 10 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{ack.first_name} {ack.last_name}</div>
+                              <div style={{ fontSize: 10, color: '#A5ACAF' }}>
+                                {new Date(ack.acknowledged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{ack.response_text}&rdquo;</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {group.acknowledgements_total > group.acknowledgements.length && (
+                      <div style={{ fontSize: 11, color: '#A5ACAF', textAlign: 'center', padding: '10px 0 0', fontStyle: 'italic' }}>
+                        Showing the most recent {group.acknowledgements.length} of {group.acknowledgements_total} responses for this nudge.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

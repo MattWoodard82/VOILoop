@@ -49,6 +49,7 @@ describe('AdminEventsClient', () => {
       }], jest.fn()])
       .mockReturnValueOnce([[], jest.fn()]) // nudges
       .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -74,6 +75,7 @@ describe('AdminEventsClient', () => {
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
       .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -98,6 +100,7 @@ describe('AdminEventsClient', () => {
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
       .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
+      .mockReturnValueOnce([new Set(), jest.fn()]) // expandedNudgeIds
       .mockReturnValueOnce(['nudge', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
