@@ -122,13 +122,22 @@ describe('recomputeActiveChallengeProgress', () => {
     })
 
     expect(participantUpdates).toHaveLength(1)
+    // Regression guard: challenge_id/participant_id are NOT NULL columns that
+    // must be present on every upsert row, even though `id` is the conflict
+    // target — Postgres validates NOT NULL against the insert side of
+    // ON CONFLICT DO UPDATE before the conflict ever resolves. Omitting either
+    // field here previously caused every real (non-mocked) recompute to fail.
     expect(participantUpdates[0][0]).toMatchObject({
+      challenge_id: 'challenge-1',
+      participant_id: 'EMP001',
       progress_value: 2,
       completed: true,
       completion_source: 'event',
       completion_idempotency_key: 'challenge:challenge-1:participant:EMP001:completion',
     })
     expect(participantUpdates[0][1]).toMatchObject({
+      challenge_id: 'challenge-1',
+      participant_id: 'EMP002',
       progress_value: 1,
     })
 
@@ -234,8 +243,8 @@ describe('recomputeActiveChallengeProgress', () => {
     const emp001 = updates.find((u) => u.id === 'p1')
     const emp002 = updates.find((u) => u.id === 'p2')
 
-    expect(emp001).toMatchObject({ progress_value: 2, completed: true })
-    expect(emp002).toMatchObject({ progress_value: 1 })
+    expect(emp001).toMatchObject({ challenge_id: 'challenge-wear-1', participant_id: 'EMP001', progress_value: 2, completed: true })
+    expect(emp002).toMatchObject({ challenge_id: 'challenge-wear-1', participant_id: 'EMP002', progress_value: 1 })
     expect(emp002?.completed).toBeUndefined()
   })
 })
