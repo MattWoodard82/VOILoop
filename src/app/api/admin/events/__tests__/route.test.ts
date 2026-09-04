@@ -144,15 +144,20 @@ describe('admin events routes', () => {
       }],
       nudges: [{ id: 'nud-1', message: 'Hydrate today' }],
       participants: [{ id: 'p-1', first_name: 'Jane', last_name: 'Doe' }],
-      acknowledgements: [{
-        participant_id: 'p-1',
-        first_name: 'Jane',
-        last_name: 'Doe',
-        acknowledged_at: '2026-08-12T10:00:00Z',
-        response_text: 'I am in.',
+      nudge_responses: [{
+        nudge_id: 'nud-1',
+        week_of: undefined,
+        message: 'Hydrate today',
+        author: undefined,
+        acknowledgements_total: 1,
+        acknowledgements: [{
+          participant_id: 'p-1',
+          first_name: 'Jane',
+          last_name: 'Doe',
+          acknowledged_at: '2026-08-12T10:00:00Z',
+          response_text: 'I am in.',
+        }],
       }],
-      acknowledgements_total: 1,
-      recent_nudge_id: 'nud-1',
     })
   })
 

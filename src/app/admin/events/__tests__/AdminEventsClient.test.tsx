@@ -48,8 +48,7 @@ describe('AdminEventsClient', () => {
         ],
       }], jest.fn()])
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
-      .mockReturnValueOnce([0, jest.fn()]) // acknowledgementsTotal
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -74,8 +73,7 @@ describe('AdminEventsClient', () => {
     mockUseState
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
-      .mockReturnValueOnce([0, jest.fn()]) // acknowledgementsTotal
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
       .mockReturnValueOnce(['events', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved
@@ -99,8 +97,7 @@ describe('AdminEventsClient', () => {
     mockUseState
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([[], jest.fn()]) // nudges
-      .mockReturnValueOnce([[], jest.fn()]) // acknowledgements
-      .mockReturnValueOnce([0, jest.fn()]) // acknowledgementsTotal
+      .mockReturnValueOnce([[], jest.fn()]) // nudgeResponses
       .mockReturnValueOnce(['nudge', jest.fn()]) // tab
       .mockReturnValueOnce([false, jest.fn()]) // saving
       .mockReturnValueOnce([false, jest.fn()]) // saved

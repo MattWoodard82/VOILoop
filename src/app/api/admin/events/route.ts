@@ -31,7 +31,26 @@ interface EventRsvpSummary {
   last_name: string
 }
 
+interface AcknowledgementSummary {
+  participant_id: string
+  first_name: string
+  last_name: string
+  acknowledged_at: string
+  response_text: string
+}
+
+interface NudgeResponseGroup {
+  nudge_id: string
+  week_of: string
+  message: string
+  author: string
+  acknowledgements_total: number
+  acknowledgements: AcknowledgementSummary[]
+}
+
 const VALID_EVENT_TYPES = new Set(['outdoor', 'fitness', 'race', 'general'])
+const MAX_DISPLAYED_NUDGES = 10
+const MAX_DISPLAYED_ACKNOWLEDGEMENTS_PER_NUDGE = 50
 
 function getMondayOfCurrentWeekIso(): string {
   const weekOf = new Date()
@@ -59,7 +78,7 @@ export async function GET() {
       .from('weekly_nudges')
       .select('*')
       .order('week_of', { ascending: false })
-      .limit(8),
+      .limit(MAX_DISPLAYED_NUDGES),
     adminClient
       .from('participants')
       .select('id, first_name, last_name')
@@ -83,7 +102,6 @@ export async function GET() {
     return NextResponse.json({ error: rsvpsError.message }, { status: 500 })
   }
 
-  const recentNudge = nudges?.[0] ?? null
   const participantMap = new Map((participants ?? []).map((participant) => [participant.id, participant]))
   const rsvpsByEventId = new Map<string, EventRsvpSummary[]>()
   for (const rsvp of rsvps ?? []) {
@@ -97,41 +115,35 @@ export async function GET() {
     })
     rsvpsByEventId.set(rsvp.event_id, eventRsvps)
   }
-  const MAX_DISPLAYED_ACKNOWLEDGEMENTS = 50
-  let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
-  let acknowledgementsTotal = 0
-  if (recentNudge) {
-    const { count: totalCount, error: countError } = await adminClient
-      .from('nudge_acknowledgements')
-      .select('*', { count: 'exact', head: true })
-      .eq('nudge_id', recentNudge.id)
 
-    if (countError) {
-      return NextResponse.json({ error: countError.message }, { status: 500 })
-    }
-    acknowledgementsTotal = totalCount ?? 0
+  // For each of the most recent nudges (most recent first), load its most recent
+  // acknowledgements (capped) plus the true total, so leadership can review responses
+  // across recent nudge history rather than only the single latest one.
+  let nudgeResponses: NudgeResponseGroup[]
+  try {
+    nudgeResponses = await Promise.all((nudges ?? []).map(async (nudge) => {
+      const { count: totalCount, error: countError } = await adminClient
+        .from('nudge_acknowledgements')
+        .select('*', { count: 'exact', head: true })
+        .eq('nudge_id', nudge.id)
+      if (countError) throw countError
 
-    const { data: acks, error: acknowledgementsError } = await adminClient
-      .from('nudge_acknowledgements')
-      .select('participant_id, acknowledged_at, response_text_encrypted')
-      .eq('nudge_id', recentNudge.id)
-      .order('acknowledged_at', { ascending: false })
-      .limit(MAX_DISPLAYED_ACKNOWLEDGEMENTS)
+      const { data: acks, error: acknowledgementsError } = await adminClient
+        .from('nudge_acknowledgements')
+        .select('participant_id, acknowledged_at, response_text_encrypted')
+        .eq('nudge_id', nudge.id)
+        .order('acknowledged_at', { ascending: false })
+        .limit(MAX_DISPLAYED_ACKNOWLEDGEMENTS_PER_NUDGE)
+      if (acknowledgementsError) throw acknowledgementsError
 
-    if (acknowledgementsError) {
-      return NextResponse.json({ error: acknowledgementsError.message }, { status: 500 })
-    }
-    if (acks && acks.length > 0) {
-      acknowledgements = await Promise.all(acks.map(async (ack) => {
+      const acknowledgements: AcknowledgementSummary[] = await Promise.all((acks ?? []).map(async (ack) => {
         let responseText = ''
         if (ack.response_text_encrypted) {
           const { data: decrypted, error: decryptError } = await adminClient.rpc('decrypt_nudge_response', {
             encrypted_data: ack.response_text_encrypted,
             key: getDbEncryptionKey(),
           })
-          if (decryptError) {
-            throw decryptError
-          }
+          if (decryptError) throw decryptError
           responseText = decrypted ?? ''
         }
         const participant = participantMap.get(ack.participant_id)
@@ -143,7 +155,19 @@ export async function GET() {
           response_text: responseText,
         }
       }))
-    }
+
+      return {
+        nudge_id: nudge.id,
+        week_of: nudge.week_of,
+        message: nudge.message,
+        author: nudge.author,
+        acknowledgements_total: totalCount ?? 0,
+        acknowledgements,
+      }
+    }))
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unable to load nudge responses.'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
   return NextResponse.json({
@@ -153,9 +177,7 @@ export async function GET() {
     })),
     nudges: nudges ?? [],
     participants: participants ?? [],
-    acknowledgements,
-    acknowledgements_total: acknowledgementsTotal,
-    recent_nudge_id: recentNudge?.id ?? null,
+    nudge_responses: nudgeResponses,
   })
 }
 
