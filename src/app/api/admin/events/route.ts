@@ -97,13 +97,26 @@ export async function GET() {
     })
     rsvpsByEventId.set(rsvp.event_id, eventRsvps)
   }
+  const MAX_DISPLAYED_ACKNOWLEDGEMENTS = 50
   let acknowledgements: Array<{ participant_id: string; first_name: string; last_name: string; acknowledged_at: string; response_text: string }> = []
+  let acknowledgementsTotal = 0
   if (recentNudge) {
+    const { count: totalCount, error: countError } = await adminClient
+      .from('nudge_acknowledgements')
+      .select('*', { count: 'exact', head: true })
+      .eq('nudge_id', recentNudge.id)
+
+    if (countError) {
+      return NextResponse.json({ error: countError.message }, { status: 500 })
+    }
+    acknowledgementsTotal = totalCount ?? 0
+
     const { data: acks, error: acknowledgementsError } = await adminClient
       .from('nudge_acknowledgements')
       .select('participant_id, acknowledged_at, response_text_encrypted')
       .eq('nudge_id', recentNudge.id)
       .order('acknowledged_at', { ascending: false })
+      .limit(MAX_DISPLAYED_ACKNOWLEDGEMENTS)
 
     if (acknowledgementsError) {
       return NextResponse.json({ error: acknowledgementsError.message }, { status: 500 })
@@ -141,6 +154,7 @@ export async function GET() {
     nudges: nudges ?? [],
     participants: participants ?? [],
     acknowledgements,
+    acknowledgements_total: acknowledgementsTotal,
     recent_nudge_id: recentNudge?.id ?? null,
   })
 }

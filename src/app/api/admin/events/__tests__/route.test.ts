@@ -75,12 +75,16 @@ describe('admin events routes', () => {
       data: [{ event_id: 'evt-1', participant_id: 'p-1' }],
       error: null,
     }))
-    const acknowledgementsOrder = jest.fn(async () => ({
+    const acknowledgementsLimit = jest.fn(async () => ({
       data: [{
         participant_id: 'p-1',
         acknowledged_at: '2026-08-12T10:00:00Z',
         response_text_encrypted: 'ciphertext-1',
       }],
+      error: null,
+    }))
+    const acknowledgementsCountEq = jest.fn(async () => ({
+      count: 1,
       error: null,
     }))
     const rpcDecrypt = jest.fn(async () => ({
@@ -100,11 +104,18 @@ describe('admin events routes', () => {
         }
         if (table === 'nudge_acknowledgements') {
           return {
-            select: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                order: acknowledgementsOrder,
-              })),
-            })),
+            select: jest.fn((_columns: string, opts?: { count?: string; head?: boolean }) => {
+              if (opts?.count) {
+                return { eq: acknowledgementsCountEq }
+              }
+              return {
+                eq: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: acknowledgementsLimit,
+                  })),
+                })),
+              }
+            }),
           }
         }
         if (table === 'event_rsvps') {
@@ -140,6 +151,7 @@ describe('admin events routes', () => {
         acknowledged_at: '2026-08-12T10:00:00Z',
         response_text: 'I am in.',
       }],
+      acknowledgements_total: 1,
       recent_nudge_id: 'nud-1',
     })
   })

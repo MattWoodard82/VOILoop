@@ -67,6 +67,7 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
   const [events, setEvents] = useState<Event[]>([])
   const [nudges, setNudges] = useState<Nudge[]>([])
   const [acknowledgements, setAcknowledgements] = useState<Acknowledgement[]>([])
+  const [acknowledgementsTotal, setAcknowledgementsTotal] = useState(0)
   const [tab, setTab] = useState<'events' | 'nudge' | 'responses'>('events')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -126,10 +127,11 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
       setLoading(false)
       return
     }
-    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; acknowledgements?: Acknowledgement[] }
+    const payload = await response.json() as { events?: Event[]; nudges?: Nudge[]; acknowledgements?: Acknowledgement[]; acknowledgements_total?: number }
     setEvents(payload.events ?? [])
     setNudges(payload.nudges ?? [])
     setAcknowledgements(payload.acknowledgements ?? [])
+    setAcknowledgementsTotal(payload.acknowledgements_total ?? (payload.acknowledgements ?? []).length)
     setError('')
     setLoading(false)
   }
@@ -226,7 +228,7 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
             border: `1px solid ${tab === t ? '#69BE28' : '#0a3560'}`,
             fontWeight: tab === t ? 700 : 400,
           }}>
-            {t === 'events' ? '📅 Events' : t === 'nudge' ? '💬 Weekly nudge' : `💌 Responses${acknowledgements.length > 0 ? ` · ${acknowledgements.length}` : ''}`}
+            {t === 'events' ? '📅 Events' : t === 'nudge' ? '💬 Weekly nudge' : `💌 Responses${acknowledgementsTotal > 0 ? ` · ${acknowledgementsTotal}` : ''}`}
           </button>
         ))}
         <span style={{ fontSize: 11, color: '#A5ACAF', marginLeft: 'auto' }}>
@@ -469,6 +471,11 @@ export function AdminEventsClient({ participants, role }: AdminEventsClientProps
               <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.6, fontStyle: 'italic' }}>&ldquo;{ack.response_text}&rdquo;</div>
             </div>
           ))}
+          {!loading && acknowledgementsTotal > acknowledgements.length && (
+            <div style={{ fontSize: 11, color: '#A5ACAF', textAlign: 'center', padding: '12px 0 0', fontStyle: 'italic' }}>
+              Showing the most recent {acknowledgements.length} of {acknowledgementsTotal} responses.
+            </div>
+          )}
         </div>
       )}
     </div>
