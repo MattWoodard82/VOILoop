@@ -66,6 +66,21 @@ describe('challenge rules', () => {
     })).toEqual({ ok: false, code: 'INVALID_WINDOW' })
   })
 
+  test('accepts device_wear_consistency as a supported metric type', () => {
+    expect(validateChallengePayload({
+      name: 'Wearables Consistency Challenge',
+      metric_type: 'device_wear_consistency',
+      threshold_value: 14,
+      window_start_at: '2026-07-01T00:00:00.000Z',
+      window_end_at: '2026-07-31T00:00:00.000Z',
+      eligibility_mode: 'all_participants',
+    })).toEqual({ ok: true })
+  })
+
+  test('rejects unsupported metric types', () => {
+    expect(validateChallengePayload({ metric_type: 'points_count' })).toEqual({ ok: false, code: 'INVALID_METRIC_TYPE' })
+  })
+
   test('evaluates eligibility with AND semantics across fields', () => {
     const def = normalizeEligibilityDefinition('filtered', {
       department_ids: ['ICU'],

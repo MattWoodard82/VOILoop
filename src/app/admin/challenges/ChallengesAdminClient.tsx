@@ -54,6 +54,7 @@ export function ChallengesAdminClient() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createName, setCreateName] = useState('Pilot Actions Challenge')
+  const [createMetricType, setCreateMetricType] = useState<'actions_count' | 'device_wear_consistency'>('actions_count')
   const [createThreshold, setCreateThreshold] = useState(5)
   const [createStart, setCreateStart] = useState(new Date().toISOString().slice(0, 10))
   const [createEnd, setCreateEnd] = useState(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
@@ -115,7 +116,7 @@ export function ChallengesAdminClient() {
       body: JSON.stringify({
         name: createName,
         description: 'Pilot challenge for smoke testing',
-        metric_type: 'actions_count',
+        metric_type: createMetricType,
         threshold_value: createThreshold,
         window_start_at: `${createStart}T00:00:00.000Z`,
         window_end_at: `${createEnd}T23:59:59.000Z`,
@@ -293,10 +294,21 @@ export function ChallengesAdminClient() {
       )}
 
       <Card title="Create draft challenge" badge={<Badge variant="amber">Pilot</Badge>}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.8fr .7fr .8fr .8fr auto', gap: 8, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.2fr .7fr .8fr .8fr auto', gap: 8, alignItems: 'end' }}>
           <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
             Name
             <input value={createName} onChange={(event) => setCreateName(event.target.value)} style={inputStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
+            Metric
+            <select
+              value={createMetricType}
+              onChange={(event) => setCreateMetricType(event.target.value as 'actions_count' | 'device_wear_consistency')}
+              style={inputStyle}
+            >
+              <option value="actions_count">Workouts logged (actions_count)</option>
+              <option value="device_wear_consistency">Device-wear consistency (valid days)</option>
+            </select>
           </label>
           <label style={{ display: 'grid', gap: 4, fontSize: 11, color: '#A5ACAF' }}>
             Threshold
@@ -327,6 +339,7 @@ export function ChallengesAdminClient() {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Metric</th>
                 <th>Status</th>
                 <th>Threshold</th>
                 <th>Window</th>
@@ -344,6 +357,7 @@ export function ChallengesAdminClient() {
                   }}
                 >
                   <td style={{ fontWeight: 600 }}>{challenge.name}</td>
+                  <td style={{ color: '#A5ACAF' }}>{challenge.metric_type}</td>
                   <td>{challenge.status}</td>
                   <td>{challenge.threshold_value}</td>
                   <td style={{ color: '#A5ACAF' }}>

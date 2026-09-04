@@ -140,4 +140,98 @@ describe('recomputeActiveChallengeProgress', () => {
       }),
     })
   })
+
+  test('recomputes device_wear_consistency progress from valid wear days in daily_wellness', async () => {
+    const participantUpdates: Array<Array<Record<string, unknown>>> = []
+
+    const supabase = {
+      from: jest.fn((table: string) => {
+        if (table === 'challenges') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: {
+                    id: 'challenge-wear-1',
+                    status: 'active',
+                    metric_type: 'device_wear_consistency',
+                    threshold_value: 2,
+                    window_start_at: '2026-07-01T00:00:00.000Z',
+                    window_end_at: '2099-07-31T23:59:59.000Z',
+                    version: 1,
+                  },
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        if (table === 'challenge_participants') {
+          return {
+            select: () => ({
+              eq: () => ({
+                eq: async () => ({
+                  data: [
+                    { id: 'p1', participant_id: 'EMP001', progress_value: 0, completed: false, updated_at: null },
+                    { id: 'p2', participant_id: 'EMP002', progress_value: 0, completed: false, updated_at: null },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+            upsert: (payload: Array<Record<string, unknown>>) => {
+              participantUpdates.push(payload)
+              return Promise.resolve({ error: null })
+            },
+          }
+        }
+
+        if (table === 'daily_wellness') {
+          return {
+            select: () => ({
+              gte: () => ({
+                lte: async () => ({
+                  data: [
+                    // EMP001: two valid wear days (both recovery_score and sleep_perf present)
+                    { participant_id: 'EMP001', date: '2026-07-11', recovery_score: 60, sleep_perf: 80 },
+                    { participant_id: 'EMP001', date: '2026-07-12', recovery_score: 55, sleep_perf: 70 },
+                    // EMP001: incomplete day (missing sleep_perf) should not count
+                    { participant_id: 'EMP001', date: '2026-07-13', recovery_score: 50, sleep_perf: null },
+                    // EMP002: only one valid wear day
+                    { participant_id: 'EMP002', date: '2026-07-11', recovery_score: 65, sleep_perf: 75 },
+                  ],
+                  error: null,
+                }),
+              }),
+            }),
+          }
+        }
+
+        if (table === 'challenge_audit_log') {
+          return {
+            insert: async () => ({ error: null }),
+          }
+        }
+
+        throw new Error(`Unexpected table: ${table}`)
+      }),
+    }
+
+    const result = await recomputeActiveChallengeProgress(supabase as never, { source: 'scheduled_recompute' })
+
+    expect(result).toMatchObject({
+      challengeId: 'challenge-wear-1',
+      updatedParticipants: 2,
+      finalized: false,
+    })
+
+    const updates = participantUpdates.flat()
+    const emp001 = updates.find((u) => u.id === 'p1')
+    const emp002 = updates.find((u) => u.id === 'p2')
+
+    expect(emp001).toMatchObject({ progress_value: 2, completed: true })
+    expect(emp002).toMatchObject({ progress_value: 1 })
+    expect(emp002?.completed).toBeUndefined()
+  })
 })

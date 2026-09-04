@@ -18,6 +18,63 @@ interface RecomputeOptions {
   batchId?: string
 }
 
+// actions_count metric: counts workouts logged per participant within the
+// challenge window.
+async function countWorkouts(
+  supabase: SupabaseLike,
+  windowStartAt: string,
+  windowEndAt: string,
+): Promise<Map<string, number>> {
+  const { data: workouts, error: workoutsError } = await supabase
+    .from('workouts')
+    .select('participant_id, start_time')
+    .gte('start_time', windowStartAt)
+    .lte('start_time', windowEndAt)
+
+  if (workoutsError) {
+    throw new Error(workoutsError.message)
+  }
+
+  const counts = new Map<string, number>()
+  for (const workout of workouts ?? []) {
+    const participantId = String(workout.participant_id ?? '')
+    if (!participantId) continue
+    counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
+  }
+  return counts
+}
+
+// device_wear_consistency metric (FR-13, Issue #66): counts days per
+// participant within the challenge window that have valid sleep+recovery
+// data — the same "wore the device" signal used by engagement scoring —
+// rather than counting logged workouts.
+async function countValidWearDays(
+  supabase: SupabaseLike,
+  windowStartAt: string,
+  windowEndAt: string,
+): Promise<Map<string, number>> {
+  const { data: wellnessRows, error: wellnessError } = await supabase
+    .from('daily_wellness')
+    .select('participant_id, date, recovery_score, sleep_perf')
+    .gte('date', windowStartAt)
+    .lte('date', windowEndAt)
+
+  if (wellnessError) {
+    throw new Error(wellnessError.message)
+  }
+
+  const counts = new Map<string, number>()
+  for (const row of wellnessRows ?? []) {
+    const participantId = String(row.participant_id ?? '')
+    if (!participantId) continue
+    const hasValidWearData = row.recovery_score !== null && row.recovery_score !== undefined
+      && row.sleep_perf !== null && row.sleep_perf !== undefined
+    if (!hasValidWearData) continue
+    counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
+  }
+  return counts
+}
+
 export async function recomputeActiveChallengeProgress(
   supabase: SupabaseLike,
   options: RecomputeOptions = {},
@@ -26,7 +83,7 @@ export async function recomputeActiveChallengeProgress(
   const source = options.source ?? 'scheduled_recompute'
   const { data: activeChallenge, error: activeChallengeError } = await supabase
     .from('challenges')
-    .select('id, status, threshold_value, window_start_at, window_end_at, version')
+    .select('id, status, metric_type, threshold_value, window_start_at, window_end_at, version')
     .eq('status', 'active')
     .maybeSingle()
 
@@ -45,22 +102,11 @@ export async function recomputeActiveChallengeProgress(
     throw new Error(participantsError.message)
   }
 
-  const { data: workouts, error: workoutsError } = await supabase
-    .from('workouts')
-    .select('participant_id, start_time')
-    .gte('start_time', activeChallenge.window_start_at)
-    .lte('start_time', activeChallenge.window_end_at)
-
-  if (workoutsError) {
-    throw new Error(workoutsError.message)
-  }
-
-  const counts = new Map<string, number>()
-  for (const workout of workouts ?? []) {
-    const participantId = String(workout.participant_id ?? '')
-    if (!participantId) continue
-    counts.set(participantId, (counts.get(participantId) ?? 0) + 1)
-  }
+  const metricType = activeChallenge.metric_type ?? 'actions_count'
+  const counts =
+    metricType === 'device_wear_consistency'
+      ? await countValidWearDays(supabase, activeChallenge.window_start_at, activeChallenge.window_end_at)
+      : await countWorkouts(supabase, activeChallenge.window_start_at, activeChallenge.window_end_at)
 
   const participantRows = (participants ?? []) as ChallengeParticipantRow[]
   const updateRequests = participantRows.map((participant) => {

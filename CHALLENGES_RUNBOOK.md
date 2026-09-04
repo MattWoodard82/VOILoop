@@ -46,6 +46,11 @@ POST /api/admin/challenges
 
 Expected: `201` with `status: "draft"`.
 
+> **Metric types:** `actions_count` counts logged workouts in the window. `device_wear_consistency`
+> (FR-13, Issue #66) instead counts days per participant with valid sleep+recovery data in
+> `daily_wellness` (both `recovery_score` and `sleep_perf` non-null) — i.e. days the device was
+> actually worn — rather than workouts. Both compare the resulting count against `threshold_value`.
+
 ### 2. Verify draft appears in list
 
 ```

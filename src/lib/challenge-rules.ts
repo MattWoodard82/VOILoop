@@ -1,5 +1,5 @@
 export type ChallengeStatus = 'draft' | 'active' | 'completed' | 'cancelled'
-export type ChallengeMetricType = 'actions_count'
+export type ChallengeMetricType = 'actions_count' | 'device_wear_consistency'
 export type ChallengeEligibilityMode = 'all_participants' | 'filtered'
 export type ChallengeCompletionSource = 'event' | 'scheduled_recompute' | 'manual_repair'
 export type ChallengeAuditAction = 'create' | 'update' | 'activate' | 'cancel' | 'complete' | 'recompute' | 'repair'
@@ -115,7 +115,8 @@ export function validateChallengePayload(payload: LooseChallengePayload): { ok: 
     if (String(payload.description).length > 1000) return { ok: false, code: 'INVALID_DESCRIPTION' }
   }
 
-  if (payload.metric_type !== undefined && String(payload.metric_type) !== 'actions_count') {
+  const supportedMetricTypes = new Set<ChallengeMetricType>(['actions_count', 'device_wear_consistency'])
+  if (payload.metric_type !== undefined && !supportedMetricTypes.has(String(payload.metric_type) as ChallengeMetricType)) {
     return { ok: false, code: 'INVALID_METRIC_TYPE' }
   }
 
