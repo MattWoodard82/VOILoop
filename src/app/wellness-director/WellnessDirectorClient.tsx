@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ParticipantWithWellness } from '@/types'
 import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
-import { recoveryColor } from '@/lib/utils'
+import { normalizeParticipantDisplayName, recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
 import type { ParticipantScoreResult, TeamHealthComponentKey, Window as ThsWindow } from '@/lib/team-health-score'
 import type { TeamHealthScoreConfig } from '@/lib/team-health-score-config'
@@ -231,7 +231,7 @@ export function WellnessDirectorClient({ participants }: Props) {
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
-      label: `${e.first_name} ${e.last_name}`,
+      label: normalizeParticipantDisplayName({ firstName: e.first_name, lastName: e.last_name }),
       value: e.engagement_score as number,
     }))
 

@@ -38,7 +38,11 @@ jest.mock('@/components/ui', () => {
     TableSkeleton: () => React.createElement('div', { className: 'table-skeleton' }),
   }
 })
-jest.mock('@/lib/utils', () => ({ recoveryColor: () => '#69BE28' }))
+jest.mock('@/lib/utils', () => ({
+  recoveryColor: () => '#69BE28',
+  normalizeParticipantDisplayName: ({ firstName, lastName }: { firstName?: string | null; lastName?: string | null }) =>
+    `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Unknown participant',
+}))
 jest.mock('next/link', () => {
   const React = require('react')
   const MockLink = ({ href, children }: { href: string; children: React.ReactNode }) => React.createElement('a', { href }, children)

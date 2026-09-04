@@ -1,7 +1,7 @@
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { getTeamDashboard, getCurrentWeekPulse } from '@/lib/supabase/queries'
 import { KpiCard, Card, Badge } from '@/components/ui'
-import { initials, safeAvg } from '@/lib/utils'
+import { initials, normalizeParticipantDisplayName, safeAvg } from '@/lib/utils'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { PulseSurvey } from '@/types'
@@ -96,13 +96,17 @@ export default async function PulsePage() {
               const score = pulseMap[e.id]?.mental_wellbeing ?? 0
               const count = pulseCounts[e.id] ?? 0
               const color = score >= 4 ? '#69BE28' : score >= 3 ? '#FFA500' : '#ff6b6b'
+              const displayName = normalizeParticipantDisplayName({ firstName: e.first_name, lastName: e.last_name })
               return (
                 <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
                   <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#1a4a2e', color: '#69BE28', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, flexShrink: 0 }}>
                     {initials(e.first_name, e.last_name)}
                   </div>
-                  <span style={{ width: 100, fontSize: 11, color: '#A5ACAF' }}>
-                    {e.first_name}{e.is_exact_data ? ' ★' : ''}
+                  <span
+                    title={displayName}
+                    style={{ width: 120, fontSize: 11, color: '#A5ACAF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 0 }}
+                  >
+                    {displayName}{e.is_exact_data ? ' ★' : ''}
                   </span>
                   <div style={{ flex: 1, height: 5, background: '#0a3560', borderRadius: 3, overflow: 'hidden' }}>
                     <div style={{ width: `${score * 20}%`, height: '100%', background: color, borderRadius: 3 }} />

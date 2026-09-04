@@ -69,6 +69,27 @@ export function initials(first?: string | null, last?: string | null): string {
   return `${firstInitial}${lastInitial}` || 'U'
 }
 
+export function normalizeParticipantDisplayName(input: {
+  firstName?: string | null
+  lastName?: string | null
+  username?: string | null
+  email?: string | null
+}): string {
+  const fullName = `${input.firstName?.trim() ?? ''} ${input.lastName?.trim() ?? ''}`.trim()
+  if (fullName) return fullName
+
+  const username = input.username?.trim()
+  if (username) return username
+
+  const email = input.email?.trim()
+  if (email) {
+    const localPart = email.split('@')[0]?.trim()
+    if (localPart) return localPart
+  }
+
+  return 'Unknown participant'
+}
+
 export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric'

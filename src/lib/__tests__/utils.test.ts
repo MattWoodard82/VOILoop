@@ -1,4 +1,4 @@
-import { initials } from '../utils'
+import { initials, normalizeParticipantDisplayName } from '../utils'
 
 describe('initials', () => {
   test('returns both initials when both names are present', () => {
@@ -19,5 +19,43 @@ describe('initials', () => {
 
   test('trims whitespace before deriving initials', () => {
     expect(initials('  Kyle ', ' Schuppan  ')).toBe('KS')
+  })
+})
+
+describe('normalizeParticipantDisplayName', () => {
+  test('prefers full name when available', () => {
+    expect(normalizeParticipantDisplayName({
+      firstName: 'Chris',
+      lastName: 'Simmons',
+      username: 'csimmons',
+      email: 'chris@example.com',
+    })).toBe('Chris Simmons')
+  })
+
+  test('falls back to username when full name is missing', () => {
+    expect(normalizeParticipantDisplayName({
+      firstName: ' ',
+      lastName: '',
+      username: 'jrevis',
+      email: 'jrevis@example.com',
+    })).toBe('jrevis')
+  })
+
+  test('falls back to email local-part when full name and username are missing', () => {
+    expect(normalizeParticipantDisplayName({
+      firstName: '',
+      lastName: '',
+      username: '',
+      email: 'nrevis@lylepearson.com',
+    })).toBe('nrevis')
+  })
+
+  test('returns stable unknown label when all sources are missing', () => {
+    expect(normalizeParticipantDisplayName({
+      firstName: '',
+      lastName: '',
+      username: '',
+      email: '',
+    })).toBe('Unknown participant')
   })
 })

@@ -27,9 +27,17 @@ export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
   if (type === 'recovery') {
     return (
       <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={withDisplayValue} layout="vertical" margin={{ left: 4, right: 28, top: 4, bottom: 4 }}>
+        <BarChart data={withDisplayValue} layout="vertical" margin={{ left: 4, right: 28, top: 4, bottom: 4 }} barCategoryGap={10}>
           <XAxis type="number" domain={[0, 100]} tick={TICK} axisLine={false} tickLine={false} />
-          <YAxis type="category" dataKey="name" tick={TICK} axisLine={false} tickLine={false} width={68} />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={TICK}
+            axisLine={false}
+            tickLine={false}
+            width={120}
+            tickFormatter={(value: string) => (value.length > 16 ? `${value.slice(0, 16)}…` : value)}
+          />
           <Tooltip
             contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }}
             labelStyle={{ color: '#fff' }}

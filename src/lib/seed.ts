@@ -66,6 +66,12 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
 const DATE = '2026-06-09'
 const WEEK_OF = '2026-06-09' // Monday of seed week
 
+function shiftIsoDate(date: string, days: number): string {
+  const dt = new Date(`${date}T00:00:00.000Z`)
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return dt.toISOString().slice(0, 10)
+}
+
 // Maps participant id → { email, password }
 // test1@user.com is mapped to Colin Stephenson (EMP005)
 const PARTICIPANT_AUTH: Record<string, { email: string; password: string }> = {
@@ -310,9 +316,20 @@ async function seed() {
     { participant_id: 'EMP010', date: DATE, confident_health: true, body_trending_good: true, energy_level: 3, rest_quality: 3, stress_level: 3, physical_activity: ['outside'], mental_wellbeing: 3, program_supported: 'neutral', whoop_reviewed: 'yes_once', health_flag: 'Intervention in progress; monitoring weekly energy.' },
   ]
 
+  // Add a few prior-week responses so Pulse dashboards can show richer participant
+  // distributions and week-over-week realism after a fresh local seed.
+  const extraPulse = [
+    { participant_id: 'EMP001', date: shiftIsoDate(DATE, -7), confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['fitness_center'], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+    { participant_id: 'EMP003', date: shiftIsoDate(DATE, -7), confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 5, stress_level: 2, physical_activity: ['outside'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    { participant_id: 'EMP004', date: shiftIsoDate(DATE, -7), confident_health: false, body_trending_good: false, energy_level: 2, rest_quality: 3, stress_level: 4, physical_activity: ['none'], mental_wellbeing: 2, program_supported: 'neutral', whoop_reviewed: 'no', health_flag: 'Stress elevated after double-shift week.' },
+    { participant_id: 'EMP006', date: shiftIsoDate(DATE, -7), confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 3, physical_activity: ['local_gym'], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    { participant_id: 'EMP008', date: shiftIsoDate(DATE, -7), confident_health: false, body_trending_good: false, energy_level: 1, rest_quality: 2, stress_level: 5, physical_activity: ['none'], mental_wellbeing: 1, program_supported: 'no', whoop_reviewed: 'no', health_flag: 'Continued low recovery and high stress.' },
+    { participant_id: 'EMP010', date: shiftIsoDate(DATE, -7), confident_health: true, body_trending_good: true, energy_level: 3, rest_quality: 3, stress_level: 3, physical_activity: ['outside'], mental_wellbeing: 3, program_supported: 'neutral', whoop_reviewed: 'yes_once', health_flag: null },
+  ]
+
   const { error: pulseErr } = await supabase
     .from('pulse_surveys')
-    .upsert(pulse, { onConflict: 'participant_id,date' })
+    .upsert([...pulse, ...extraPulse], { onConflict: 'participant_id,date' })
   if (pulseErr) { console.error('Pulse:', pulseErr); process.exit(1) }
   console.log('✅ Pulse surveys seeded')
 
