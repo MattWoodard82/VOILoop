@@ -8,8 +8,14 @@ const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
 const GRID = '#0a3560'
 const VALUE_LABEL_STYLE = { fill: '#fff', fontSize: 10, fontFamily: 'Inter' }
 
+// Minimum vertical space (px) each row needs so its YAxis category label doesn't
+// get silently dropped by Recharts' overlap-avoidance when there are more rows
+// than the fixed 210px default comfortably fits (e.g. a cohort-sized participant
+// list rather than the 3-5 fixed rows the "recovery" layout was designed for).
+const MIN_ROW_HEIGHT = 26
+
 export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
-  const height = type === 'recovery' ? 210 : 130
+  const height = type === 'recovery' ? Math.max(210, data.length * MIN_ROW_HEIGHT) : 130
   // Bars need a plotted number even for "no data" (rendered as an empty/zero-height
   // bar via color), but the tooltip (and the end-of-bar value label) should say so
   // explicitly rather than "0" - otherwise a genuinely missing window looks
