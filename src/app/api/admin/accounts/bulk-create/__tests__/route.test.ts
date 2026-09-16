@@ -359,4 +359,51 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     const body = await response.text()
     expect(body).toContain('"pilot@example.com","participant","EMP007","","existing-password-preserved"')
   })
+
+  test('preserves passwords for accounts discovered after the initial user scan', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const upsertUserAccess = jest.fn(async () => ({ error: null }))
+    const createUser = jest.fn()
+    const updateUserById = jest.fn()
+    const listUsers = jest.fn()
+      .mockResolvedValueOnce({ data: { users: [] }, error: null })
+      .mockResolvedValueOnce({
+        data: { users: [{ id: 'concurrent-user', email: 'concurrent@example.com' }] },
+        error: null,
+      })
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      auth: {
+        admin: {
+          listUsers,
+          createUser,
+          updateUserById,
+        },
+      },
+      from: jest.fn(() => ({ upsert: upsertUserAccess })),
+    } as never)
+
+    const response = await POST(makeRequest('email\nconcurrent@example.com', 'wellness_director'))
+
+    expect(response.status).toBe(200)
+    expect(createUser).not.toHaveBeenCalled()
+    expect(updateUserById).not.toHaveBeenCalled()
+    expect(upsertUserAccess).toHaveBeenCalledWith({
+      user_id: 'concurrent-user',
+      role: 'wellness_director',
+    }, { onConflict: 'user_id' })
+    await expect(response.text()).resolves.toContain(
+      '"concurrent@example.com","wellness_director","","","existing-password-preserved"'
+    )
+  })
 })

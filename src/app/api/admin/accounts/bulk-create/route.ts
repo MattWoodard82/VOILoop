@@ -322,26 +322,28 @@ export async function POST(request: Request) {
   for (const email of parsed.emails) {
     let userId = existingUsersByEmail.get(email)
     const existingUserId = userId
-    const password = existingUserId ? '' : randomPassword(8)
+    const generatedPassword = existingUserId ? '' : randomPassword(8)
     let participantId = ''
-    let status = existingUserId ? 'existing-password-preserved' : 'created'
+    let password = ''
+    let status = 'created'
 
     try {
       const provisioned = await provisionSupabaseAccount({
         adminClient,
         email,
-        password,
+        password: generatedPassword,
         role: config.role,
         mustChangePassword: true,
         existingUserId: userId,
-        updateExistingPassword: !existingUserId,
+        updateExistingPassword: false,
       })
       userId = provisioned.userId
-      status = existingUserId ? 'existing-password-preserved' : provisioned.status
+      password = provisioned.status === 'created' ? generatedPassword : ''
+      status = provisioned.status === 'created' ? 'created' : 'existing-password-preserved'
       existingUsersByEmail.set(email, userId)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create user'
-      outputRows.push({ email, accountType, participantId: '', password, status: `error:${message}` })
+      outputRows.push({ email, accountType, participantId: '', password: '', status: `error:${message}` })
       continue
     }
 
