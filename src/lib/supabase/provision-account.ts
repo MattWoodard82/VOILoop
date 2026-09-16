@@ -29,6 +29,7 @@ interface ProvisionSupabaseAccountInput {
   role: ProvisionableRole
   mustChangePassword: boolean
   existingUserId?: string | null
+  updateExistingPassword?: boolean
 }
 
 interface ProvisionSupabaseAccountResult {
@@ -80,14 +81,18 @@ export async function provisionSupabaseAccount(
     userId = await findUserIdByEmail(input.adminClient, normalizedEmail)
   }
 
-  if (userId) {
-    const { error } = await input.adminClient.auth.admin.updateUserById(userId, {
-      password: input.password,
-      email_confirm: true,
-    }) as UpdateUserResult
+  const shouldUpdateExistingPassword = input.updateExistingPassword ?? true
 
-    if (error) {
-      throw new Error(error.message)
+  if (userId) {
+    if (shouldUpdateExistingPassword) {
+      const { error } = await input.adminClient.auth.admin.updateUserById(userId, {
+        password: input.password,
+        email_confirm: true,
+      }) as UpdateUserResult
+
+      if (error) {
+        throw new Error(error.message)
+      }
     }
   } else {
     const { data, error } = await input.adminClient.auth.admin.createUser({
@@ -104,13 +109,22 @@ export async function provisionSupabaseAccount(
     status = 'created'
   }
 
+  const accessPayload: {
+    user_id: string
+    role: ProvisionableRole
+    must_change_password?: boolean
+  } = {
+    user_id: userId,
+    role: input.role,
+  }
+
+  if (status === 'created' || shouldUpdateExistingPassword) {
+    accessPayload.must_change_password = input.mustChangePassword
+  }
+
   const { error: accessError } = await input.adminClient
     .from('user_access')
-    .upsert({
-      user_id: userId,
-      role: input.role,
-      must_change_password: input.mustChangePassword,
-    }, { onConflict: 'user_id' }) as UpsertAccessResult
+    .upsert(accessPayload, { onConflict: 'user_id' }) as UpsertAccessResult
 
   if (accessError) {
     throw new Error(accessError.message)
