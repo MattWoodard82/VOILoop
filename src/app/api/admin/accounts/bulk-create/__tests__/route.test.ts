@@ -293,4 +293,117 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     })
     expect(updateParticipantEq).toHaveBeenCalledWith('id', 'EMP010')
   })
+
+  test('preserves existing account passwords during participant re-imports', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const upsertUserAccess = jest.fn(async () => ({ error: null }))
+    const updateUserById = jest.fn(async () => ({ error: null }))
+    const insertParticipant = jest.fn(async () => ({ error: null }))
+    const listUsers = jest.fn(async () => ({
+      data: { users: [{ id: 'existing-auth-user', email: 'pilot@example.com' }] },
+      error: null,
+    }))
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      auth: {
+        admin: {
+          listUsers,
+          createUser: jest.fn(),
+          updateUserById,
+        },
+      },
+      from: jest.fn((table: string) => {
+        if (table === 'user_access') {
+          return { upsert: upsertUserAccess }
+        }
+
+        if (table === 'participants') {
+          return {
+            select: jest.fn(async () => ({
+              data: [{
+                id: 'EMP007',
+                auth_user_id: 'existing-auth-user',
+                first_name: 'Pilot',
+                last_name: 'Account',
+              }],
+              error: null,
+            })),
+            insert: insertParticipant,
+          }
+        }
+
+        return {}
+      }),
+    } as never)
+
+    const response = await POST(makeRequest('email\npilot@example.com', 'participant'))
+
+    expect(response.status).toBe(200)
+    expect(updateUserById).not.toHaveBeenCalled()
+    expect(insertParticipant).not.toHaveBeenCalled()
+    expect(upsertUserAccess).toHaveBeenCalledWith({
+      user_id: 'existing-auth-user',
+      role: 'participant',
+    }, { onConflict: 'user_id' })
+
+    const body = await response.text()
+    expect(body).toContain('"pilot@example.com","participant","EMP007","","existing-password-preserved"')
+  })
+
+  test('preserves passwords for accounts discovered after the initial user scan', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'admin-user' } } as never)
+    mockCreateServerSupabaseClient.mockReturnValue({
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({ data: { role: 'admin' }, error: null })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const upsertUserAccess = jest.fn(async () => ({ error: null }))
+    const createUser = jest.fn()
+    const updateUserById = jest.fn()
+    const listUsers = jest.fn()
+      .mockResolvedValueOnce({ data: { users: [] }, error: null })
+      .mockResolvedValueOnce({
+        data: { users: [{ id: 'concurrent-user', email: 'concurrent@example.com' }] },
+        error: null,
+      })
+
+    mockCreateAdminSupabaseClient.mockReturnValue({
+      auth: {
+        admin: {
+          listUsers,
+          createUser,
+          updateUserById,
+        },
+      },
+      from: jest.fn(() => ({ upsert: upsertUserAccess })),
+    } as never)
+
+    const response = await POST(makeRequest('email\nconcurrent@example.com', 'wellness_director'))
+
+    expect(response.status).toBe(200)
+    expect(createUser).not.toHaveBeenCalled()
+    expect(updateUserById).not.toHaveBeenCalled()
+    expect(upsertUserAccess).toHaveBeenCalledWith({
+      user_id: 'concurrent-user',
+      role: 'wellness_director',
+    }, { onConflict: 'user_id' })
+    await expect(response.text()).resolves.toContain(
+      '"concurrent@example.com","wellness_director","","","existing-password-preserved"'
+    )
+  })
 })

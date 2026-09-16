@@ -108,4 +108,27 @@ describe('provisionSupabaseAccount', () => {
       email_confirm: true,
     })
   })
+
+  test('can preserve an existing account password while updating access', async () => {
+    const mocks = createMockAdminClient()
+
+    const result = await provisionSupabaseAccount({
+      adminClient: mocks.adminClient,
+      email: 'wd@example.com',
+      password: '',
+      role: 'wellness_director',
+      mustChangePassword: true,
+      existingUserId: 'known-user-id',
+      updateExistingPassword: false,
+    })
+
+    expect(result).toEqual({ userId: 'known-user-id', status: 'updated' })
+    expect(mocks.listUsers).not.toHaveBeenCalled()
+    expect(mocks.createUser).not.toHaveBeenCalled()
+    expect(mocks.updateUserById).not.toHaveBeenCalled()
+    expect(mocks.upsert).toHaveBeenCalledWith({
+      user_id: 'known-user-id',
+      role: 'wellness_director',
+    }, { onConflict: 'user_id' })
+  })
 })

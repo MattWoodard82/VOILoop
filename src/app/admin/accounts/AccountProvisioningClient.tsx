@@ -16,14 +16,14 @@ const ACCOUNT_TYPE_COPY: Record<AccountType, {
   participant: {
     title: 'Participant accounts',
     successLabel: 'participant',
-    description: 'Upload a CSV of user emails. Each account is created as a participant, receives a generated password, and is required to change that password at first login.',
+    description: 'Upload a CSV of user emails. New accounts are created as participants with generated passwords and first-login password changes. Existing accounts keep their current passwords.',
     downloadName: 'participant-passwords.csv',
     buttonLabel: 'Generate Participant Password CSV',
   },
   wellness_director: {
     title: 'Wellness Director accounts',
     successLabel: 'Wellness Director',
-    description: 'Upload a CSV of user emails. Each account is created as a Wellness Director, receives a generated password, and is required to change that password at first login.',
+    description: 'Upload a CSV of user emails. New accounts are created as Wellness Directors with generated passwords and first-login password changes. Existing accounts keep their current passwords.',
     downloadName: 'wellness-director-passwords.csv',
     buttonLabel: 'Generate Wellness Director Password CSV',
   },
