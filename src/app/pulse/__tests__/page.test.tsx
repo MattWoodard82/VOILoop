@@ -1,6 +1,7 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import PulsePage, { selectLatestPulseByParticipant } from '../page'
+import PulsePage from '../page'
+import { selectLatestPulseByParticipant } from '../selectLatestPulseByParticipant'
 import type { PulseSurvey } from '@/types'
 
 jest.mock('next/navigation', () => ({
