@@ -9,6 +9,8 @@ export const runtime = 'nodejs'
 // console's expanded nudge list (see MAX_DISPLAYED_NUDGES in
 // src/app/api/admin/events/route.ts).
 const MAX_NUDGE_HISTORY = 50
+const MAX_TARGETED_NUDGES = MAX_NUDGE_HISTORY + 1
+const ACKNOWLEDGEMENT_DECRYPT_CONCURRENCY = 8
 
 interface TargetedNudgeRow {
   id: string
@@ -118,7 +120,7 @@ async function getTargetedNudges(
     .in('id', targetedNudgeIds)
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
-    .limit(MAX_NUDGE_HISTORY)
+    .limit(MAX_TARGETED_NUDGES)
 
   if (error) return { error }
 
@@ -143,37 +145,92 @@ interface DecryptedAcknowledgement {
   response_due_at: string
 }
 
-async function loadDecryptedAcknowledgement(
-  supabase: ReturnType<typeof createServerSupabaseClient>,
-  nudgeId: string,
-  participantId: string,
-): Promise<{ acknowledgement: DecryptedAcknowledgement | null } | { error: { message: string } }> {
-  const { data, error } = await supabase
-    .from('nudge_acknowledgements')
-    .select('acknowledged_at, response_text_encrypted, response_due_at')
-    .eq('nudge_id', nudgeId)
-    .eq('participant_id', participantId)
-    .maybeSingle()
-  if (error) return { error }
+interface AcknowledgementRow {
+  nudge_id: string
+  acknowledged_at: string
+  response_text_encrypted: string | null
+  response_due_at: string
+}
 
-  if (!data || !data.response_text_encrypted) {
-    return { acknowledgement: null }
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<TResult>,
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length)
+  let nextIndex = 0
+
+  async function worker() {
+    while (true) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      if (currentIndex >= items.length) return
+      results[currentIndex] = await mapper(items[currentIndex])
+    }
   }
 
-  // Decrypt the response using the stored procedure
-  const { data: decrypted, error: decryptError } = await supabase
-    .rpc('decrypt_nudge_response', {
-      encrypted_data: data.response_text_encrypted,
-      key: getDbEncryptionKey(),
-    })
-  if (decryptError) return { error: decryptError }
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  )
 
-  return {
-    acknowledgement: {
-      acknowledged_at: data.acknowledged_at,
-      response_text: decrypted,
-      response_due_at: data.response_due_at,
-    },
+  return results
+}
+
+async function loadDecryptedAcknowledgements(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  nudgeIds: string[],
+  participantId: string,
+): Promise<{ acknowledgementsByNudgeId: Map<string, DecryptedAcknowledgement> } | { error: { message: string } }> {
+  if (!nudgeIds.length) {
+    return { acknowledgementsByNudgeId: new Map() }
+  }
+
+  const { data, error } = await supabase
+    .from('nudge_acknowledgements')
+    .select('nudge_id, acknowledged_at, response_text_encrypted, response_due_at')
+    .eq('participant_id', participantId)
+    .in('nudge_id', nudgeIds)
+  if (error) return { error }
+
+  const acknowledgementRows = (data ?? []) as AcknowledgementRow[]
+  const decryptableRows = acknowledgementRows.filter((row) => row.response_text_encrypted)
+
+  try {
+    const decryptedAcknowledgements = await mapWithConcurrency(
+      decryptableRows,
+      ACKNOWLEDGEMENT_DECRYPT_CONCURRENCY,
+      async (row) => {
+        const { data: decrypted, error: decryptError } = await supabase.rpc('decrypt_nudge_response', {
+          encrypted_data: row.response_text_encrypted,
+          key: getDbEncryptionKey(),
+        })
+        if (decryptError) throw decryptError
+
+        return [
+          row.nudge_id,
+          {
+            acknowledged_at: row.acknowledged_at,
+            response_text: decrypted ?? '',
+            response_due_at: row.response_due_at,
+          },
+        ] as const
+      },
+    )
+
+    return {
+      acknowledgementsByNudgeId: new Map(decryptedAcknowledgements),
+    }
+  } catch (decryptionError) {
+    if (
+      typeof decryptionError === 'object' &&
+      decryptionError !== null &&
+      'message' in decryptionError &&
+      typeof decryptionError.message === 'string'
+    ) {
+      return { error: { message: decryptionError.message } }
+    }
+
+    return { error: { message: 'Unable to decrypt nudge acknowledgement.' } }
   }
 }
 
@@ -220,20 +277,19 @@ export async function GET() {
   const nudges = 'nudges' in nudgesResult ? nudgesResult.nudges : []
   const nudge = nudges[0] ?? null
   const historyNudges = nudges.slice(1)
+  const acknowledgementResult = await loadDecryptedAcknowledgements(
+    supabase,
+    nudges.map((targetedNudge) => targetedNudge.id),
+    participantId,
+  )
+  if ('error' in acknowledgementResult) return NextResponse.json({ error: acknowledgementResult.error.message }, { status: 500 })
 
-  let acknowledgement = null
-  if (nudge?.id) {
-    const result = await loadDecryptedAcknowledgement(supabase, nudge.id, participantId)
-    if ('error' in result) return NextResponse.json({ error: result.error.message }, { status: 500 })
-    acknowledgement = result.acknowledgement
-  }
-
-  const history: Array<TargetedNudgeRow & { acknowledgement: DecryptedAcknowledgement | null }> = []
-  for (const historyNudge of historyNudges) {
-    const result = await loadDecryptedAcknowledgement(supabase, historyNudge.id, participantId)
-    if ('error' in result) return NextResponse.json({ error: result.error.message }, { status: 500 })
-    history.push({ ...historyNudge, acknowledgement: result.acknowledgement })
-  }
+  const acknowledgementByNudgeId = acknowledgementResult.acknowledgementsByNudgeId
+  const acknowledgement = nudge ? acknowledgementByNudgeId.get(nudge.id) ?? null : null
+  const history: Array<TargetedNudgeRow & { acknowledgement: DecryptedAcknowledgement | null }> = historyNudges.map((historyNudge) => ({
+    ...historyNudge,
+    acknowledgement: acknowledgementByNudgeId.get(historyNudge.id) ?? null,
+  }))
 
   return NextResponse.json({
     events: events ?? [],

@@ -343,11 +343,8 @@ export function WellnessDirectorClient({ participants }: Props) {
           {configLoaded ? (
             <WellnessDirectorCharts
               type="recovery"
-              data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))}
-              onBarClick={(name) => {
-                const match = engagementRows.find((row) => row.label === name)
-                if (match) setPersonFilter(match.id)
-              }}
+              data={engagementRows.map((row) => ({ id: row.id, name: row.label, value: row.value, color: recoveryColor(row.value) }))}
+              onBarClick={(participantId) => setPersonFilter(participantId)}
             />
           ) : (
             <ChartSkeleton height={210} />

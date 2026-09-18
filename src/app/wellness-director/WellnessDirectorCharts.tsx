@@ -1,13 +1,13 @@
 'use client'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts'
 
-interface ChartData { name: string; value: number; color: string; label?: string }
+interface ChartData { id?: string; name: string; value: number; color: string; label?: string }
 interface Props {
   type: 'recovery' | 'hrv' | 'strain'
   data: ChartData[]
   seriesName?: string
-  /** Called with the clicked row's `name` (only wired up for the "recovery"/per-participant chart). */
-  onBarClick?: (name: string) => void
+  /** Called with the clicked row's `id` (only wired up for the per-participant chart). */
+  onBarClick?: (id: string) => void
 }
 
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
@@ -60,7 +60,7 @@ export function WellnessDirectorCharts({ type, data, seriesName, onBarClick }: P
             dataKey="value"
             radius={[0, 4, 4, 0]}
             name={seriesName ?? 'Recovery'}
-            onClick={onBarClick ? (entry: ChartData) => onBarClick(entry.name) : undefined}
+            onClick={onBarClick ? (entry: ChartData) => { if (entry.id) onBarClick(entry.id) } : undefined}
             cursor={onBarClick ? 'pointer' : undefined}
           >
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}

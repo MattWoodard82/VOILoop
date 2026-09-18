@@ -35,6 +35,12 @@ function createGetRouteMock({
   events = [{ id: 'evt-1', title: 'Walk Club' }],
   rsvps = [{ event_id: 'evt-1' }],
   acknowledgement = null,
+  acknowledgements = acknowledgement
+    ? [{ nudge_id: nudgeRows[0]?.id ?? 'nudge-1', ...acknowledgement }]
+    : [],
+  decryptedResponses = {},
+  onAcknowledgementNudgeIds,
+  onNudgeLimit,
 }: {
   cohort?: string | null
   targetedRows?: Array<{ nudge_id: string; target_type?: string; target_label?: string; participant_id?: string | null }>
@@ -42,6 +48,10 @@ function createGetRouteMock({
   events?: Array<{ id: string; title: string }>
   rsvps?: Array<{ event_id: string }>
   acknowledgement?: { acknowledged_at: string; response_text_encrypted: string; response_due_at: string } | null
+  acknowledgements?: Array<{ nudge_id: string; acknowledged_at: string; response_text_encrypted: string; response_due_at: string }>
+  decryptedResponses?: Record<string, string>
+  onAcknowledgementNudgeIds?: (nudgeIds: string[]) => void
+  onNudgeLimit?: (limit: number) => void
 }) {
   const participantsMaybeSingle = jest
     .fn()
@@ -79,10 +89,13 @@ function createGetRouteMock({
             in: jest.fn(() => ({
               lte: jest.fn(() => ({
                 order: jest.fn(() => ({
-                  limit: jest.fn(async () => ({
-                    data: nudgeRows,
-                    error: null,
-                  })),
+                  limit: jest.fn(async (limit: number) => {
+                    onNudgeLimit?.(limit)
+                    return {
+                      data: nudgeRows,
+                      error: null,
+                    }
+                  }),
                 })),
               })),
             })),
@@ -117,21 +130,22 @@ function createGetRouteMock({
         return {
           select: jest.fn(() => ({
             eq: jest.fn(() => ({
-              eq: jest.fn(() => ({
-                maybeSingle: jest.fn(async () => ({
-                  data: acknowledgement,
+              in: jest.fn(async (_column: string, nudgeIds: string[]) => {
+                onAcknowledgementNudgeIds?.(nudgeIds)
+                return {
+                  data: acknowledgements.filter((row) => nudgeIds.includes(row.nudge_id)),
                   error: null,
-                })),
-              })),
+                }
+              }),
             })),
           })),
         }
       }
       throw new Error(`Unexpected table ${table}`)
     }),
-    rpc: jest.fn(async (name: string) => {
+    rpc: jest.fn(async (name: string, params?: { encrypted_data?: string }) => {
       if (name === 'decrypt_nudge_response') {
-        return { data: 'Will do', error: null }
+        return { data: decryptedResponses[params?.encrypted_data ?? ''] ?? 'Will do', error: null }
       }
       throw new Error(`Unexpected RPC ${name}`)
     }),
@@ -194,6 +208,98 @@ describe('/api/participant/events', () => {
       history: [],
       rsvpEventIds: ['evt-1'],
     })
+  })
+
+  test('GET batches acknowledgement loading across current and history nudges', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const requestedNudgeIds: string[][] = []
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [
+        { nudge_id: 'nudge-3', target_type: 'all', target_label: '', participant_id: null },
+        { nudge_id: 'nudge-2', target_type: 'all', target_label: '', participant_id: null },
+        { nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null },
+      ],
+      nudgeRows: [
+        { id: 'nudge-3', message: 'Newest', author: 'Coach', week_of: '2026-07-22' },
+        { id: 'nudge-2', message: 'Middle', author: 'Coach', week_of: '2026-07-15' },
+        { id: 'nudge-1', message: 'Oldest', author: 'Coach', week_of: '2026-07-08' },
+      ],
+      acknowledgements: [
+        {
+          nudge_id: 'nudge-3',
+          acknowledged_at: '2026-07-22T12:00:00Z',
+          response_text_encrypted: 'encrypted-newest',
+          response_due_at: '2026-07-24T12:00:00Z',
+        },
+        {
+          nudge_id: 'nudge-1',
+          acknowledged_at: '2026-07-08T12:00:00Z',
+          response_text_encrypted: 'encrypted-oldest',
+          response_due_at: '2026-07-10T12:00:00Z',
+        },
+      ],
+      decryptedResponses: {
+        'encrypted-newest': 'Newest reply',
+        'encrypted-oldest': 'Oldest reply',
+      },
+      onAcknowledgementNudgeIds: (nudgeIds) => requestedNudgeIds.push(nudgeIds),
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(requestedNudgeIds).toEqual([['nudge-3', 'nudge-2', 'nudge-1']])
+    expect(body.acknowledgement).toEqual({
+      acknowledged_at: '2026-07-22T12:00:00Z',
+      response_text: 'Newest reply',
+      response_due_at: '2026-07-24T12:00:00Z',
+    })
+    expect(body.history).toEqual([
+      {
+        id: 'nudge-2',
+        message: 'Middle',
+        author: 'Coach',
+        week_of: '2026-07-15',
+        acknowledgement: null,
+      },
+      {
+        id: 'nudge-1',
+        message: 'Oldest',
+        author: 'Coach',
+        week_of: '2026-07-08',
+        acknowledgement: {
+          acknowledged_at: '2026-07-08T12:00:00Z',
+          response_text: 'Oldest reply',
+          response_due_at: '2026-07-10T12:00:00Z',
+        },
+      },
+    ])
+  })
+
+  test('GET requests one current nudge plus fifty history entries', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const observedLimits: number[] = []
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [{ nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' }],
+      onNudgeLimit: (limit) => observedLimits.push(limit),
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(200)
+    expect(observedLimits).toEqual([51])
   })
 
   test('GET returns a nudge targeted to all participants', async () => {

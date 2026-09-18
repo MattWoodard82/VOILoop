@@ -41,6 +41,11 @@ const PARTICIPANT_LINKED_TABLES = [
   'login_activity',
 ] as const
 
+interface TableCountResult {
+  count: number | null
+  error: string | null
+}
+
 async function listAllAuthUsers() {
   const adminClient = createAdminSupabaseClient()
   const users: Array<{ id: string; email: string; created_at?: string }> = []
@@ -68,7 +73,11 @@ async function listAllAuthUsers() {
   return { adminClient, users }
 }
 
-async function countRows(adminClient: ReturnType<typeof createAdminSupabaseClient>, table: string, participantId: string): Promise<number> {
+async function countRows(
+  adminClient: ReturnType<typeof createAdminSupabaseClient>,
+  table: string,
+  participantId: string
+): Promise<TableCountResult> {
   const { count, error } = await adminClient
     .from(table)
     .select('*', { count: 'exact', head: true })
@@ -76,11 +85,12 @@ async function countRows(adminClient: ReturnType<typeof createAdminSupabaseClien
 
   if (error) {
     // Some tables may not exist in every environment (e.g. optional migrations
-    // not yet applied) — treat as zero rather than failing the whole report.
+    // not yet applied). Represent failures as unknown so cleanup decisions
+    // cannot rely on a fabricated zero row count.
     console.warn(`Warning: could not count ${table} for participant ${participantId}: ${error.message}`)
-    return 0
+    return { count: null, error: error.message }
   }
-  return count ?? 0
+  return { count: count ?? 0, error: null }
 }
 
 async function main() {
@@ -101,8 +111,8 @@ async function main() {
     participantId: string | null
     employeeId: string | null
     name: string | null
-    dataCounts: Record<string, number>
-    totalRows: number
+    dataCounts: Record<string, TableCountResult>
+    totalRows: number | null
   }> = []
 
   for (const user of testUsers) {
@@ -116,14 +126,21 @@ async function main() {
       console.warn(`Warning: could not look up participant for ${user.email}: ${participantError.message}`)
     }
 
-    const dataCounts: Record<string, number> = {}
+    const dataCounts: Record<string, TableCountResult> = {}
     let totalRows = 0
+    let hasUnknownCounts = false
 
     if (participant?.id) {
       for (const table of PARTICIPANT_LINKED_TABLES) {
-        const count = await countRows(adminClient, table, participant.id)
-        dataCounts[table] = count
-        totalRows += count
+        const result = await countRows(adminClient, table, participant.id)
+        dataCounts[table] = result
+
+        if (result.count === null) {
+          hasUnknownCounts = true
+          continue
+        }
+
+        totalRows += result.count
       }
     }
 
@@ -135,7 +152,7 @@ async function main() {
       employeeId: participant?.employee_id ?? null,
       name: participant ? `${participant.first_name ?? ''} ${participant.last_name ?? ''}`.trim() || null : null,
       dataCounts,
-      totalRows,
+      totalRows: hasUnknownCounts ? null : totalRows,
     })
   }
 
@@ -150,13 +167,20 @@ async function main() {
     console.log(`    participant_id: ${row.participantId ?? '(no participant row)'}`)
     console.log(`    employee_id:    ${row.employeeId ?? 'n/a'}`)
     console.log(`    name:           ${row.name ?? 'n/a'}`)
-    console.log(`    data rows:      ${row.totalRows} total (${Object.entries(row.dataCounts).map(([t, c]) => `${t}=${c}`).join(', ') || 'no participant row'})`)
+    const countSummary = Object.entries(row.dataCounts)
+      .map(([table, result]) => result.count === null ? `${table}=UNKNOWN [count failed: ${result.error ?? 'unknown error'}]` : `${table}=${result.count}`)
+      .join(', ')
+    const totalSummary = row.totalRows === null ? 'UNKNOWN total (incomplete count data)' : `${row.totalRows} total`
+    console.log(`    data rows:      ${totalSummary} (${countSummary || 'no participant row'})`)
     console.log('')
   }
 
   console.log('--- SUMMARY ---')
   console.log(`Total test accounts found: ${rows.length}`)
   console.log(`Emails: ${rows.map(r => r.email).join(', ')}`)
+  if (rows.some(row => row.totalRows === null)) {
+    console.log('WARNING: One or more per-table row counts failed. Any account with UNKNOWN totals must be reviewed manually and is not safe to approve for deletion from this report alone.')
+  }
   console.log('\nThis script made NO changes. Review this list and confirm which single account to KEEP')
   console.log('before any deletion script is written or run.')
 }
