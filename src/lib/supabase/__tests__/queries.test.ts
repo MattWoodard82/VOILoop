@@ -8,6 +8,7 @@ import {
   getTeamHealthScoreConfig,
   getWorkoutHistoryForParticipants,
   getTeamHealthScore,
+  isLatestMeaningfulWellnessStale,
 } from '../queries'
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
@@ -1144,6 +1145,142 @@ describe('getTeamDashboard', () => {
     expect(dashboard.participants.map((p) => p.id).sort()).toEqual(['P1', 'P2'])
     expect(dashboard.stats.total_participants).toBe(2)
     expect(dashboard.stats.test_account_filtering_unavailable).toBe(true)
+  })
+
+  test('flags "No wellness data for 14 days" when the latest meaningful wellness row is older than 14 days, even though getLatestWellness still returns that stale row for display', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-10T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    // Latest meaningful row is 20 days before "now" - well past the 14-day window.
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2026-07-21', recovery_score: 70, hrv_ms: 60, sleep_perf: 80 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participant = dashboard.participants[0]
+
+    // The stale row must still be surfaced as latest_wellness for existing dashboard
+    // rendering - only risk detection changes.
+    expect(participant.latest_wellness?.date).toBe('2026-07-21')
+    expect(participant.risk_trigger_reasons).toContain('No wellness data for 14 days')
+    expect(participant.risk_level).toBe('High')
+
+    jest.useRealTimers()
+  })
+
+  test('does not flag "No wellness data for 14 days" when the latest meaningful wellness row is recent', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-10T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false,
+      },
+    ]
+
+    // Latest meaningful row is only 5 days before "now".
+    const dailyWellness = [
+      { id: 'w1', participant_id: 'P1', date: '2026-08-05', recovery_score: 70, hrv_ms: 60, sleep_perf: 80 },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: dailyWellness,
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participant = dashboard.participants[0]
+
+    expect(participant.risk_trigger_reasons).not.toContain('No wellness data for 14 days')
+
+    jest.useRealTimers()
+  })
+
+  test('exempts a participant enrolled fewer than 14 days ago from the no-data trigger even with zero wellness rows', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-10T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Alice', last_name: 'Able', department: 'Ops',
+        location_id: null, employment_type: null, title: 'Nurse', device_id: null, consent: true,
+        enrolled_date: '2026-08-05', status: 'Active', is_exact_data: false, // enrolled 5 days ago
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participant = dashboard.participants[0]
+
+    expect(participant.latest_wellness).toBeNull()
+    expect(participant.risk_trigger_reasons).not.toContain('No wellness data for 14 days')
+
+    jest.useRealTimers()
+  })
+})
+
+describe('isLatestMeaningfulWellnessStale', () => {
+  const referenceDate = new Date('2026-08-10T12:00:00Z')
+
+  test('is stale when the newest meaningful row is exactly 14 days old (boundary)', () => {
+    const rows = [{ date: '2026-07-27', recovery_score: 70 }]
+    expect(isLatestMeaningfulWellnessStale(rows, referenceDate, 14)).toBe(true)
+  })
+
+  test('is stale when the newest meaningful row is older than 14 days', () => {
+    const rows = [{ date: '2026-07-01', recovery_score: 70 }]
+    expect(isLatestMeaningfulWellnessStale(rows, referenceDate, 14)).toBe(true)
+  })
+
+  test('is not stale when the newest meaningful row is within 14 days', () => {
+    const rows = [{ date: '2026-08-05', recovery_score: 70 }]
+    expect(isLatestMeaningfulWellnessStale(rows, referenceDate, 14)).toBe(false)
+  })
+
+  test('ignores placeholder rows with no meaningful metrics, even if recent, and falls back to the older meaningful row', () => {
+    const rows = [
+      { date: '2026-08-09', recovery_score: null, hrv_ms: null, sleep_perf: null },
+      { date: '2026-07-01', recovery_score: 70, hrv_ms: 60, sleep_perf: 80 },
+    ]
+    expect(isLatestMeaningfulWellnessStale(rows, referenceDate, 14)).toBe(true)
+  })
+
+  test('is stale when there are no rows at all', () => {
+    expect(isLatestMeaningfulWellnessStale([], referenceDate, 14)).toBe(true)
   })
 })
 
