@@ -49,7 +49,7 @@ interface NudgeResponseGroup {
 }
 
 const VALID_EVENT_TYPES = new Set(['outdoor', 'fitness', 'race', 'general'])
-const MAX_DISPLAYED_NUDGES = 10
+const MAX_DISPLAYED_NUDGES = 50
 const MAX_DISPLAYED_ACKNOWLEDGEMENTS_PER_NUDGE = 50
 
 function getMondayOfCurrentWeekIso(): string {

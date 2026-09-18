@@ -15,7 +15,8 @@
     "db:seed:team-health-score": "npx ts-node --project tsconfig.json src/lib/seed-team-health-score.ts",
     "db:seed:nudge-responses": "npx ts-node --project tsconfig.json src/lib/seed-nudge-responses.ts",
     "admin:bootstrap": "npx ts-node --project tsconfig.json src/lib/bootstrap-admin.ts",
-    "admin:delete-accounts": "npx ts-node --project tsconfig.json src/lib/delete-accounts-by-email.ts"
+    "admin:delete-accounts": "npx ts-node --project tsconfig.json src/lib/delete-accounts-by-email.ts",
+    "admin:list-test-accounts": "npx ts-node --project tsconfig.json src/lib/list-test-accounts.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.4.0",

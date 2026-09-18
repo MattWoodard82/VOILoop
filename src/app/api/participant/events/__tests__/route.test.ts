@@ -191,6 +191,7 @@ describe('/api/participant/events', () => {
         response_text: 'Will do',
         response_due_at: '2026-07-22T12:00:00Z',
       },
+      history: [],
       rsvpEventIds: ['evt-1'],
     })
   })
@@ -432,6 +433,16 @@ describe('/api/participant/events', () => {
                   error: null,
                 })),
               })),
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: jest.fn(async () => ({
+                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
+                      error: null,
+                    })),
+                  })),
+                })),
+              })),
             })),
           }
         }
@@ -440,6 +451,10 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(async () => ({
                 data: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
+                error: null,
+              })),
+              or: jest.fn(async () => ({
+                data: [{ nudge_id: 'nudge-1', target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
                 error: null,
               })),
             })),
@@ -468,12 +483,11 @@ describe('/api/participant/events', () => {
     })
   })
 
-  test('PATCH trusts weekly_nudges.response_due_at rather than deriving a window from week_of', async () => {
-    // Regression test: week_of here is far in the past (long past any week_of + 48h
-    // window), but response_due_at is explicitly still open. Prior to the fix, the
-    // route recomputed a 48h window from week_of and would wrongly reject this with
-    // "Response window has closed." even though the persisted response_due_at
-    // (e.g. seeded far-future for pilot testing) says it's still open.
+  test('PATCH allows a reply to the current nudge even after its response_due_at has passed', async () => {
+    // Regression test for the stale-nudge reply bug: a nudge's 48h response_due_at
+    // no longer gates replies. As long as it's still the participant's current
+    // (newest targeted) nudge, they can reply to it - the due_at column is kept
+    // only for display/analytics.
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
@@ -499,10 +513,20 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(() => ({
                 maybeSingle: jest.fn(async () => ({
-                  // week_of is long past its own +48h window, but response_due_at is
-                  // explicitly still open — the persisted value must win.
-                  data: { id: 'nudge-1', week_of: '2026-06-09', response_due_at: '2099-12-31T23:59:00Z' },
+                  // week_of and response_due_at are both long past - but this is
+                  // still the participant's only/newest targeted nudge.
+                  data: { id: 'nudge-1', week_of: '2026-06-09', response_due_at: '2026-06-11T00:00:00Z' },
                   error: null,
+                })),
+              })),
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: jest.fn(async () => ({
+                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-06-09' }],
+                      error: null,
+                    })),
+                  })),
                 })),
               })),
             })),
@@ -513,6 +537,10 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(async () => ({
                 data: [{ target_type: 'all', participant_id: null, target_label: '' }],
+                error: null,
+              })),
+              or: jest.fn(async () => ({
+                data: [{ nudge_id: 'nudge-1', target_type: 'all', participant_id: null, target_label: '' }],
                 error: null,
               })),
             })),
@@ -535,7 +563,10 @@ describe('/api/participant/events', () => {
     expect(rpcUpsert).toHaveBeenCalled()
   })
 
-  test('PATCH rejects when weekly_nudges.response_due_at has actually passed', async () => {
+  test('PATCH rejects a reply to a superseded (non-newest) nudge', async () => {
+    // A newer nudge (nudge-2) has since been targeted to this participant, so
+    // the older nudge-1 is retained for reference only - replies are only
+    // accepted for the participant's current (newest) nudge.
     mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
     mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
 
@@ -565,6 +596,19 @@ describe('/api/participant/events', () => {
                   error: null,
                 })),
               })),
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: jest.fn(async () => ({
+                      data: [
+                        { id: 'nudge-2', message: 'Newer nudge', author: 'Coach', week_of: '2026-06-16' },
+                        { id: 'nudge-1', message: 'Older nudge', author: 'Coach', week_of: '2026-06-09' },
+                      ],
+                      error: null,
+                    })),
+                  })),
+                })),
+              })),
             })),
           }
         }
@@ -573,6 +617,13 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(async () => ({
                 data: [{ target_type: 'all', participant_id: null, target_label: '' }],
+                error: null,
+              })),
+              or: jest.fn(async () => ({
+                data: [
+                  { nudge_id: 'nudge-2', target_type: 'all', participant_id: null, target_label: '' },
+                  { nudge_id: 'nudge-1', target_type: 'all', participant_id: null, target_label: '' },
+                ],
                 error: null,
               })),
             })),
@@ -592,7 +643,7 @@ describe('/api/participant/events', () => {
     if (!response) throw new Error('Expected response')
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({ error: 'Response window has closed.' })
+    await expect(response.json()).resolves.toMatchObject({ error: 'This nudge is no longer current. Only the newest nudge accepts replies.' })
     expect(rpcUpsert).not.toHaveBeenCalled()
   })
 
@@ -684,6 +735,16 @@ describe('/api/participant/events', () => {
                   error: null,
                 })),
               })),
+              in: jest.fn(() => ({
+                lte: jest.fn(() => ({
+                  order: jest.fn(() => ({
+                    limit: jest.fn(async () => ({
+                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
+                      error: null,
+                    })),
+                  })),
+                })),
+              })),
             })),
           }
         }
@@ -692,6 +753,10 @@ describe('/api/participant/events', () => {
             select: jest.fn(() => ({
               eq: jest.fn(async () => ({
                 data: [{ target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
+                error: null,
+              })),
+              or: jest.fn(async () => ({
+                data: [{ nudge_id: 'nudge-1', target_type: 'participant', participant_id: 'EMP123', target_label: '' }],
                 error: null,
               })),
             })),

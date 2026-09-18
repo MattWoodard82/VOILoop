@@ -2,7 +2,13 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts'
 
 interface ChartData { name: string; value: number; color: string; label?: string }
-interface Props { type: 'recovery' | 'hrv' | 'strain'; data: ChartData[]; seriesName?: string }
+interface Props {
+  type: 'recovery' | 'hrv' | 'strain'
+  data: ChartData[]
+  seriesName?: string
+  /** Called with the clicked row's `name` (only wired up for the "recovery"/per-participant chart). */
+  onBarClick?: (name: string) => void
+}
 
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
 const GRID = '#0a3560'
@@ -14,7 +20,7 @@ const VALUE_LABEL_STYLE = { fill: '#fff', fontSize: 10, fontFamily: 'Inter' }
 // list rather than the 3-5 fixed rows the "recovery" layout was designed for).
 const MIN_ROW_HEIGHT = 26
 
-export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
+export function WellnessDirectorCharts({ type, data, seriesName, onBarClick }: Props) {
   const height = type === 'recovery' ? Math.max(210, data.length * MIN_ROW_HEIGHT) : 130
   // Bars need a plotted number even for "no data" (rendered as an empty/zero-height
   // bar via color), but the tooltip (and the end-of-bar value label) should say so
@@ -50,7 +56,13 @@ export function WellnessDirectorCharts({ type, data, seriesName }: Props) {
             itemStyle={{ color: '#69BE28' }}
             formatter={tooltipFormatter}
           />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]} name={seriesName ?? 'Recovery'}>
+          <Bar
+            dataKey="value"
+            radius={[0, 4, 4, 0]}
+            name={seriesName ?? 'Recovery'}
+            onClick={onBarClick ? (entry: ChartData) => onBarClick(entry.name) : undefined}
+            cursor={onBarClick ? 'pointer' : undefined}
+          >
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}
             <LabelList dataKey="displayValue" position="right" style={VALUE_LABEL_STYLE} />
           </Bar>
