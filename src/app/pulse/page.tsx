@@ -5,6 +5,7 @@ import { initials, normalizeParticipantDisplayName, safeAvg } from '@/lib/utils'
 import { requireAuth } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { PulseSurvey } from '@/types'
+import { selectLatestPulseByParticipant } from './selectLatestPulseByParticipant'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,7 +35,7 @@ export default async function PulsePage() {
     getCurrentWeekPulse(),
   ])
 
-  const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
+  const pulseMap = selectLatestPulseByParticipant(pulse)
   const pulseCounts = pulse.reduce<Record<string, number>>((acc, row) => {
     acc[row.participant_id] = (acc[row.participant_id] ?? 0) + 1
     return acc

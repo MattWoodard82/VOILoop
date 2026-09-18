@@ -211,6 +211,24 @@ describe('WellnessDirectorClient', () => {
     expect(markup).not.toContain('Send a nudge')
   })
 
+  test('passes participant ids through engagement chart rows so duplicate display labels do not collide', () => {
+    const duplicateNameParticipant = {
+      ...participant,
+      id: 'P2',
+      first_name: 'Alex',
+      last_name: 'Able',
+      latest_wellness: { ...participant.latest_wellness!, id: 'w2', participant_id: 'P2' },
+      latest_workout: { ...participant.latest_workout!, id: 'wo2', participant_id: 'P2' },
+      latest_habits: { ...participant.latest_habits!, id: 'h2', participant_id: 'P2' },
+      latest_pulse: { ...participant.latest_pulse!, id: 'p2', participant_id: 'P2' },
+    } as ParticipantWithWellness
+
+    const markup = renderClientMarkup([participant, duplicateNameParticipant])
+
+    expect(markup).toContain('&quot;id&quot;:&quot;P1&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
+    expect(markup).toContain('&quot;id&quot;:&quot;P2&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
+  })
+
   test('shows empty states when selected participant data is unavailable or out of scope', () => {
     const missingBreakdownMarkup = renderClientMarkup(
       [{ ...participant, engagement_score_components: null } as ParticipantWithWellness],

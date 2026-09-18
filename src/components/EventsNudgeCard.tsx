@@ -29,6 +29,14 @@ interface Acknowledgement {
   response_due_at: string
 }
 
+interface HistoryNudge {
+  id: string
+  message: string
+  author: string
+  week_of: string
+  acknowledgement: Acknowledgement | null
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -74,10 +82,10 @@ export function EventsNudgeCard() {
   const [events, setEvents] = useState<Event[]>([])
   const [nudge, setNudge] = useState<Nudge | null>(null)
   const [acknowledgement, setAcknowledgement] = useState<Acknowledgement | null>(null)
+  const [history, setHistory] = useState<HistoryNudge[]>([])
   const [rsvps, setRsvps] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showAckModal, setShowAckModal] = useState(false)
   const [ackText, setAckText] = useState('')
   const [ackSubmitting, setAckSubmitting] = useState(false)
 
@@ -93,12 +101,14 @@ export function EventsNudgeCard() {
           events?: Event[]
           nudge?: Nudge | null
           acknowledgement?: Acknowledgement | null
+          history?: HistoryNudge[]
           rsvpEventIds?: string[]
         }
 
         setEvents(payload.events ?? [])
         setNudge(payload.nudge ?? null)
         setAcknowledgement(payload.acknowledgement ?? null)
+        setHistory(payload.history ?? [])
         setRsvps(payload.rsvpEventIds ?? [])
         setError('')
       } catch (fetchError) {
@@ -130,11 +140,6 @@ export function EventsNudgeCard() {
     }
   }
 
-  const acknowledgeNudge = async () => {
-    if (!nudge) return
-    setShowAckModal(true)
-  }
-
   const submitAcknowledgement = async () => {
     if (!nudge || !ackText.trim()) return
     setAckSubmitting(true)
@@ -154,7 +159,6 @@ export function EventsNudgeCard() {
       response_text: ackText.trim(),
       response_due_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
     })
-    setShowAckModal(false)
     setAckText('')
     setAckSubmitting(false)
   }
@@ -164,38 +168,6 @@ export function EventsNudgeCard() {
 
   return (
     <div style={{ marginBottom: 14 }}>
-      {showAckModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,10,25,0.75)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#002244', border: '1px solid #0a3560', borderRadius: 12, padding: '24px 28px', width: 420, maxWidth: '90vw', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Acknowledge this week&apos;s nudge</div>
-            <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 16 }}>Share a brief reflection. Your response is private and visible only to your wellness director.</div>
-            <textarea
-              autoFocus
-              value={ackText}
-              onChange={e => setAckText(e.target.value)}
-              placeholder="How are you feeling about this week's focus?"
-              rows={3}
-              style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, padding: '9px 12px', fontSize: 12, color: '#fff', fontFamily: 'Inter, sans-serif', resize: 'vertical', outline: 'none', boxSizing: 'border-box' } as React.CSSProperties}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button
-                onClick={() => { setShowAckModal(false); setAckText('') }}
-                disabled={ackSubmitting}
-                style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #0a3560', background: 'transparent', color: '#A5ACAF', fontSize: 12, cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitAcknowledgement}
-                disabled={ackSubmitting || !ackText.trim()}
-                style={{ padding: '8px 18px', borderRadius: 7, border: 'none', background: ackText.trim() ? '#69BE28' : '#0a3560', color: ackText.trim() ? '#002244' : '#A5ACAF', fontSize: 12, fontWeight: 700, cursor: ackText.trim() ? 'pointer' : 'default', fontFamily: 'Inter, sans-serif' }}
-              >
-                {ackSubmitting ? 'Sending…' : 'Send'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {error && (
         <div style={{ marginBottom: 10, padding: '10px 12px', background: 'rgba(255,107,107,0.1)', border: '1px solid rgba(255,107,107,0.3)', borderRadius: 8, color: '#ffb4b4', fontSize: 12 }}>
           {error}
@@ -230,16 +202,58 @@ export function EventsNudgeCard() {
           <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.6 }}>
             {nudge.message}
           </div>
-          <div style={{ marginTop: 10, fontSize: 11, color: '#A5ACAF' }}>
-            {acknowledgement ? `Acknowledged: ${acknowledgement.response_text}` : 'Open-text response required within 48 hours.'}
-          </div>
-          {!acknowledgement && (
-            <button onClick={acknowledgeNudge} style={{ marginTop: 10, fontSize: 11, padding: '5px 10px', borderRadius: 18, border: '1px solid #69BE28', background: 'transparent', color: '#69BE28', cursor: 'pointer' }}>
-              Acknowledge
-            </button>
+          {acknowledgement ? (
+            <div style={{ marginTop: 10, fontSize: 11, color: '#A5ACAF' }}>
+              Acknowledged: {acknowledgement.response_text}
+            </div>
+          ) : (
+            // Inline reply, directly beneath the nudge message it responds to -
+            // replying no longer requires navigating away (and losing sight of
+            // what you're replying to) via a modal.
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 6 }}>
+                Reply below. Your response is private and visible only to your wellness director.
+              </div>
+              <textarea
+                value={ackText}
+                onChange={e => setAckText(e.target.value)}
+                placeholder="How are you feeling about this week's focus?"
+                rows={2}
+                style={{ width: '100%', background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, padding: '9px 12px', fontSize: 12, color: '#fff', fontFamily: 'Inter, sans-serif', resize: 'vertical', outline: 'none', boxSizing: 'border-box' } as React.CSSProperties}
+              />
+              <button
+                onClick={submitAcknowledgement}
+                disabled={ackSubmitting || !ackText.trim()}
+                style={{ marginTop: 8, fontSize: 11, padding: '5px 14px', borderRadius: 18, border: 'none', background: ackText.trim() ? '#69BE28' : '#0a3560', color: ackText.trim() ? '#002244' : '#A5ACAF', fontWeight: 700, cursor: ackText.trim() ? 'pointer' : 'default', fontFamily: 'Inter, sans-serif' }}
+              >
+                {ackSubmitting ? 'Sending…' : 'Send'}
+              </button>
+            </div>
           )}
         </div>
       ) : null}
+
+      {history.length > 0 && (
+        <div style={{ marginBottom: 10, display: 'grid', gap: 8 }}>
+          {history.map((historyNudge) => (
+            <div key={historyNudge.id} style={{
+              background: '#001a33',
+              border: '1px solid #0a3560',
+              borderRadius: 10,
+              padding: '10px 14px',
+              opacity: 0.75,
+            }}>
+              <div style={{ fontSize: 9, color: '#A5ACAF', textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, marginBottom: 4 }}>
+                Past focus · from {historyNudge.author}
+              </div>
+              <div style={{ fontSize: 12, color: '#A5ACAF', lineHeight: 1.5 }}>{historyNudge.message}</div>
+              <div style={{ marginTop: 6, fontSize: 10, color: '#6b7580' }}>
+                {historyNudge.acknowledgement ? `You replied: ${historyNudge.acknowledgement.response_text}` : 'No reply was sent for this nudge.'}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showEventsSkeleton ? (
         <Card title="Upcoming events" badge={<LoadingNotice>Loading…</LoadingNotice>} className="loading-card">

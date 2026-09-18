@@ -4,6 +4,21 @@ import { getDbEncryptionKey } from '@/lib/supabase/encryption'
 
 export const runtime = 'nodejs'
 
+// Number of past targeted nudges to retain for reference in the participant's
+// nudge history (in addition to the current/newest one). Matches the admin
+// console's expanded nudge list (see MAX_DISPLAYED_NUDGES in
+// src/app/api/admin/events/route.ts).
+const MAX_NUDGE_HISTORY = 50
+const MAX_TARGETED_NUDGES = MAX_NUDGE_HISTORY + 1
+const ACKNOWLEDGEMENT_DECRYPT_CONCURRENCY = 8
+
+interface TargetedNudgeRow {
+  id: string
+  message: string
+  author: string
+  week_of: string
+}
+
 function mondayOfCurrentWeekIso() {
   const weekOf = new Date()
   weekOf.setDate(weekOf.getDate() - weekOf.getDay() + 1)
@@ -81,7 +96,7 @@ function buildStructuredAckError(
   return payload
 }
 
-async function getTargetedNudge(
+async function getTargetedNudges(
   supabase: ReturnType<typeof createServerSupabaseClient>,
   participantId: string,
   cohort: string | null,
@@ -96,7 +111,7 @@ async function getTargetedNudge(
 
   const targetedNudgeIds = Array.from(new Set((targetedRows ?? []).map((row) => row.nudge_id).filter(Boolean)))
   if (!targetedNudgeIds.length) {
-    return { nudge: null }
+    return { nudges: [] as TargetedNudgeRow[] }
   }
 
   const { data, error } = await supabase
@@ -105,24 +120,118 @@ async function getTargetedNudge(
     .in('id', targetedNudgeIds)
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
-    .limit(10)
+    .limit(MAX_TARGETED_NUDGES)
 
   if (error) return { error }
 
-  const rows = (data ?? []) as Array<{
-    id: string
-    message: string
-    author: string
-    week_of: string
-  }>
+  const rows = (data ?? []) as TargetedNudgeRow[]
 
-  const nudge = rows.find((row) =>
+  // Most-recent-first list of every nudge actually targeted to this participant
+  // (by "all", their specific participant id, or their cohort subgroup). The
+  // first entry (if any) is the participant's current/newest nudge; the rest
+  // are retained for reference only - see getTargetedNudges callers.
+  const nudges = rows.filter((row) =>
     targetedRows?.some((target) =>
       target.nudge_id === row.id &&
       isParticipantTarget(target.target_type ?? 'all', target.target_label ?? null, target.participant_id ?? null, participantId, cohort))
-  ) ?? null
+  )
 
-  return { nudge }
+  return { nudges }
+}
+
+interface DecryptedAcknowledgement {
+  acknowledged_at: string
+  response_text: string
+  response_due_at: string
+}
+
+interface AcknowledgementRow {
+  nudge_id: string
+  acknowledged_at: string
+  response_text_encrypted: string | null
+  response_due_at: string
+}
+
+async function mapWithConcurrency<T, TResult>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<TResult>,
+): Promise<TResult[]> {
+  const results = new Array<TResult>(items.length)
+  let nextIndex = 0
+
+  async function worker() {
+    while (true) {
+      const currentIndex = nextIndex
+      nextIndex += 1
+      if (currentIndex >= items.length) return
+      results[currentIndex] = await mapper(items[currentIndex])
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => worker()),
+  )
+
+  return results
+}
+
+async function loadDecryptedAcknowledgements(
+  supabase: ReturnType<typeof createServerSupabaseClient>,
+  nudgeIds: string[],
+  participantId: string,
+): Promise<{ acknowledgementsByNudgeId: Map<string, DecryptedAcknowledgement> } | { error: { message: string } }> {
+  if (!nudgeIds.length) {
+    return { acknowledgementsByNudgeId: new Map() }
+  }
+
+  const { data, error } = await supabase
+    .from('nudge_acknowledgements')
+    .select('nudge_id, acknowledged_at, response_text_encrypted, response_due_at')
+    .eq('participant_id', participantId)
+    .in('nudge_id', nudgeIds)
+  if (error) return { error }
+
+  const acknowledgementRows = (data ?? []) as AcknowledgementRow[]
+  const decryptableRows = acknowledgementRows.filter((row) => row.response_text_encrypted)
+
+  try {
+    const decryptedAcknowledgements = await mapWithConcurrency(
+      decryptableRows,
+      ACKNOWLEDGEMENT_DECRYPT_CONCURRENCY,
+      async (row) => {
+        const { data: decrypted, error: decryptError } = await supabase.rpc('decrypt_nudge_response', {
+          encrypted_data: row.response_text_encrypted,
+          key: getDbEncryptionKey(),
+        })
+        if (decryptError) throw decryptError
+
+        return [
+          row.nudge_id,
+          {
+            acknowledged_at: row.acknowledged_at,
+            response_text: decrypted ?? '',
+            response_due_at: row.response_due_at,
+          },
+        ] as const
+      },
+    )
+
+    return {
+      acknowledgementsByNudgeId: new Map(decryptedAcknowledgements),
+    }
+  } catch (decryptionError) {
+    if (
+      typeof decryptionError === 'object' &&
+      decryptionError !== null &&
+      'message' in decryptionError &&
+      typeof decryptionError.message === 'string'
+    ) {
+      return { error: { message: decryptionError.message } }
+    }
+
+    return { error: { message: 'Unable to decrypt nudge acknowledgement.' } }
+  }
 }
 
 export async function GET() {
@@ -143,14 +252,14 @@ export async function GET() {
   const today = new Date().toISOString().split('T')[0]
   const weekOf = mondayOfCurrentWeekIso()
 
-  const [{ data: events, error: eventsError }, nudgeResult, { data: rsvps, error: rsvpError }] = await Promise.all([
+  const [{ data: events, error: eventsError }, nudgesResult, { data: rsvps, error: rsvpError }] = await Promise.all([
     supabase
       .from('events')
       .select('*')
       .gte('event_date', today)
       .order('event_date', { ascending: true })
       .limit(5),
-    getTargetedNudge(supabase, participantId, participant?.cohort ?? null, weekOf),
+    getTargetedNudges(supabase, participantId, participant?.cohort ?? null, weekOf),
     supabase
       .from('event_rsvps')
       .select('event_id')
@@ -158,40 +267,35 @@ export async function GET() {
   ])
 
   if (eventsError) return NextResponse.json({ error: eventsError.message }, { status: 500 })
-  if ('error' in nudgeResult && nudgeResult.error) return NextResponse.json({ error: nudgeResult.error.message }, { status: 500 })
+  if ('error' in nudgesResult && nudgesResult.error) return NextResponse.json({ error: nudgesResult.error.message }, { status: 500 })
   if (rsvpError) return NextResponse.json({ error: rsvpError.message }, { status: 500 })
 
-  const nudge = 'nudge' in nudgeResult ? nudgeResult.nudge : null
-  let acknowledgement = null
-  if (nudge?.id) {
-    const { data, error } = await supabase
-      .from('nudge_acknowledgements')
-      .select('acknowledged_at, response_text_encrypted, response_due_at')
-      .eq('nudge_id', nudge.id)
-      .eq('participant_id', participantId)
-      .maybeSingle()
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    
-    if (data && data.response_text_encrypted) {
-      // Decrypt the response using the stored procedure
-      const { data: decrypted, error: decryptError } = await supabase
-        .rpc('decrypt_nudge_response', {
-          encrypted_data: data.response_text_encrypted,
-          key: getDbEncryptionKey(),
-        })
-      if (decryptError) return NextResponse.json({ error: decryptError.message }, { status: 500 })
-      acknowledgement = {
-        acknowledged_at: data.acknowledged_at,
-        response_text: decrypted,
-        response_due_at: data.response_due_at,
-      }
-    }
-  }
+  // The first (most recent) targeted nudge is the "current" one, repliable via
+  // PATCH. Any older targeted nudges are retained here as read-only history -
+  // they remain visible for reference, but only the current nudge can be
+  // acknowledged/replied to (see PATCH below).
+  const nudges = 'nudges' in nudgesResult ? nudgesResult.nudges : []
+  const nudge = nudges[0] ?? null
+  const historyNudges = nudges.slice(1)
+  const acknowledgementResult = await loadDecryptedAcknowledgements(
+    supabase,
+    nudges.map((targetedNudge) => targetedNudge.id),
+    participantId,
+  )
+  if ('error' in acknowledgementResult) return NextResponse.json({ error: acknowledgementResult.error.message }, { status: 500 })
+
+  const acknowledgementByNudgeId = acknowledgementResult.acknowledgementsByNudgeId
+  const acknowledgement = nudge ? acknowledgementByNudgeId.get(nudge.id) ?? null : null
+  const history: Array<TargetedNudgeRow & { acknowledgement: DecryptedAcknowledgement | null }> = historyNudges.map((historyNudge) => ({
+    ...historyNudge,
+    acknowledgement: acknowledgementByNudgeId.get(historyNudge.id) ?? null,
+  }))
 
   return NextResponse.json({
     events: events ?? [],
     nudge,
     acknowledgement,
+    history,
     rsvpEventIds: (rsvps ?? []).map((entry) => entry.event_id),
   })
 }
@@ -292,9 +396,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Nudge not targeted to this participant.' }, { status: 403 })
   }
 
-  const responseDueAt = new Date(nudge.response_due_at)
-  if (responseDueAt.getTime() < Date.now()) {
-    return NextResponse.json({ error: 'Response window has closed.' }, { status: 403 })
+  // Old nudges are retained for reference, but only the participant's current
+  // (newest targeted) nudge accepts replies - prevents the confusing case where
+  // a stale nudge stays visible/repliable-looking after a newer one supersedes
+  // it. This intentionally replaces the previous response_due_at expiry check:
+  // response_due_at is still stored/displayed, but no longer gates writes.
+  const nudgesResult = await getTargetedNudges(supabase, participantId, participant?.cohort ?? null, mondayOfCurrentWeekIso())
+  if ('error' in nudgesResult && nudgesResult.error) return NextResponse.json({ error: nudgesResult.error.message }, { status: 500 })
+  const currentNudgeId = 'nudges' in nudgesResult ? (nudgesResult.nudges[0]?.id ?? null) : null
+  if (currentNudgeId !== nudgeId) {
+    return NextResponse.json({ error: 'This nudge is no longer current. Only the newest nudge accepts replies.' }, { status: 403 })
   }
 
   // Use RPC to upsert encrypted acknowledgement

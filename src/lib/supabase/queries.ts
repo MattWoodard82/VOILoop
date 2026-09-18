@@ -245,6 +245,34 @@ export function hasMeaningfulWellnessData(row: Partial<DailyWellness> | null | u
   return WELLNESS_METRIC_FIELDS.some((field) => row?.[field] !== null && row?.[field] !== undefined)
 }
 
+// Determines whether a participant's most recent *meaningful* wellness row
+// (see hasMeaningfulWellnessData) is at least `staleAfterDays` calendar days
+// old as of `referenceDate`. Rows lacking any meaningful metric are ignored
+// entirely - a placeholder/echo row with a recent date must not mask a real
+// gap in qualifying data. If `rows` contains no meaningful row at all, the
+// data is treated as stale (there is nothing recent to disprove staleness),
+// which is the correct behavior as long as callers pass a history window at
+// least as wide as `staleAfterDays` (a narrower window can only ever make a
+// participant look *more* stale than a wider one would, never less).
+export function isLatestMeaningfulWellnessStale(
+  rows: Array<Partial<DailyWellness> | null | undefined>,
+  referenceDate: Date = new Date(),
+  staleAfterDays: number = 14,
+): boolean {
+  const meaningfulDates = rows
+    .filter((row): row is Partial<DailyWellness> => hasMeaningfulWellnessData(row))
+    .map((row) => row.date)
+    .filter((date): date is string => Boolean(date))
+
+  if (meaningfulDates.length === 0) return true
+
+  const latestDate = meaningfulDates.reduce((latest, date) => (date > latest ? date : latest))
+  const ageDays = Math.floor(
+    (startOfDayUTC(referenceDate).getTime() - startOfDayUTC(new Date(`${latestDate}T00:00:00Z`)).getTime()) / MS_PER_DAY,
+  )
+  return ageDays >= staleAfterDays
+}
+
 function getQueryClient() {
   try {
     return createServerSupabaseClient()
@@ -865,7 +893,7 @@ export async function getTeamDashboard(): Promise<{
       ...(hrvDelta !== 0 ? [`HRV ${hrvDelta > 0 ? 'up' : 'down'}`] : []),
       ...(sleepDelta !== 0 ? [`Sleep performance ${sleepDelta > 0 ? 'up' : 'down'}`] : []),
     ]
-    const zeroDataFor14Days = !w && enrolledDays != null && enrolledDays >= 14
+    const zeroDataFor14Days = isLatestMeaningfulWellnessStale(wellnessRows, now, 14) && enrolledDays != null && enrolledDays >= 14
     const riskTriggers = [
       ...(engagementScore < 35 ? ['Low engagement score'] : []),
       ...(physiologicalTrend === 'declining' ? ['Physiological trend declining'] : []),

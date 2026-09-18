@@ -231,6 +231,7 @@ export function WellnessDirectorClient({ participants }: Props) {
   const engagementRows = filtered
     .filter((e) => e.engagement_score != null)
     .map((e) => ({
+      id: e.id,
       label: normalizeParticipantDisplayName({ firstName: e.first_name, lastName: e.last_name }),
       value: e.engagement_score as number,
     }))
@@ -337,20 +338,16 @@ export function WellnessDirectorClient({ participants }: Props) {
         </select>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 10 }}>
         <Card title="Engagement score" badge={<Badge variant="wolf">weighted</Badge>}>
           {configLoaded ? (
-            <WellnessDirectorCharts type="recovery" data={engagementRows.map((row) => ({ name: row.label, value: row.value, color: recoveryColor(row.value) }))} />
+            <WellnessDirectorCharts
+              type="recovery"
+              data={engagementRows.map((row) => ({ id: row.id, name: row.label, value: row.value, color: recoveryColor(row.value) }))}
+              onBarClick={(participantId) => setPersonFilter(participantId)}
+            />
           ) : (
             <ChartSkeleton height={210} />
-          )}
-          {configLoaded && (
-            <div style={{ marginTop: 12, display: 'grid', gap: 12 }}>
-              <AveragesBlock title="Cohort averages" averages={cohortAverages} showWeightedScoreExplanation />
-              {selected && selectedAverages && (
-                <AveragesBlock title={`${selected.first_name} ${selected.last_name}`} averages={selectedAverages} />
-              )}
-            </div>
           )}
         </Card>
         <Card title="Score breakdown">
@@ -370,7 +367,7 @@ export function WellnessDirectorClient({ participants }: Props) {
               <Badge variant={selected.physiological_trend === 'declining' ? 'red' : selected.physiological_trend === 'improving' ? 'green' : 'amber'}>{selected.physiological_trend ?? 'steady'}</Badge>
               <div>{selected.physiological_trend_metrics?.join(', ') ?? '—'}</div>
             </>
-          ) : null}
+          ) : <div>Choose a participant to view physiological trend.</div>}
         </Card>
         <Card title="Risk tier">
           {selected ? (
@@ -383,6 +380,25 @@ export function WellnessDirectorClient({ participants }: Props) {
               <div>{selected.risk_trigger_reasons && selected.risk_trigger_reasons.length > 0 ? selected.risk_trigger_reasons.join(' · ') : selected.baseline_state === 'building' ? 'Baseline still forming' : 'No triggers'}</div>
             </>
           ) : <div>Choose a participant to view risk tier.</div>}
+        </Card>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+        <Card>
+          {configLoaded ? (
+            <AveragesBlock title="Cohort averages" averages={cohortAverages} showWeightedScoreExplanation />
+          ) : (
+            <TableSkeleton columns={2} rows={4} />
+          )}
+        </Card>
+        <Card>
+          {!configLoaded ? (
+            <TableSkeleton columns={2} rows={4} />
+          ) : selected && selectedAverages ? (
+            <AveragesBlock title={`${selected.first_name} ${selected.last_name}`} averages={selectedAverages} />
+          ) : (
+            <div style={{ fontSize: 11, color: '#A5ACAF' }}>Choose a participant above to view their averages here.</div>
+          )}
         </Card>
       </div>
 
