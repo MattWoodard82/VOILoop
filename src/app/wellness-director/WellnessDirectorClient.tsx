@@ -20,9 +20,9 @@ function overrideLabel(state?: ParticipantWithWellness['override_state']) {
 // Labels for the five FR-13 (GH issue #66) engagement score components, shared by
 // the score breakdown card and the weight editor so both stay in sync.
 const ENGAGEMENT_COMPONENT_LABELS: Record<string, string> = {
-  submission_consistency: 'WHOOP/CSV submission consistency',
-  device_wear_consistency: 'Device-wear consistency',
-  pulse_completion: 'Pulse survey completion',
+  submission_consistency: 'Weekly WHOOP/CSV coverage',
+  device_wear_consistency: 'Qualifying data consistency',
+  pulse_completion: 'Weekly pulse completion',
   nudge_response: 'Nudge response rate',
   workout_volume: 'Workout volume vs. baseline',
 }
@@ -48,10 +48,19 @@ const DEFAULT_WEIGHTS: WeightsState = {
 }
 
 type ZoneMinutes = { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null }
-type Averages = { avgWeightedScore: number | null; avgWearConsistency: number | null; avgZoneMinutes: ZoneMinutes }
+type Averages = { avgWeightedScore: number | null; qualifyingDataConsistency: number | null; avgZoneMinutes: ZoneMinutes; latestWellnessDate: string | null }
 
 function formatStat(value: number | null, suffix = '') {
   return value != null ? `${value}${suffix}` : '—'
+}
+
+function formatDataFreshness(date: string | null) {
+  if (!date) return 'Latest data: —'
+  const today = new Date()
+  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+  const then = new Date(`${date.slice(0, 10)}T00:00:00.000Z`).getTime()
+  const ageDays = Math.max(0, Math.floor((todayUtc - then) / 86400000))
+  return `Latest data: ${date.slice(0, 10)} · ${ageDays} day${ageDays === 1 ? '' : 's'} old${ageDays > 10 ? ' · stale' : ''}`
 }
 
 // Renders one averages block (either the whole cohort/department scope, or a single
@@ -61,24 +70,34 @@ function AveragesBlock({
   title,
   averages,
   showWeightedScoreExplanation = false,
+  showCohortZoneExplanation = false,
 }: {
   title: string
   averages: Averages
   showWeightedScoreExplanation?: boolean
+  showCohortZoneExplanation?: boolean
 }) {
   return (
     <div style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: '#fff', marginBottom: 8 }}>{title}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 8, fontSize: 11, color: '#A5ACAF' }}>
         <div>Avg weighted score: <strong style={{ color: '#fff' }}>{formatStat(averages.avgWeightedScore)}</strong></div>
-        <div>Avg wear consistency: <strong style={{ color: '#fff' }}>{formatStat(averages.avgWearConsistency, '%')}</strong></div>
+        <div>Qualifying Data Consistency (21 days): <strong style={{ color: '#fff' }}>{formatStat(averages.qualifyingDataConsistency, '%')}</strong></div>
+        <div style={{ gridColumn: '1 / -1', color: averages.latestWellnessDate && formatDataFreshness(averages.latestWellnessDate).includes('stale') ? '#F59E0B' : '#6b7580' }}>
+          {formatDataFreshness(averages.latestWellnessDate)}
+        </div>
         <div style={{ gridColumn: '1 / -1' }}>
-          Avg zone 1-5 duration (min): {' '}
+          Avg zone 1-5 duration (min/day, current Team Health Score week): {' '}
           <strong style={{ color: '#fff' }}>
             Z1 {formatStat(averages.avgZoneMinutes.zone1)} · Z2 {formatStat(averages.avgZoneMinutes.zone2)} · Z3 {formatStat(averages.avgZoneMinutes.zone3)} · Z4 {formatStat(averages.avgZoneMinutes.zone4)} · Z5 {formatStat(averages.avgZoneMinutes.zone5)}
           </strong>
         </div>
         <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>Avg steps: not available (no WHOOP steps data source).</div>
+        {showCohortZoneExplanation && (
+          <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
+            Zone averages are equal per-participant averages; participants without workouts count as 0 min/day.
+          </div>
+        )}
         {showWeightedScoreExplanation && (
           <div style={{ gridColumn: '1 / -1', color: '#6b7580' }}>
             Avg weighted score is the average engagement score of retained, non-test participants in this scope — pilot/test accounts are excluded.
@@ -95,17 +114,31 @@ function averageOf(values: Array<number | null | undefined>) {
   return Math.round((valid.reduce((sum, v) => sum + v, 0) / valid.length) * 10) / 10
 }
 
+function averageZone(values: Array<number | null | undefined>) {
+  if (values.length === 0) return null
+  return Math.round((values.reduce<number>((sum, value) => sum + (value ?? 0), 0) / values.length) * 10) / 10
+}
+
+function latestWellnessDate(group: ParticipantWithWellness[]) {
+  const dates = group
+    .map((p) => p.latest_wellness?.date?.slice(0, 10))
+    .filter((date): date is string => Boolean(date))
+  if (dates.length === 0) return null
+  return dates.sort().at(-1) ?? null
+}
+
 function computeAverages(group: ParticipantWithWellness[]): Averages {
   return {
     avgWeightedScore: averageOf(group.map((p) => p.engagement_score)),
-    avgWearConsistency: averageOf(group.map((p) => p.engagement_score_components?.device_wear_consistency)),
+    qualifyingDataConsistency: averageOf(group.map((p) => p.engagement_score_components?.device_wear_consistency)),
     avgZoneMinutes: {
-      zone1: averageOf(group.map((p) => p.avg_zone_minutes?.zone1)),
-      zone2: averageOf(group.map((p) => p.avg_zone_minutes?.zone2)),
-      zone3: averageOf(group.map((p) => p.avg_zone_minutes?.zone3)),
-      zone4: averageOf(group.map((p) => p.avg_zone_minutes?.zone4)),
-      zone5: averageOf(group.map((p) => p.avg_zone_minutes?.zone5)),
+      zone1: averageZone(group.map((p) => p.avg_zone_minutes?.zone1)),
+      zone2: averageZone(group.map((p) => p.avg_zone_minutes?.zone2)),
+      zone3: averageZone(group.map((p) => p.avg_zone_minutes?.zone3)),
+      zone4: averageZone(group.map((p) => p.avg_zone_minutes?.zone4)),
+      zone5: averageZone(group.map((p) => p.avg_zone_minutes?.zone5)),
     },
+    latestWellnessDate: latestWellnessDate(group),
   }
 }
 
@@ -115,7 +148,7 @@ function computeAverages(group: ParticipantWithWellness[]): Averages {
 const THS_COMPONENT_LABELS: Record<TeamHealthComponentKey, string> = {
   sleep: 'Sleep Duration',
   hrv: 'HRV Trend',
-  zone2: 'Zone 2+ Activity',
+  zone2: 'Zone 2+ Activity Score (0-100)',
   recovery: 'Recovery Score',
   strain: 'Strain-Recovery Balance',
 }
@@ -354,9 +387,19 @@ export function WellnessDirectorClient({ participants }: Props) {
           {!configLoaded ? (
             <TableSkeleton columns={2} rows={5} />
           ) : selected?.engagement_score_components ? (
-            Object.entries(selected.engagement_score_components).map(([key, value]) => (
-              <BarRow key={key} label={engagementComponentLabel(key)} value={value} color="#69BE28" />
-            ))
+            <>
+              <div style={{ fontSize: 11, color: '#A5ACAF', marginBottom: 8 }}>
+                Weekly coverage uses the last 3 calendar weeks; qualifying consistency, nudges, and workout volume use trailing 21-day windows.
+              </div>
+              {Object.entries(selected.engagement_score_components).map(([key, value]) => (
+                <BarRow
+                  key={key}
+                  label={`${engagementComponentLabel(key)}${selected.engagement_score_component_windows?.[key] ? ` · ${selected.engagement_score_component_windows[key]}` : ''}`}
+                  value={value}
+                  color="#69BE28"
+                />
+              ))}
+            </>
           ) : (
             <div>{hasExplicitParticipantSelection ? 'No score breakdown available for the selected participant.' : 'Choose a participant to view score breakdown.'}</div>
           )}
@@ -386,7 +429,7 @@ export function WellnessDirectorClient({ participants }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
         <Card>
           {configLoaded ? (
-            <AveragesBlock title="Cohort averages" averages={cohortAverages} showWeightedScoreExplanation />
+            <AveragesBlock title="Cohort averages" averages={cohortAverages} showWeightedScoreExplanation showCohortZoneExplanation />
           ) : (
             <TableSkeleton columns={2} rows={4} />
           )}

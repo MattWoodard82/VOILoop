@@ -73,6 +73,13 @@ const participant: ParticipantWithWellness = {
   recovery_status: 'green',
   engagement_score: 68,
   engagement_score_components: { submission_consistency: 25, device_wear_consistency: 20, pulse_completion: 20, nudge_response: 15, workout_volume: 20 },
+  engagement_score_component_windows: {
+    submission_consistency: 'Last 3 calendar weeks',
+    device_wear_consistency: 'Trailing 21 days',
+    pulse_completion: 'Last 3 calendar weeks',
+    nudge_response: 'Trailing 21 days',
+    workout_volume: 'Trailing 21 days vs. baseline',
+  },
   physiological_trend: 'improving',
   physiological_trend_metrics: ['Recovery up', 'HRV up', 'Sleep performance up'],
   risk_tier_label: 'Stable',
@@ -141,7 +148,9 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Dismiss')
     expect(markup).not.toContain('Loading weights…')
     expect(markup).not.toContain('table-skeleton')
-    expect(markup).toContain('WHOOP/CSV submission consistency')
+    expect(markup).toContain('Weekly WHOOP/CSV coverage')
+    expect(markup).toContain('Last 3 calendar weeks')
+    expect(markup).toContain('Trailing 21 days')
     expect(markup).toContain('Send a nudge to Alex Able')
   })
 
@@ -151,7 +160,9 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Alex Able')
     expect(markup).toContain('Avg steps: not available (no WHOOP steps data source).')
     expect(markup).toContain('Avg weighted score')
-    expect(markup).toContain('Avg wear consistency')
+    expect(markup).toContain('Qualifying Data Consistency (21 days)')
+    expect(markup).toContain('Avg zone 1-5 duration (min/day, current Team Health Score week)')
+    expect(markup).toContain('participants without workouts count as 0 min/day')
   })
 
   test('shows Avg weighted score explanation only for cohort averages, not selected participant averages', () => {

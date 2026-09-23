@@ -69,6 +69,15 @@ function getRecentCalendarWeeks(referenceDate: Date, count: number): WeekWindow[
   return weeks
 }
 
+function getMostRecentCompletedWeek(referenceDate: Date): WeekWindow {
+  const thisMonday = getMondayOfWeek(referenceDate)
+  const start = new Date(thisMonday)
+  start.setUTCDate(start.getUTCDate() - 7)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 6)
+  return { start, end }
+}
+
 function dateKeyInWindow(dateStr: string, window: WeekWindow): boolean {
   const key = dateStr.slice(0, 10)
   return key >= toDateKey(window.start) && key <= toDateKey(window.end)
@@ -142,45 +151,42 @@ function computeWorkoutVolumeVsBaseline(
   return Math.max(0, Math.min(100, Math.round(ratio * 100)))
 }
 
-// Average minutes spent in each HR zone (1-5) per workout, over a trailing window.
+// Average minutes spent in each HR zone (1-5) per calendar day, over a reporting week.
 // WHOOP only reports zone percentages + total duration per workout (not raw zone minutes),
 // so each workout's zone minutes are approximated as duration_min * (zoneN_pct / 100).
-// Returns null for a zone (or the whole result) when there isn't enough data in the window.
 function computeAverageZoneMinutes(
   workouts: Workout[],
-  windowDays: number,
-  referenceDate: Date,
-): { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } | null {
-  const windowStart = new Date(referenceDate)
-  windowStart.setUTCDate(windowStart.getUTCDate() - (windowDays - 1))
-  const windowStartKey = toDateKey(windowStart)
-  const windowEndKey = toDateKey(referenceDate)
+  window: WeekWindow,
+): { zone1: number; zone2: number; zone3: number; zone4: number; zone5: number } {
+  const windowStartKey = toDateKey(window.start)
+  const windowEndKey = toDateKey(window.end)
+  const calendarDays = Math.floor((startOfDayUTC(window.end).getTime() - startOfDayUTC(window.start).getTime()) / MS_PER_DAY) + 1
 
-  // Bound the window on both ends: without the upper bound, future-dated or
-  // otherwise out-of-order imported workouts (dated after referenceDate) would
-  // still be included and could inflate the trailing-window averages.
   const windowed = workouts.filter((w) => {
     const dateKey = w.date.slice(0, 10)
     return dateKey >= windowStartKey && dateKey <= windowEndKey
   })
-  if (windowed.length === 0) return null
 
   const zoneKeys = ['zone1_pct', 'zone2_pct', 'zone3_pct', 'zone4_pct', 'zone5_pct'] as const
   const resultKeys = ['zone1', 'zone2', 'zone3', 'zone4', 'zone5'] as const
-  const result: { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } = {
-    zone1: null, zone2: null, zone3: null, zone4: null, zone5: null,
+  const totals: { zone1: number; zone2: number; zone3: number; zone4: number; zone5: number } = {
+    zone1: 0, zone2: 0, zone3: 0, zone4: 0, zone5: 0,
   }
 
   zoneKeys.forEach((zoneKey, i) => {
-    const minutes = windowed
-      .map((w) => (w.duration_min != null && w[zoneKey] != null ? w.duration_min * ((w[zoneKey] as number) / 100) : null))
-      .filter((v): v is number => v !== null)
-    if (minutes.length > 0) {
-      result[resultKeys[i]] = Math.round((minutes.reduce((a, b) => a + b, 0) / minutes.length) * 10) / 10
-    }
+    totals[resultKeys[i]] = windowed.reduce(
+      (sum, w) => sum + (w.duration_min != null && w[zoneKey] != null ? w.duration_min * ((w[zoneKey] as number) / 100) : 0),
+      0,
+    )
   })
 
-  return result
+  return {
+    zone1: Math.round((totals.zone1 / calendarDays) * 10) / 10,
+    zone2: Math.round((totals.zone2 / calendarDays) * 10) / 10,
+    zone3: Math.round((totals.zone3 / calendarDays) * 10) / 10,
+    zone4: Math.round((totals.zone4 / calendarDays) * 10) / 10,
+    zone5: Math.round((totals.zone5 / calendarDays) * 10) / 10,
+  }
 }
 
 interface NudgeRecord { id: string; week_of: string }
@@ -837,6 +843,7 @@ export async function getTeamDashboard(): Promise<{
   const habitsMap = Object.fromEntries(habits.map((h) => [h.participant_id, h]))
   const pulseMap = Object.fromEntries(pulse.map((p) => [p.participant_id, p]))
   const recentWeeks = getRecentCalendarWeeks(now, 3)
+  const teamHealthScoreWeek = getMostRecentCompletedWeek(now)
 
   const enriched: ParticipantWithWellness[] = participants.map((emp) => {
     const w = wellnessMap[emp.id] ?? null
@@ -859,13 +866,20 @@ export async function getTeamDashboard(): Promise<{
     const pulseCompletion = computeWeeklyConsistency(pulseRows, recentWeeks, enrolledDate, () => true)
     const nudgeResponse = computeNudgeResponseRate(emp, nudgeData.nudges, nudgeData.targets, nudgeData.acknowledgements)
     const workoutVolume = computeWorkoutVolumeVsBaseline(workoutRows, 21, now)
-    const avgZoneMinutes = computeAverageZoneMinutes(workoutRows, 21, now)
+    const avgZoneMinutes = computeAverageZoneMinutes(workoutRows, teamHealthScoreWeek)
     const engagementComponents: Record<string, number> = {
       submission_consistency: submissionConsistency ?? 0,
       device_wear_consistency: deviceWearConsistency ?? 0,
       pulse_completion: pulseCompletion ?? 0,
       nudge_response: nudgeResponse ?? 0,
       workout_volume: workoutVolume ?? 0,
+    }
+    const engagementComponentWindows: Record<string, string> = {
+      submission_consistency: 'Last 3 calendar weeks',
+      device_wear_consistency: 'Trailing 21 days',
+      pulse_completion: 'Last 3 calendar weeks',
+      nudge_response: 'Trailing 21 days',
+      workout_volume: 'Trailing 21 days vs. baseline',
     }
     const engagementScore: number = Math.round(
       [
@@ -910,6 +924,7 @@ export async function getTeamDashboard(): Promise<{
       recovery_status: getRecoveryStatus(w?.recovery_score ?? null),
       engagement_score: engagementScore,
       engagement_score_components: engagementComponents,
+      engagement_score_component_windows: engagementComponentWindows,
       avg_zone_minutes: avgZoneMinutes,
       physiological_trend: physiologicalTrend,
       physiological_trend_metrics: physiologicalMetrics,

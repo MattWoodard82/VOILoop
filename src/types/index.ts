@@ -133,6 +133,7 @@ export interface ParticipantWithWellness extends Participant {
   recovery_status: RecoveryStatus
   engagement_score?: number | null
   engagement_score_components?: Record<string, number> | null
+  engagement_score_component_windows?: Record<string, string> | null
   avg_zone_minutes?: { zone1: number | null; zone2: number | null; zone3: number | null; zone4: number | null; zone5: number | null } | null
   physiological_trend?: 'improving' | 'steady' | 'declining' | null
   physiological_trend_metrics?: string[] | null

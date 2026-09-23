@@ -993,6 +993,86 @@ describe('getTeamDashboard', () => {
     jest.useRealTimers()
   })
 
+  test('zone 1-5 duration uses average minutes per calendar day for the latest completed Team Health Score week', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-08-17T12:00:00Z'))
+
+    const participants = [
+      {
+        id: 'P1', first_name: 'Weekly', last_name: 'Mover', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+      {
+        id: 'P2', first_name: 'No', last_name: 'Workouts', department: 'Ops', location_id: null,
+        employment_type: null, title: 'RN', device_id: null, consent: true,
+        enrolled_date: '2026-01-01', status: 'Active', is_exact_data: false, cohort: null,
+      },
+    ]
+
+    mockCreateClient.mockReturnValue(
+      makeTableClient({
+        participants,
+        daily_wellness: [],
+        workouts: [
+          {
+            id: 'wo-current-week',
+            participant_id: 'P1',
+            date: '2026-08-10',
+            start_time: '2026-08-10T08:00:00Z',
+            activity: 'Run',
+            duration_min: 70,
+            strain: 8,
+            zone1_pct: 10,
+            zone2_pct: 20,
+            zone3_pct: 30,
+            zone4_pct: 30,
+            zone5_pct: 10,
+          },
+          {
+            id: 'wo-in-progress-week-excluded',
+            participant_id: 'P1',
+            date: '2026-08-17',
+            start_time: '2026-08-17T08:00:00Z',
+            activity: 'Run',
+            duration_min: 700,
+            strain: 8,
+            zone1_pct: 100,
+            zone2_pct: 0,
+            zone3_pct: 0,
+            zone4_pct: 0,
+            zone5_pct: 0,
+          },
+        ],
+        habits: [],
+        pulse_surveys: [],
+        interventions: [],
+        weekly_nudges: [],
+        nudge_targets: [],
+        nudge_acknowledgements: [],
+      }) as never
+    )
+
+    const dashboard = await getTeamDashboard()
+    const participantById = Object.fromEntries(dashboard.participants.map((participant) => [participant.id, participant]))
+
+    expect(participantById.P1.avg_zone_minutes).toEqual({
+      zone1: 1,
+      zone2: 2,
+      zone3: 3,
+      zone4: 3,
+      zone5: 1,
+    })
+    expect(participantById.P2.avg_zone_minutes).toEqual({
+      zone1: 0,
+      zone2: 0,
+      zone3: 0,
+      zone4: 0,
+      zone5: 0,
+    })
+
+    jest.useRealTimers()
+  })
+
   test('excludes pilot/test accounts (auth email matching /^test\\d+@/i) from participants and cohort stats', async () => {
     const participants = [
       {
@@ -1386,4 +1466,3 @@ describe('getCurrentWeekPulse', () => {
     expect(result.filter((row) => row.participant_id === 'P1')).toHaveLength(3)
   })
 })
-
