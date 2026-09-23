@@ -6,9 +6,9 @@ import { useEffect, useMemo, useState } from 'react'
 // sync with the read-only display of these same weights on the WD dashboard
 // (src/app/wellness-director/WellnessDirectorClient.tsx).
 const ENGAGEMENT_COMPONENT_LABELS: Record<string, string> = {
-  submission_consistency: 'WHOOP/CSV submission consistency',
-  device_wear_consistency: 'Device-wear consistency',
-  pulse_completion: 'Pulse survey completion',
+  submission_consistency: 'Weekly WHOOP/CSV coverage',
+  device_wear_consistency: 'Qualifying data consistency',
+  pulse_completion: 'Weekly pulse completion',
   nudge_response: 'Nudge response rate',
   workout_volume: 'Workout volume vs. baseline',
 }

@@ -52,7 +52,7 @@ interface NudgeResponseGroup {
 }
 
 const EVENT_TYPES = ['outdoor', 'fitness', 'race', 'general']
-const MAX_DISPLAYED_NUDGES = 10
+const MAX_DISPLAYED_NUDGES = 50
 const TYPE_LABELS: Record<string, string> = {
   outdoor: '🥾 Outdoor',
   fitness: '🧘 Fitness',

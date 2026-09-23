@@ -132,7 +132,7 @@ describe('admin events routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(nudgesLimit).toHaveBeenCalledWith(10)
+    expect(nudgesLimit).toHaveBeenCalledWith(50)
     expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
     expect(body).toEqual({
       events: [{
@@ -220,7 +220,7 @@ describe('admin events routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(nudgesLimit).toHaveBeenCalledWith(10)
+    expect(nudgesLimit).toHaveBeenCalledWith(50)
     expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
     expect(body.nudge_responses).toHaveLength(1)
     expect(body.nudge_responses[0].acknowledgements_total).toBe(137)

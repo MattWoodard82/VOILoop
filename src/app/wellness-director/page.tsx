@@ -8,6 +8,23 @@ import { redirect } from 'next/navigation'
 
 export const dynamic = 'force-dynamic'
 
+function latestWellnessDate(participants: Awaited<ReturnType<typeof getTeamDashboard>>['participants']) {
+  const dates = participants
+    .map((participant) => participant.latest_wellness?.date?.slice(0, 10))
+    .filter((date): date is string => Boolean(date))
+  if (dates.length === 0) return null
+  return dates.sort().at(-1) ?? null
+}
+
+function latestWellnessDelta(participants: Awaited<ReturnType<typeof getTeamDashboard>>['participants']) {
+  const date = latestWellnessDate(participants)
+  if (!date) return 'No latest wellness records available'
+  const now = new Date()
+  const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const ageDays = Math.max(0, Math.floor((todayUtc - new Date(`${date}T00:00:00.000Z`).getTime()) / 86400000))
+  return `Latest available record ${date} · ${ageDays} day${ageDays === 1 ? '' : 's'} old${ageDays > 10 ? ' · stale' : ''}`
+}
+
 export default async function WellnessDirectorPage() {
   const access = await requireAuth()
   if ('redirect' in access && access.redirect) redirect(access.redirect)
@@ -15,6 +32,8 @@ export default async function WellnessDirectorPage() {
 
   const { participants, stats, interventions } = await getTeamDashboard()
   const highRisk = participants.filter(e => e.risk_level === 'High')
+  const latestRecordDelta = latestWellnessDelta(participants)
+  const latestRecordIsStale = latestRecordDelta.includes('stale')
 
   // Build a live department summary from logged intervention records. Computed
   // recommendations driven by team risk patterns are coming soon.
@@ -60,10 +79,10 @@ export default async function WellnessDirectorPage() {
       )}
       <div className="sec-label">Workforce snapshot — {participants.length} participants</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
-        <KpiCard label="Avg recovery score" value={stats.avg_recovery} color="#69BE28" delta={`${stats.total_participants} participants tracked`} deltaDir="neutral" />
+        <KpiCard label="Avg recovery score (latest available record)" value={stats.avg_recovery} color={latestRecordIsStale ? '#F59E0B' : '#69BE28'} delta={latestRecordDelta} deltaDir="neutral" />
         <KpiCard label="High burnout risk" value={stats.high_risk_count} color="#ff6b6b" delta={highRisk.length > 0 ? highRisk.map(e => e.first_name).join(' · ') : 'No high-risk participants today'} deltaDir="neutral" />
-        <KpiCard label="Avg sleep performance" value={`${stats.avg_sleep_perf}%`} color="#A5ACAF" delta={`Pulse participation ${stats.participation_rate}%`} deltaDir="neutral" />
-        <KpiCard label="Avg HRV" value={`${stats.avg_hrv}ms`} color="#69BE28" delta={`${participants.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data`} deltaDir="neutral" />
+        <KpiCard label="Avg sleep performance (latest available record)" value={`${stats.avg_sleep_perf}%`} color={latestRecordIsStale ? '#F59E0B' : '#A5ACAF'} delta={`Pulse participation ${stats.participation_rate}% · ${latestRecordDelta}`} deltaDir="neutral" />
+        <KpiCard label="Avg HRV (latest available record)" value={`${stats.avg_hrv}ms`} color={latestRecordIsStale ? '#F59E0B' : '#69BE28'} delta={`${participants.filter(e => e.latest_wellness?.hrv_ms != null).length} with HRV data · ${latestRecordDelta}`} deltaDir="neutral" />
       </div>
 
       <WellnessDirectorClient participants={participants} />

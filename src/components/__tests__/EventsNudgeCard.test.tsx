@@ -63,10 +63,10 @@ describe('EventsNudgeCard', () => {
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([null, jest.fn()]) // nudge
       .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // history
       .mockReturnValueOnce([[], jest.fn()]) // rsvps
       .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce(['Events card failed to load. Detail: Request failed (500)', jest.fn()]) // error
-      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
       .mockReturnValueOnce(['', jest.fn()]) // ackText
       .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
 
@@ -76,7 +76,7 @@ describe('EventsNudgeCard', () => {
     expect(markup).toContain('Events card failed to load. Detail: Request failed (500)')
   })
 
-  test('renders nudge acknowledgement prompt and upcoming event details', async () => {
+  test('renders nudge reply prompt and upcoming event details', async () => {
     mockUseState
       .mockReturnValueOnce([[{
         id: 'evt-1',
@@ -92,10 +92,10 @@ describe('EventsNudgeCard', () => {
       }], jest.fn()]) // events
       .mockReturnValueOnce([{ id: 'nudge-1', message: 'Hydrate today', author: 'Coach', week_of: '2099-08-04' }, jest.fn()]) // nudge
       .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // history
       .mockReturnValueOnce([['evt-1'], jest.fn()]) // rsvps
       .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce(['', jest.fn()]) // error
-      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
       .mockReturnValueOnce(['', jest.fn()]) // ackText
       .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
 
@@ -104,7 +104,7 @@ describe('EventsNudgeCard', () => {
 
     expect(markup).toContain('This week&#x27;s focus')
     expect(markup).toContain('Hydrate today')
-    expect(markup).toContain('Open-text response required within 48 hours.')
+    expect(markup).toContain('Reply below. Your response is private and visible only to your wellness director.')
     expect(markup).toContain('Upcoming events')
     expect(markup).toContain('Walk Club')
     expect(markup).toContain('Bring water')
@@ -112,15 +112,41 @@ describe('EventsNudgeCard', () => {
     expect(markup).toContain('Weekly')
   })
 
+  test('renders past nudge history read-only, without a reply control', async () => {
+    mockUseState
+      .mockReturnValueOnce([[], jest.fn()]) // events
+      .mockReturnValueOnce([{ id: 'nudge-2', message: 'Stretch daily', author: 'Coach', week_of: '2099-08-11' }, jest.fn()]) // nudge
+      .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[{
+        id: 'nudge-1',
+        message: 'Hydrate today',
+        author: 'Coach',
+        week_of: '2099-08-04',
+        acknowledgement: { acknowledged_at: '2099-08-05T00:00:00Z', response_text: 'Did it!', response_due_at: '2099-08-06T00:00:00Z' },
+      }], jest.fn()]) // history
+      .mockReturnValueOnce([[], jest.fn()]) // rsvps
+      .mockReturnValueOnce([false, jest.fn()]) // loading
+      .mockReturnValueOnce(['', jest.fn()]) // error
+      .mockReturnValueOnce(['', jest.fn()]) // ackText
+      .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
+
+    const { EventsNudgeCard } = await import('../EventsNudgeCard')
+    const markup = renderToStaticMarkup(React.createElement(EventsNudgeCard))
+
+    expect(markup).toContain('Past focus · from Coach')
+    expect(markup).toContain('Hydrate today')
+    expect(markup).toContain('You replied: Did it!')
+  })
+
   test('renders stable skeleton shells while card data is loading', async () => {
     mockUseState
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([null, jest.fn()]) // nudge
       .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // history
       .mockReturnValueOnce([[], jest.fn()]) // rsvps
       .mockReturnValueOnce([true, jest.fn()]) // loading
       .mockReturnValueOnce(['', jest.fn()]) // error
-      .mockReturnValueOnce([false, jest.fn()]) // showAckModal
       .mockReturnValueOnce(['', jest.fn()]) // ackText
       .mockReturnValueOnce([false, jest.fn()]) // ackSubmitting
 
@@ -140,10 +166,10 @@ describe('EventsNudgeCard', () => {
       .mockReturnValueOnce([[], jest.fn()]) // events
       .mockReturnValueOnce([{ id: 'nudge-1', message: 'Hydrate today', author: 'Coach', week_of: '2099-08-04' }, jest.fn()]) // nudge
       .mockReturnValueOnce([null, jest.fn()]) // acknowledgement
+      .mockReturnValueOnce([[], jest.fn()]) // history
       .mockReturnValueOnce([[], jest.fn()]) // rsvps
       .mockReturnValueOnce([false, jest.fn()]) // loading
       .mockReturnValueOnce(['', setError]) // error
-      .mockReturnValueOnce([true, jest.fn()]) // showAckModal
       .mockReturnValueOnce(['Will do', jest.fn()]) // ackText
       .mockReturnValueOnce([false, setAckSubmitting]) // ackSubmitting
 

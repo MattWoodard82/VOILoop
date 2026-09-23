@@ -73,6 +73,13 @@ const participant: ParticipantWithWellness = {
   recovery_status: 'green',
   engagement_score: 68,
   engagement_score_components: { submission_consistency: 25, device_wear_consistency: 20, pulse_completion: 20, nudge_response: 15, workout_volume: 20 },
+  engagement_score_component_windows: {
+    submission_consistency: 'Last 3 calendar weeks',
+    device_wear_consistency: 'Trailing 21 days',
+    pulse_completion: 'Last 3 calendar weeks',
+    nudge_response: 'Trailing 21 days',
+    workout_volume: 'Trailing 21 days vs. baseline',
+  },
   physiological_trend: 'improving',
   physiological_trend_metrics: ['Recovery up', 'HRV up', 'Sleep performance up'],
   risk_tier_label: 'Stable',
@@ -141,7 +148,9 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Dismiss')
     expect(markup).not.toContain('Loading weights…')
     expect(markup).not.toContain('table-skeleton')
-    expect(markup).toContain('WHOOP/CSV submission consistency')
+    expect(markup).toContain('Weekly WHOOP/CSV coverage')
+    expect(markup).toContain('Last 3 calendar weeks')
+    expect(markup).toContain('Trailing 21 days')
     expect(markup).toContain('Send a nudge to Alex Able')
   })
 
@@ -151,7 +160,9 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Alex Able')
     expect(markup).toContain('Avg steps: not available (no WHOOP steps data source).')
     expect(markup).toContain('Avg weighted score')
-    expect(markup).toContain('Avg wear consistency')
+    expect(markup).toContain('Qualifying Data Consistency (21 days)')
+    expect(markup).toContain('Avg zone 1-5 duration (min/day, current Team Health Score week)')
+    expect(markup).toContain('participants without workouts count as 0 min/day')
   })
 
   test('shows Avg weighted score explanation only for cohort averages, not selected participant averages', () => {
@@ -209,6 +220,24 @@ describe('WellnessDirectorClient', () => {
     expect(markup).toContain('Choose a participant to view risk tier.')
     expect(markup).toContain('Cohort averages')
     expect(markup).not.toContain('Send a nudge')
+  })
+
+  test('passes participant ids through engagement chart rows so duplicate display labels do not collide', () => {
+    const duplicateNameParticipant = {
+      ...participant,
+      id: 'P2',
+      first_name: 'Alex',
+      last_name: 'Able',
+      latest_wellness: { ...participant.latest_wellness!, id: 'w2', participant_id: 'P2' },
+      latest_workout: { ...participant.latest_workout!, id: 'wo2', participant_id: 'P2' },
+      latest_habits: { ...participant.latest_habits!, id: 'h2', participant_id: 'P2' },
+      latest_pulse: { ...participant.latest_pulse!, id: 'p2', participant_id: 'P2' },
+    } as ParticipantWithWellness
+
+    const markup = renderClientMarkup([participant, duplicateNameParticipant])
+
+    expect(markup).toContain('&quot;id&quot;:&quot;P1&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
+    expect(markup).toContain('&quot;id&quot;:&quot;P2&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
   })
 
   test('shows empty states when selected participant data is unavailable or out of scope', () => {

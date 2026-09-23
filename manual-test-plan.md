@@ -95,17 +95,24 @@
 6. **Participant verification**
    - Confirm the nudge card appears near the top of the dashboard.
    - Confirm the message text is visible.
-   - Confirm the card shows an **Acknowledge** button and the helper text `Open-text response required within 48 hours.`
-7. **Participant acknowledgement**
-   - Click **Acknowledge**.
-   - Enter a short response in the browser prompt.
-   - Submit the prompt.
-   - Confirm the card updates to `Acknowledged: <your response>` and the button disappears.
+   - Confirm the card shows an inline reply textarea directly under the message, with the helper text `Reply below. Your response is private and visible only to your wellness director.` (no modal/popup step).
+7. **Participant reply**
+   - Type a short response directly into the inline textarea.
+   - Click **Send**.
+   - Confirm the card updates in place to `Acknowledged: <your response>` and the textarea/Send button disappear — no navigation away from the message was required.
 8. **Encrypted storage verification**
    - Return to Supabase Studio.
    - Open `nudge_acknowledgements`.
    - Find the row for the participant and current nudge.
    - Confirm `acknowledged_at` is set and `response_text_encrypted` is populated.
+9. **Stale-nudge reply restriction (retain-but-non-repliable)**
+   - Publish a second, newer individual nudge to the same participant (`test1@user.com`).
+   - Sign in as the participant and open `http://localhost:3000/my`.
+   - Confirm the newest nudge is shown at the top with an active inline reply textarea, and the prior nudge now appears below it in a read-only "Past focus" section (message still visible, no reply control).
+   - Attempt to `PATCH /api/participant/events` with the **older** nudge's id (e.g., via devtools) -> confirm `403` with `This nudge is no longer current. Only the newest nudge accepts replies.`
+   - Confirm replying to the **current/newest** nudge still succeeds regardless of how long ago it was published (no 48-hour cutoff).
+10. **Nudge list shows up to 50**
+    - In `http://localhost:3000/admin/events`, confirm the nudge list/history view can display up to 50 recent nudges (not capped at 10).
 
 ## Priority 3 — Rewards + Rules (FR-9 to FR-10)
 - [x] **9. Rules page hidden by default** — Historical check only; rollout gate has been removed, so this step is no longer applicable on the current branch.
