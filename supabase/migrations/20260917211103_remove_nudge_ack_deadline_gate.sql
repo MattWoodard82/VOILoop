@@ -12,6 +12,7 @@ returns jsonb as $$
 declare
   v_result jsonb;
   v_response_due_at timestamptz;
+  v_current_nudge_id uuid;
 begin
   if public.current_app_role() <> 'participant' then
     return json_build_object('error', 'Only participants may submit nudge responses')::jsonb;
@@ -51,6 +52,24 @@ begin
       )
   ) then
     return json_build_object('error', 'Nudge not targeted to this participant')::jsonb;
+  end if;
+
+  select wn.id
+  into v_current_nudge_id
+  from public.weekly_nudges wn
+  join public.nudge_targets nt on nt.nudge_id = wn.id
+  join public.participants p on p.id = p_participant_id
+  where wn.week_of <= date_trunc('week', now())::date
+    and (
+      nt.target_type = 'all'
+      or (nt.target_type = 'participant' and nt.participant_id = p_participant_id)
+      or (nt.target_type = 'subgroup' and nt.target_label = coalesce(p.cohort, ''))
+    )
+  order by wn.week_of desc, wn.created_at desc
+  limit 1;
+
+  if v_current_nudge_id is distinct from p_nudge_id then
+    return json_build_object('error', 'Only the newest targeted nudge accepts responses')::jsonb;
   end if;
 
   insert into public.nudge_acknowledgements (nudge_id, participant_id, response_text, response_text_encrypted, acknowledged_at, response_due_at)

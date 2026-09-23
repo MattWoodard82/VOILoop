@@ -41,6 +41,7 @@ function createGetRouteMock({
   decryptedResponses = {},
   onAcknowledgementNudgeIds,
   onNudgeLimit,
+  onNudgeOrder,
 }: {
   cohort?: string | null
   targetedRows?: Array<{ nudge_id: string; target_type?: string; target_label?: string; participant_id?: string | null }>
@@ -52,6 +53,7 @@ function createGetRouteMock({
   decryptedResponses?: Record<string, string>
   onAcknowledgementNudgeIds?: (nudgeIds: string[]) => void
   onNudgeLimit?: (limit: number) => void
+  onNudgeOrder?: (column: string, options: { ascending: boolean }) => void
 }) {
   const participantsMaybeSingle = jest
     .fn()
@@ -88,15 +90,23 @@ function createGetRouteMock({
           select: jest.fn(() => ({
             in: jest.fn(() => ({
               lte: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: jest.fn(async (limit: number) => {
-                    onNudgeLimit?.(limit)
-                    return {
-                      data: nudgeRows,
-                      error: null,
-                    }
-                  }),
-                })),
+                order: jest.fn((column: string, options: { ascending: boolean }) => {
+                  onNudgeOrder?.(column, options)
+                  return {
+                    order: jest.fn((tieBreakerColumn: string, tieBreakerOptions: { ascending: boolean }) => {
+                      onNudgeOrder?.(tieBreakerColumn, tieBreakerOptions)
+                      return {
+                        limit: jest.fn(async (limit: number) => {
+                          onNudgeLimit?.(limit)
+                          return {
+                            data: nudgeRows,
+                            error: null,
+                          }
+                        }),
+                      }
+                    }),
+                  }
+                }),
               })),
             })),
           })),
@@ -300,6 +310,29 @@ describe('/api/participant/events', () => {
 
     expect(response.status).toBe(200)
     expect(observedLimits).toEqual([51])
+  })
+
+  test('GET orders same-week nudges by creation time', async () => {
+    mockGetSession.mockResolvedValue({ user: { id: 'participant-1' } } as never)
+    mockGetUserAccess.mockResolvedValue({ role: 'participant', mustChangePassword: false })
+
+    const observedOrders: Array<[string, { ascending: boolean }]> = []
+    mockCreateServerSupabaseClient.mockReturnValue(createGetRouteMock({
+      targetedRows: [{ nudge_id: 'nudge-1', target_type: 'all', target_label: '', participant_id: null }],
+      nudgeRows: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-07-20' }],
+      onNudgeOrder: (column, options) => observedOrders.push([column, options]),
+      events: [],
+      rsvps: [],
+    }) as never)
+
+    const response = await GET()
+    if (!response) throw new Error('Expected response')
+
+    expect(response.status).toBe(200)
+    expect(observedOrders).toEqual([
+      ['week_of', { ascending: false }],
+      ['created_at', { ascending: false }],
+    ])
   })
 
   test('GET returns a nudge targeted to all participants', async () => {
@@ -542,9 +575,11 @@ describe('/api/participant/events', () => {
               in: jest.fn(() => ({
                 lte: jest.fn(() => ({
                   order: jest.fn(() => ({
-                    limit: jest.fn(async () => ({
-                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
-                      error: null,
+                    order: jest.fn(() => ({
+                      limit: jest.fn(async () => ({
+                        data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
+                        error: null,
+                      })),
                     })),
                   })),
                 })),
@@ -628,9 +663,11 @@ describe('/api/participant/events', () => {
               in: jest.fn(() => ({
                 lte: jest.fn(() => ({
                   order: jest.fn(() => ({
-                    limit: jest.fn(async () => ({
-                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-06-09' }],
-                      error: null,
+                    order: jest.fn(() => ({
+                      limit: jest.fn(async () => ({
+                        data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2026-06-09' }],
+                        error: null,
+                      })),
                     })),
                   })),
                 })),
@@ -705,12 +742,14 @@ describe('/api/participant/events', () => {
               in: jest.fn(() => ({
                 lte: jest.fn(() => ({
                   order: jest.fn(() => ({
-                    limit: jest.fn(async () => ({
-                      data: [
-                        { id: 'nudge-2', message: 'Newer nudge', author: 'Coach', week_of: '2026-06-16' },
-                        { id: 'nudge-1', message: 'Older nudge', author: 'Coach', week_of: '2026-06-09' },
-                      ],
-                      error: null,
+                    order: jest.fn(() => ({
+                      limit: jest.fn(async () => ({
+                        data: [
+                          { id: 'nudge-2', message: 'Newer nudge', author: 'Coach', week_of: '2026-06-16' },
+                          { id: 'nudge-1', message: 'Older nudge', author: 'Coach', week_of: '2026-06-09' },
+                        ],
+                        error: null,
+                      })),
                     })),
                   })),
                 })),
@@ -844,9 +883,11 @@ describe('/api/participant/events', () => {
               in: jest.fn(() => ({
                 lte: jest.fn(() => ({
                   order: jest.fn(() => ({
-                    limit: jest.fn(async () => ({
-                      data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
-                      error: null,
+                    order: jest.fn(() => ({
+                      limit: jest.fn(async () => ({
+                        data: [{ id: 'nudge-1', message: 'Hydrate', author: 'Coach', week_of: '2099-08-11' }],
+                        error: null,
+                      })),
                     })),
                   })),
                 })),

@@ -24,7 +24,6 @@ interface ParticipantRow {
   auth_user_id: string | null
   first_name: string | null
   last_name: string | null
-  employee_id: string | null
 }
 
 // Tables keyed by participant_id whose row counts are useful context when
@@ -109,7 +108,6 @@ async function main() {
     authUserId: string
     createdAt: string
     participantId: string | null
-    employeeId: string | null
     name: string | null
     dataCounts: Record<string, TableCountResult>
     totalRows: number | null
@@ -118,7 +116,7 @@ async function main() {
   for (const user of testUsers) {
     const { data: participant, error: participantError } = await adminClient
       .from('participants')
-      .select('id, auth_user_id, first_name, last_name, employee_id')
+      .select('id, auth_user_id, first_name, last_name')
       .eq('auth_user_id', user.id)
       .maybeSingle() as { data: ParticipantRow | null, error: { message: string } | null }
 
@@ -149,7 +147,6 @@ async function main() {
       authUserId: user.id,
       createdAt: user.created_at ?? 'unknown',
       participantId: participant?.id ?? null,
-      employeeId: participant?.employee_id ?? null,
       name: participant ? `${participant.first_name ?? ''} ${participant.last_name ?? ''}`.trim() || null : null,
       dataCounts,
       totalRows: hasUnknownCounts ? null : totalRows,
@@ -165,7 +162,6 @@ async function main() {
     console.log(`    auth_user_id:   ${row.authUserId}`)
     console.log(`    created_at:     ${row.createdAt}`)
     console.log(`    participant_id: ${row.participantId ?? '(no participant row)'}`)
-    console.log(`    employee_id:    ${row.employeeId ?? 'n/a'}`)
     console.log(`    name:           ${row.name ?? 'n/a'}`)
     const countSummary = Object.entries(row.dataCounts)
       .map(([table, result]) => result.count === null ? `${table}=UNKNOWN [count failed: ${result.error ?? 'unknown error'}]` : `${table}=${result.count}`)

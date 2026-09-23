@@ -60,7 +60,10 @@ export function WellnessDirectorCharts({ type, data, seriesName, onBarClick }: P
             dataKey="value"
             radius={[0, 4, 4, 0]}
             name={seriesName ?? 'Recovery'}
-            onClick={onBarClick ? (entry: ChartData) => { if (entry.id) onBarClick(entry.id) } : undefined}
+            onClick={onBarClick ? (entry: { payload?: ChartData }) => {
+              const id = entry.payload?.id
+              if (id) onBarClick(id)
+            } : undefined}
             cursor={onBarClick ? 'pointer' : undefined}
           >
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}

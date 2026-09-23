@@ -49,7 +49,6 @@ select
   (select count(*) from public.pulse_surveys ps where ps.participant_id = mp.participant_id) as pulse_surveys_rows,
   (select count(*) from public.interventions i where i.participant_id = mp.participant_id) as interventions_rows,
   (select count(*) from public.challenge_participants cp where cp.participant_id = mp.participant_id) as challenge_participants_rows,
-  (select count(*) from public.upload_batches ub where ub.participant_id = mp.participant_id) as upload_batches_rows,
   (select count(*) from public.nudge_acknowledgements na where na.participant_id = mp.participant_id) as nudge_acknowledgements_rows,
   (select count(*) from public.login_activity la where la.participant_id = mp.participant_id) as login_activity_rows,
   (
@@ -59,7 +58,6 @@ select
     + coalesce((select count(*) from public.pulse_surveys ps where ps.participant_id = mp.participant_id), 0)
     + coalesce((select count(*) from public.interventions i where i.participant_id = mp.participant_id), 0)
     + coalesce((select count(*) from public.challenge_participants cp where cp.participant_id = mp.participant_id), 0)
-    + coalesce((select count(*) from public.upload_batches ub where ub.participant_id = mp.participant_id), 0)
     + coalesce((select count(*) from public.nudge_acknowledgements na where na.participant_id = mp.participant_id), 0)
     + coalesce((select count(*) from public.login_activity la where la.participant_id = mp.participant_id), 0)
   ) as total_data_rows

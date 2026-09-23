@@ -120,6 +120,7 @@ async function getTargetedNudges(
     .in('id', targetedNudgeIds)
     .lte('week_of', weekOf)
     .order('week_of', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(MAX_TARGETED_NUDGES)
 
   if (error) return { error }
