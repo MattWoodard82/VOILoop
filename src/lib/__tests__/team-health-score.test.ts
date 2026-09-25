@@ -223,6 +223,20 @@ describe('scoreWindow', () => {
     expect(result.band).toBeNull()
     expect(result.lowConfidence).toBe(true)
   })
+
+  it('exposes audit inputs, source mappings, and date assignment counts without changing scores', () => {
+    const nights: NightInput[] = [
+      { nightDate: '2026-08-10', sleepHours: 7, hrvMs: 60, recoveryPct: 70, dateSource: 'sleep_onset', dayStrain: 8 },
+      { nightDate: '2026-08-11', sleepHours: 8, hrvMs: 66, recoveryPct: 75, dateSource: 'stored_date', dayStrain: 10 },
+    ]
+    const result = scoreWindow(nights, [], { start: '2026-08-10', end: '2026-08-11' }, 60, 70, false)
+    expect(result.hrv).toBe(60)
+    expect(result.audit.sourceMappings.hrv).toBe('physiological_cycles.csv → hrv_ms')
+    expect(result.audit.rows.hrv).toBe(2)
+    expect(result.audit.dateAssignment).toEqual({ sleepOnsetRows: 1, storedDateFallbackRows: 1, unknownRows: 0 })
+    expect(result.audit.averages).toMatchObject({ sleepHours: 7.5, hrvMs: 63, recoveryPct: 72.5, strain: 9 })
+    expect(result.audit.hrv.percentChange).toBe(5)
+  })
 })
 
 describe('scoreParticipant', () => {
@@ -257,7 +271,7 @@ describe('toNightInputs', () => {
       sleep_need: null, deep_sleep: null, rem_sleep: null, light_sleep: null, sleep_eff: null,
       sleep_consistency: null, resp_rate: null,
     }]
-    expect(toNightInputs(rows)).toEqual([{ nightDate: '2026-08-10', sleepHours: 7.5, hrvMs: 60, recoveryPct: 70 }])
+    expect(toNightInputs(rows)).toEqual([{ nightDate: '2026-08-10', sleepHours: 7.5, hrvMs: 60, recoveryPct: 70, dateSource: 'sleep_onset', dayStrain: null }])
   })
 
   it('falls back to the date column when sleep_onset_time is missing (pre-ship historical rows)', () => {
@@ -281,6 +295,6 @@ describe('toWorkoutInputs', () => {
       duration_min: 60, strain: null, calories: null, max_hr: null, avg_hr: null,
       zone1_pct: null, zone2_pct: 50, zone3_pct: 20, zone4_pct: 0, zone5_pct: 0,
     }]
-    expect(toWorkoutInputs(rows)).toEqual([{ date: '2026-08-11', durationMin: 60, zone2Pct: 50, zone3Pct: 20, zone4Pct: 0, zone5Pct: 0 }])
+    expect(toWorkoutInputs(rows)).toEqual([{ date: '2026-08-11', durationMin: 60, zone2Pct: 50, zone3Pct: 20, zone4Pct: 0, zone5Pct: 0, strain: null }])
   })
 })
