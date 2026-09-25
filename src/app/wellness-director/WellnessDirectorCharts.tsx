@@ -6,8 +6,17 @@ interface Props {
   type: 'recovery' | 'hrv' | 'strain'
   data: ChartData[]
   seriesName?: string
-  /** Called with the clicked row's `id` (only wired up for the per-participant chart). */
+  /** Called with the selected row's `id` (only wired up for the per-participant chart). */
   onBarClick?: (id: string) => void
+}
+
+interface ParticipantTickProps {
+  x: number
+  y: number
+  index: number
+  payload: { value: string }
+  data: ChartData[]
+  onSelect?: (id: string) => void
 }
 
 const TICK = { fill: '#A5ACAF', fontSize: 9, fontFamily: 'Inter' }
@@ -19,6 +28,40 @@ const VALUE_LABEL_STYLE = { fill: '#fff', fontSize: 10, fontFamily: 'Inter' }
 // than the fixed 210px default comfortably fits (e.g. a cohort-sized participant
 // list rather than the 3-5 fixed rows the "recovery" layout was designed for).
 const MIN_ROW_HEIGHT = 26
+
+export function ParticipantAxisTick({ x, y, index, payload, data, onSelect }: ParticipantTickProps) {
+  const participantId = data[index]?.id
+  const label = payload.value.length > 16 ? `${payload.value.slice(0, 16)}…` : payload.value
+  const selectParticipant = participantId && onSelect ? () => onSelect(participantId) : undefined
+
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={3}
+      textAnchor="end"
+      fill={TICK.fill}
+      fontSize={TICK.fontSize}
+      fontFamily={TICK.fontFamily}
+      role={selectParticipant ? 'button' : undefined}
+      tabIndex={selectParticipant ? 0 : undefined}
+      aria-label={selectParticipant ? `Select ${payload.value}` : undefined}
+      onClick={selectParticipant}
+      onKeyDown={selectParticipant ? (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          selectParticipant()
+        }
+      } : undefined}
+      style={{
+        cursor: selectParticipant ? 'pointer' : 'default',
+        textDecoration: selectParticipant ? 'underline' : 'none',
+      }}
+    >
+      {label}
+    </text>
+  )
+}
 
 export function WellnessDirectorCharts({ type, data, seriesName, onBarClick }: Props) {
   const height = type === 'recovery' ? Math.max(210, data.length * MIN_ROW_HEIGHT) : 130
@@ -44,11 +87,12 @@ export function WellnessDirectorCharts({ type, data, seriesName, onBarClick }: P
           <YAxis
             type="category"
             dataKey="name"
-            tick={TICK}
+            tick={(props: ParticipantTickProps) => (
+              <ParticipantAxisTick {...props} data={data} onSelect={onBarClick} />
+            )}
             axisLine={false}
             tickLine={false}
             width={120}
-            tickFormatter={(value: string) => (value.length > 16 ? `${value.slice(0, 16)}…` : value)}
           />
           <Tooltip
             contentStyle={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, fontSize: 11 }}
