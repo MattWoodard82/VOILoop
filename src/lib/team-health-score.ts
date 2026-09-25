@@ -132,6 +132,8 @@ export interface NightInput {
   sleepHours: number | null
   hrvMs: number | null
   recoveryPct: number | null
+  dateSource?: 'sleep_onset' | 'stored_date'
+  dayStrain?: number | null
 }
 
 export interface WorkoutInput {
@@ -141,18 +143,20 @@ export interface WorkoutInput {
   zone3Pct: number | null
   zone4Pct: number | null
   zone5Pct: number | null
+  strain?: number | null
 }
 
 // Rows without a captured sleep_onset_time (imported before this feature
-// shipped) fall back to the existing `date` column — a small ±1-day drift
-// risk right at the midnight boundary, flagged in the implementation plan,
-// affecting only historical rows.
+// shipped) fall back to the existing `date` column. Keep the source marker so
+// the dashboard can disclose when a score depends on that historical fallback.
 export function toNightInputs(wellnessRows: DailyWellness[]): NightInput[] {
   return wellnessRows.map((row) => ({
     nightDate: row.sleep_onset_time ? sleepNightDate(row.sleep_onset_time) : row.date,
     sleepHours: row.sleep_hrs,
     hrvMs: row.hrv_ms,
     recoveryPct: row.recovery_score,
+    dateSource: row.sleep_onset_time ? 'sleep_onset' : 'stored_date',
+    dayStrain: row.day_strain,
   }))
 }
 
@@ -164,6 +168,7 @@ export function toWorkoutInputs(workouts: Workout[]): WorkoutInput[] {
     zone3Pct: w.zone3_pct,
     zone4Pct: w.zone4_pct,
     zone5Pct: w.zone5_pct,
+    strain: w.strain,
   }))
 }
 
@@ -312,6 +317,53 @@ export interface WindowScoreResult {
   lowConfidence: boolean
   /** Which components are null for this window, for UI messaging (OQ1). */
   missingComponents: TeamHealthComponentKey[]
+  audit: WindowAudit
+}
+
+export interface WindowAudit {
+  sourceMappings: {
+    sleep: string
+    hrv: string
+    recovery: string
+    zone2: string
+    strain: string
+  }
+  rows: {
+    nights: number
+    sleep: number
+    hrv: number
+    recovery: number
+    workouts: number
+    measurableWorkouts: number
+    dayStrain: number
+    workoutStrain: number
+  }
+  dateAssignment: {
+    sleepOnsetRows: number
+    storedDateFallbackRows: number
+    unknownRows: number
+  }
+  averages: {
+    sleepHours: number | null
+    hrvMs: number | null
+    recoveryPct: number | null
+    dayStrain: number | null
+    workoutStrain: number | null
+  }
+  hrv: {
+    baselineMs: number | null
+    percentChange: number | null
+    multiplier: number
+  }
+  timezone: {
+    status: 'not_persisted'
+    message: string
+  }
+  constants: {
+    sleepTargetHours: number
+    zone2TargetMinPerDay: number
+    strainDeclineMultiplier: number
+  }
 }
 
 export function scoreWindow(
@@ -334,6 +386,23 @@ export function scoreWindow(
   const missingComponents = (Object.keys(TEAM_HEALTH_WEIGHTS) as TeamHealthComponentKey[])
     .filter((key) => scores[key] == null)
 
+  const windowNights = nightsInWindow(nights, window)
+  const sleepRows = windowNights.filter((n) => n.sleepHours != null)
+  const hrvRows = windowNights.filter((n) => n.hrvMs != null)
+  const recoveryRows = windowNights.filter((n) => n.recoveryPct != null)
+  const windowWorkouts = workoutsInWindow(workouts, window)
+  const measurableWorkouts = windowWorkouts.filter(
+    (w) => w.durationMin != null && [w.zone2Pct, w.zone3Pct, w.zone4Pct, w.zone5Pct].some((pct) => pct != null),
+  )
+  const hrvAverage = hrvRows.length ? avgOf(hrvRows.map((n) => n.hrvMs as number)) : null
+  const recoveryAverage = recoveryRows.length ? avgOf(recoveryRows.map((n) => n.recoveryPct as number)) : null
+  const sleepAverage = sleepRows.length ? avgOf(sleepRows.map((n) => n.sleepHours as number)) : null
+  const dayStrainValues = windowNights.map((n) => n.dayStrain).filter((v): v is number => v != null)
+  const workoutStrainValues = windowWorkouts.map((w) => w.strain).filter((v): v is number => v != null)
+  const hrvPercentChange = hrvAverage != null && baselineHrvMs != null && baselineHrvMs !== 0
+    ? ((hrvAverage - baselineHrvMs) / baselineHrvMs) * 100
+    : null
+
   return {
     window,
     sleep,
@@ -346,6 +415,51 @@ export function scoreWindow(
     coveragePct: coverage,
     lowConfidence: isLowConfidence(coverage),
     missingComponents,
+    audit: {
+      sourceMappings: {
+        sleep: 'sleeps.csv → sleep_hrs',
+        hrv: 'physiological_cycles.csv → hrv_ms',
+        recovery: 'physiological_cycles.csv → recovery_score',
+        zone2: 'workouts.csv → duration_min + zone2_pct–zone5_pct',
+        strain: 'daily_wellness.day_strain / workouts.csv → strain (comparison only)',
+      },
+      rows: {
+        nights: windowNights.length,
+        sleep: sleepRows.length,
+        hrv: hrvRows.length,
+        recovery: recoveryRows.length,
+        workouts: windowWorkouts.length,
+        measurableWorkouts: measurableWorkouts.length,
+        dayStrain: dayStrainValues.length,
+        workoutStrain: workoutStrainValues.length,
+      },
+      dateAssignment: {
+        sleepOnsetRows: windowNights.filter((n) => n.dateSource === 'sleep_onset').length,
+        storedDateFallbackRows: windowNights.filter((n) => n.dateSource === 'stored_date').length,
+        unknownRows: windowNights.filter((n) => n.dateSource == null).length,
+      },
+      averages: {
+        sleepHours: sleepAverage,
+        hrvMs: hrvAverage,
+        recoveryPct: recoveryAverage,
+        dayStrain: dayStrainValues.length ? avgOf(dayStrainValues) : null,
+        workoutStrain: workoutStrainValues.length ? avgOf(workoutStrainValues) : null,
+      },
+      hrv: {
+        baselineMs: baselineHrvMs,
+        percentChange: hrvPercentChange,
+        multiplier: HRV_PCT_MULTIPLIER,
+      },
+      timezone: {
+        status: 'not_persisted',
+        message: 'Cycle timezone from the source export is not persisted in daily_wellness; the stored sleep_onset_time wall-clock value is used as supplied.',
+      },
+      constants: {
+        sleepTargetHours: SLEEP_TARGET_HOURS,
+        zone2TargetMinPerDay: ZONE2_TARGET_MIN_PER_DAY,
+        strainDeclineMultiplier: STRAIN_DECLINE_MULTIPLIER,
+      },
+    },
   }
 }
 

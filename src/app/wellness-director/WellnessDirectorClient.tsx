@@ -176,6 +176,86 @@ function formatWindowLabel(window: ThsWindow) {
   return `${window.start} – ${window.end}`
 }
 
+function formatAuditNumber(value: number | null, suffix = '') {
+  return value == null ? '—' : `${Math.round(value * 10) / 10}${suffix}`
+}
+
+function TeamHealthAudit({
+  score,
+  participantLabel,
+  participantId,
+}: {
+  score: ParticipantScoreResult
+  participantLabel: string
+  participantId: string
+}) {
+  const rows = [
+    ['Baseline', score.baseline],
+    ['Last week', score.lastWeek],
+    ['Current', score.current],
+  ] as const
+  const auditRows = rows.map(([label, result]) => ({
+    label,
+    window: formatWindowLabel(result.window),
+    audit: result.audit,
+    score: result,
+  }))
+  const current = score.current.audit
+  const baseline = score.baseline.audit
+  const fallbackRows = auditRows.reduce((sum, row) => sum + row.audit.dateAssignment.storedDateFallbackRows, 0)
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid #0a3560', paddingTop: 12 }}>
+      <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Calculation audit</div>
+      <div style={{ color: '#A5ACAF', fontSize: 11, marginBottom: 10 }}>
+        {participantLabel} ({participantId}) · scores use the same persisted rows shown below.
+      </div>
+      <div style={{ display: 'grid', gap: 8, fontSize: 11 }}>
+        {auditRows.map((row) => (
+          <div key={row.label} style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, padding: '8px 10px' }}>
+            <div style={{ color: '#fff', fontWeight: 700, marginBottom: 5 }}>{row.label}: {row.window}</div>
+            <div style={{ color: '#A5ACAF', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
+              <span>Sleep avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.sleepHours, ' h')}</strong> ({row.audit.rows.sleep} rows)</span>
+              <span>HRV avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.hrvMs, ' ms')}</strong> ({row.audit.rows.hrv} rows)</span>
+              <span>Recovery avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.recoveryPct, '%')}</strong> ({row.audit.rows.recovery} rows)</span>
+              <span>Day strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.dayStrain)}</strong> ({row.audit.rows.dayStrain} rows)</span>
+              <span>Workout strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.workoutStrain)}</strong> ({row.audit.rows.workoutStrain} rows)</span>
+              <span>HRV baseline: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.baselineMs, ' ms')}</strong> · change: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.percentChange, '%')}</strong></span>
+              <span>Sleep final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.sleep)}</strong></span>
+              <span>HRV final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.hrv)}</strong></span>
+              <span>Zone 2 final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.zone2)}</strong></span>
+              <span>Recovery final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.recovery)}</strong></span>
+              <span>Strain final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.strain)}</strong></span>
+              <span>Composite final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.composite)}</strong></span>
+              <span>Night rows: <strong style={{ color: '#fff' }}>{row.audit.rows.nights}</strong></span>
+              <span>Workouts: <strong style={{ color: '#fff' }}>{row.audit.rows.measurableWorkouts}/{row.audit.rows.workouts} measurable</strong></span>
+              <span>Onset dates: <strong style={{ color: '#fff' }}>{row.audit.dateAssignment.sleepOnsetRows}</strong></span>
+              <span>Fallback dates: <strong style={{ color: '#fff' }}>{row.audit.dateAssignment.storedDateFallbackRows}</strong></span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 10, color: fallbackRows > 0 ? '#FFA500' : '#A5ACAF', fontSize: 11 }}>
+        {fallbackRows > 0
+          ? `${fallbackRows} window rows use stored daily_wellness.date because sleep_onset_time was unavailable. This can shift overnight records and affect HRV and Recovery comparisons.`
+          : 'All displayed window rows have sleep_onset_time available; no stored-date fallback was used.'}
+      </div>
+      <div style={{ marginTop: 10, color: '#A5ACAF', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>CSV mappings:</strong> {current.sourceMappings.sleep}; {current.sourceMappings.hrv}; {current.sourceMappings.recovery}; {current.sourceMappings.zone2}.
+      </div>
+      <div style={{ marginTop: 8, color: '#A5ACAF', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Constants:</strong> sleep target {baseline.constants.sleepTargetHours} h · Zone 2+ target {baseline.constants.zone2TargetMinPerDay} min/day · HRV multiplier {baseline.hrv.multiplier} · strain decline multiplier {baseline.constants.strainDeclineMultiplier}.
+      </div>
+      <div style={{ marginTop: 10, background: '#10263a', borderRadius: 6, padding: 8, color: '#A5ACAF', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Strain-Recovery Balance:</strong> confirmed recovery-only production formula. It uses {current.sourceMappings.recovery}, sets baseline to 100, and penalizes current/last-week recovery declines by {baseline.constants.strainDeclineMultiplier}×. Workout strain is not part of this score.
+      </div>
+      <div style={{ marginTop: 8, background: '#10263a', borderRadius: 6, padding: 8, color: '#FFA500', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Timezone limitation:</strong> {current.timezone.message} Matt’s raw exports use the Cycle timezone, so exact timezone parity cannot be verified from the persisted rows.
+      </div>
+    </div>
+  )
+}
+
 export function WellnessDirectorClient({ participants }: Props) {
   const [deptFilter, setDeptFilter] = useState('All')
   const [personFilter, setPersonFilter] = useState('All')
@@ -195,6 +275,7 @@ export function WellnessDirectorClient({ participants }: Props) {
   const [thsError, setThsError] = useState('')
   const [baselineConfig, setBaselineConfig] = useState<TeamHealthScoreConfig | null>(null)
   const [baselineLoaded, setBaselineLoaded] = useState(false)
+  const [showThsAudit, setShowThsAudit] = useState(false)
 
   // Both the engagement-score weights and the Team Health Score baseline window
   // are admin-only settings, editable only from the Admin Console (whole-cohort
@@ -573,6 +654,22 @@ export function WellnessDirectorClient({ participants }: Props) {
                 Composite: <strong>{teamHealthScore.current.composite != null ? teamHealthScore.current.composite : 'No data this window'}</strong>
                 {teamHealthScore.current.band && <span style={{ color: '#A5ACAF' }}> · {teamHealthScore.current.band}</span>}
               </div>
+              <button
+                className="btn-primary"
+                type="button"
+                aria-expanded={showThsAudit}
+                onClick={() => setShowThsAudit((visible) => !visible)}
+                style={{ marginTop: 10 }}
+              >
+                {showThsAudit ? 'Hide calculation details' : 'Show calculation details'}
+              </button>
+              {showThsAudit && (
+                <TeamHealthAudit
+                  score={teamHealthScore}
+                  participantLabel={`${selected.first_name} ${selected.last_name}`}
+                  participantId={selected.id}
+                />
+              )}
             </>
           ) : null}
         </Card>
