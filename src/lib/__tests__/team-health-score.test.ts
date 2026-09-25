@@ -229,12 +229,22 @@ describe('scoreWindow', () => {
       { nightDate: '2026-08-10', sleepHours: 7, hrvMs: 60, recoveryPct: 70, dateSource: 'sleep_onset', dayStrain: 8 },
       { nightDate: '2026-08-11', sleepHours: 8, hrvMs: 66, recoveryPct: 75, dateSource: 'stored_date', dayStrain: 10 },
     ]
-    const result = scoreWindow(nights, [], { start: '2026-08-10', end: '2026-08-11' }, 60, 70, false)
+    const workouts: WorkoutInput[] = [
+      { date: '2026-08-10', durationMin: 30, zone2Pct: 50, zone3Pct: 0, zone4Pct: 0, zone5Pct: 0, strain: 4 },
+    ]
+    const result = scoreWindow(nights, workouts, { start: '2026-08-10', end: '2026-08-11' }, 60, 70, false)
     expect(result.hrv).toBe(60)
     expect(result.audit.sourceMappings.hrv).toBe('physiological_cycles.csv → hrv_ms')
     expect(result.audit.rows.hrv).toBe(2)
     expect(result.audit.dateAssignment).toEqual({ sleepOnsetRows: 1, storedDateFallbackRows: 1, unknownRows: 0 })
-    expect(result.audit.averages).toMatchObject({ sleepHours: 7.5, hrvMs: 63, recoveryPct: 72.5, strain: 9 })
+    expect(result.audit.rows).toMatchObject({ dayStrain: 2, workoutStrain: 1 })
+    expect(result.audit.averages).toMatchObject({
+      sleepHours: 7.5,
+      hrvMs: 63,
+      recoveryPct: 72.5,
+      dayStrain: 9,
+      workoutStrain: 4,
+    })
     expect(result.audit.hrv.percentChange).toBe(5)
   })
 })

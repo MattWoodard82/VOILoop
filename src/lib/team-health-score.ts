@@ -335,6 +335,8 @@ export interface WindowAudit {
     recovery: number
     workouts: number
     measurableWorkouts: number
+    dayStrain: number
+    workoutStrain: number
   }
   dateAssignment: {
     sleepOnsetRows: number
@@ -345,7 +347,8 @@ export interface WindowAudit {
     sleepHours: number | null
     hrvMs: number | null
     recoveryPct: number | null
-    strain: number | null
+    dayStrain: number | null
+    workoutStrain: number | null
   }
   hrv: {
     baselineMs: number | null
@@ -394,10 +397,8 @@ export function scoreWindow(
   const hrvAverage = hrvRows.length ? avgOf(hrvRows.map((n) => n.hrvMs as number)) : null
   const recoveryAverage = recoveryRows.length ? avgOf(recoveryRows.map((n) => n.recoveryPct as number)) : null
   const sleepAverage = sleepRows.length ? avgOf(sleepRows.map((n) => n.sleepHours as number)) : null
-  const strainValues = [
-    ...windowNights.map((n) => n.dayStrain).filter((v): v is number => v != null),
-    ...windowWorkouts.map((w) => w.strain).filter((v): v is number => v != null),
-  ]
+  const dayStrainValues = windowNights.map((n) => n.dayStrain).filter((v): v is number => v != null)
+  const workoutStrainValues = windowWorkouts.map((w) => w.strain).filter((v): v is number => v != null)
   const hrvPercentChange = hrvAverage != null && baselineHrvMs != null && baselineHrvMs !== 0
     ? ((hrvAverage - baselineHrvMs) / baselineHrvMs) * 100
     : null
@@ -429,6 +430,8 @@ export function scoreWindow(
         recovery: recoveryRows.length,
         workouts: windowWorkouts.length,
         measurableWorkouts: measurableWorkouts.length,
+        dayStrain: dayStrainValues.length,
+        workoutStrain: workoutStrainValues.length,
       },
       dateAssignment: {
         sleepOnsetRows: windowNights.filter((n) => n.dateSource === 'sleep_onset').length,
@@ -439,7 +442,8 @@ export function scoreWindow(
         sleepHours: sleepAverage,
         hrvMs: hrvAverage,
         recoveryPct: recoveryAverage,
-        strain: strainValues.length ? avgOf(strainValues) : null,
+        dayStrain: dayStrainValues.length ? avgOf(dayStrainValues) : null,
+        workoutStrain: workoutStrainValues.length ? avgOf(workoutStrainValues) : null,
       },
       hrv: {
         baselineMs: baselineHrvMs,

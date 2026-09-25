@@ -218,9 +218,15 @@ function TeamHealthAudit({
               <span>Sleep avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.sleepHours, ' h')}</strong> ({row.audit.rows.sleep} rows)</span>
               <span>HRV avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.hrvMs, ' ms')}</strong> ({row.audit.rows.hrv} rows)</span>
               <span>Recovery avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.recoveryPct, '%')}</strong> ({row.audit.rows.recovery} rows)</span>
-              <span>Day strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.strain)}</strong></span>
+              <span>Day strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.dayStrain)}</strong> ({row.audit.rows.dayStrain} rows)</span>
+              <span>Workout strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.workoutStrain)}</strong> ({row.audit.rows.workoutStrain} rows)</span>
               <span>HRV change: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.percentChange, '%')}</strong></span>
-              <span>HRV Trend: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.hrv)}</strong></span>
+              <span>Sleep final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.sleep)}</strong></span>
+              <span>HRV final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.hrv)}</strong></span>
+              <span>Zone 2 final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.zone2)}</strong></span>
+              <span>Recovery final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.recovery)}</strong></span>
+              <span>Strain final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.strain)}</strong></span>
+              <span>Composite final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.composite)}</strong></span>
               <span>Night rows: <strong style={{ color: '#fff' }}>{row.audit.rows.nights}</strong></span>
               <span>Workouts: <strong style={{ color: '#fff' }}>{row.audit.rows.measurableWorkouts}/{row.audit.rows.workouts} measurable</strong></span>
               <span>Onset dates: <strong style={{ color: '#fff' }}>{row.audit.dateAssignment.sleepOnsetRows}</strong></span>
