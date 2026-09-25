@@ -220,7 +220,7 @@ function TeamHealthAudit({
               <span>Recovery avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.recoveryPct, '%')}</strong> ({row.audit.rows.recovery} rows)</span>
               <span>Day strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.dayStrain)}</strong> ({row.audit.rows.dayStrain} rows)</span>
               <span>Workout strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.workoutStrain)}</strong> ({row.audit.rows.workoutStrain} rows)</span>
-              <span>HRV change: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.percentChange, '%')}</strong></span>
+              <span>HRV baseline: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.baselineMs, ' ms')}</strong> · change: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.percentChange, '%')}</strong></span>
               <span>Sleep final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.sleep)}</strong></span>
               <span>HRV final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.hrv)}</strong></span>
               <span>Zone 2 final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.zone2)}</strong></span>
