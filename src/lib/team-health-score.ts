@@ -352,6 +352,10 @@ export interface WindowAudit {
     percentChange: number | null
     multiplier: number
   }
+  timezone: {
+    status: 'not_persisted'
+    message: string
+  }
   constants: {
     sleepTargetHours: number
     zone2TargetMinPerDay: number
@@ -441,6 +445,10 @@ export function scoreWindow(
         baselineMs: baselineHrvMs,
         percentChange: hrvPercentChange,
         multiplier: HRV_PCT_MULTIPLIER,
+      },
+      timezone: {
+        status: 'not_persisted',
+        message: 'Cycle timezone from the source export is not persisted in daily_wellness; the stored sleep_onset_time wall-clock value is used as supplied.',
       },
       constants: {
         sleepTargetHours: SLEEP_TARGET_HOURS,

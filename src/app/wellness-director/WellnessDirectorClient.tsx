@@ -183,11 +183,11 @@ function formatAuditNumber(value: number | null, suffix = '') {
 function TeamHealthAudit({
   score,
   participantLabel,
-  scopeLabel,
+  participantId,
 }: {
   score: ParticipantScoreResult
   participantLabel: string
-  scopeLabel: string
+  participantId: string
 }) {
   const rows = [
     ['Baseline', score.baseline],
@@ -208,7 +208,7 @@ function TeamHealthAudit({
     <div style={{ marginTop: 12, borderTop: '1px solid #0a3560', paddingTop: 12 }}>
       <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Calculation audit</div>
       <div style={{ color: '#A5ACAF', fontSize: 11, marginBottom: 10 }}>
-        {participantLabel} · scope: {scopeLabel} · scores use the same persisted rows shown below.
+        {participantLabel} ({participantId}) · scores use the same persisted rows shown below.
       </div>
       <div style={{ display: 'grid', gap: 8, fontSize: 11 }}>
         {auditRows.map((row) => (
@@ -240,20 +240,11 @@ function TeamHealthAudit({
       <div style={{ marginTop: 8, color: '#A5ACAF', fontSize: 11 }}>
         <strong style={{ color: '#fff' }}>Constants:</strong> sleep target {baseline.constants.sleepTargetHours} h · Zone 2+ target {baseline.constants.zone2TargetMinPerDay} min/day · HRV multiplier {baseline.hrv.multiplier} · strain decline multiplier {baseline.constants.strainDeclineMultiplier}.
       </div>
-      <div style={{ marginTop: 10, color: '#fff', fontSize: 11, fontWeight: 700 }}>Strain definition comparison for Matt</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 6, fontSize: 11 }}>
-        <div style={{ background: '#10263a', borderRadius: 6, padding: 8, color: '#A5ACAF' }}>
-          <strong style={{ color: '#fff' }}>Current production</strong>
-          <div style={{ marginTop: 4 }}>Recovery-only: baseline neutral 100, then penalize recovery declines.</div>
-          <div style={{ marginTop: 4 }}>Source: {current.sourceMappings.recovery}</div>
-          <div style={{ marginTop: 4 }}>Current score: <strong style={{ color: '#fff' }}>{formatAuditNumber(score.current.strain)}</strong></div>
-        </div>
-        <div style={{ background: '#10263a', borderRadius: 6, padding: 8, color: '#A5ACAF' }}>
-          <strong style={{ color: '#fff' }}>Alternative for decision</strong>
-          <div style={{ marginTop: 4 }}>Actual strain versus ideal strain, with recovery used to assess workload balance.</div>
-          <div style={{ marginTop: 4 }}>Source: {current.sourceMappings.strain}</div>
-          <div style={{ marginTop: 4 }}>Score: <strong style={{ color: '#fff' }}>Pending formula/target</strong></div>
-        </div>
+      <div style={{ marginTop: 10, background: '#10263a', borderRadius: 6, padding: 8, color: '#A5ACAF', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Strain-Recovery Balance:</strong> confirmed recovery-only production formula. It uses {current.sourceMappings.recovery}, sets baseline to 100, and penalizes current/last-week recovery declines by {baseline.constants.strainDeclineMultiplier}×. Workout strain is not part of this score.
+      </div>
+      <div style={{ marginTop: 8, background: '#10263a', borderRadius: 6, padding: 8, color: '#FFA500', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Timezone limitation:</strong> {current.timezone.message} Matt’s raw exports use the Cycle timezone, so exact timezone parity cannot be verified from the persisted rows.
       </div>
     </div>
   )
@@ -670,7 +661,7 @@ export function WellnessDirectorClient({ participants }: Props) {
                 <TeamHealthAudit
                   score={teamHealthScore}
                   participantLabel={`${selected.first_name} ${selected.last_name}`}
-                  scopeLabel={deptFilter === 'All' ? 'all departments' : deptFilter}
+                  participantId={selected.id}
                 />
               )}
             </>
