@@ -89,6 +89,93 @@ export function toBool(val: unknown): boolean | null {
   return s === 'true' || s === 'yes' || s === '1'
 }
 
+interface LocalTimestamp {
+  date: string
+  hour: number
+  iso: string
+}
+
+function parseLocalTimestamp(value: unknown): LocalTimestamp | null {
+  if (typeof value !== 'string') return null
+  const match = value.trim().match(
+    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/,
+  )
+  if (!match) return null
+
+  const [, date, hourText, minuteText, secondText = '0', fraction = ''] = match
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  const second = Number(secondText)
+  const dateMs = Date.parse(`${date}T00:00:00.000Z`)
+  if (
+    !Number.isFinite(dateMs) ||
+    new Date(dateMs).toISOString().slice(0, 10) !== date ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    return null
+  }
+
+  const milliseconds = fraction.slice(0, 3).padEnd(3, '0')
+  return {
+    date,
+    hour,
+    iso: `${date}T${hourText}:${minuteText}:${secondText.padStart(2, '0')}.${milliseconds || '000'}Z`,
+  }
+}
+
+function hasLocalTimestampSyntax(value: unknown): boolean {
+  return typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value.trim())
+}
+
+function isInvalidLocalTimestamp(value: unknown): boolean {
+  return hasLocalTimestampSyntax(value) && parseLocalTimestamp(value) === null
+}
+
+function timezoneOffsetMinutes(timezone?: string | null): number {
+  if (!timezone) return 0
+  const match = timezone.match(/UTC([+-])(\d{1,2}):(\d{2})/)
+  if (!match) return 0
+  const sign = match[1] === '+' ? 1 : -1
+  return sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
+}
+
+function shiftTimestamp(isoTimestamp: string, offsetMinutes: number): string {
+  return new Date(new Date(isoTimestamp).getTime() + offsetMinutes * 60_000).toISOString()
+}
+
+function normalizeWorkoutTimestamp(value: unknown, timezone?: string | null): string | null {
+  if (hasLocalTimestampSyntax(value)) {
+    const localTimestamp = parseLocalTimestamp(value)
+    if (!localTimestamp) return null
+    return shiftTimestamp(localTimestamp.iso, -timezoneOffsetMinutes(timezone))
+  }
+  if (value instanceof Date) {
+    const isoTimestamp = toISOString(value)
+    return isoTimestamp ? shiftTimestamp(isoTimestamp, -timezoneOffsetMinutes(timezone)) : null
+  }
+  return toISOString(value)
+}
+
+function normalizeSleepOnset(value: unknown, timezone?: string | null): string | null {
+  if (hasLocalTimestampSyntax(value)) {
+    return parseLocalTimestamp(value)?.iso ?? null
+  }
+
+  const isoTimestamp = toISOString(value)
+  if (
+    !isoTimestamp ||
+    value instanceof Date ||
+    typeof value !== 'string' ||
+    !/[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i.test(value.trim())
+  ) {
+    return isoTimestamp
+  }
+  return shiftTimestamp(isoTimestamp, timezoneOffsetMinutes(timezone))
+}
+
 /**
  * Parse a WHOOP timestamp field into an ISO 8601 string.
  * WHOOP exports may have:
@@ -104,6 +191,7 @@ export function toISOString(val: unknown): string | null {
   }
   const s = String(val).trim()
   if (s === '##########' || s === '') return null
+  if (hasLocalTimestampSyntax(s)) return parseLocalTimestamp(s)?.iso ?? null
   let normalized = s
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     normalized = `${s}T00:00:00Z`
@@ -123,16 +211,22 @@ export function toISOString(val: unknown): string | null {
  * Falls back to UTC date when timezone cannot be parsed.
  */
 export function toLocalDate(isoTimestamp: string, timezone?: string | null): string {
-  let offsetMinutes = 0
-  if (timezone) {
-    const match = timezone.match(/UTC([+-])(\d{1,2}):(\d{2})/)
-    if (match) {
-      const sign = match[1] === '+' ? 1 : -1
-      offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
-    }
-  }
+  const offsetMinutes = timezoneOffsetMinutes(timezone)
   const ms = new Date(isoTimestamp).getTime() + offsetMinutes * 60_000
   return new Date(ms).toISOString().slice(0, 10)
+}
+
+function sourceTimeComponents(
+  value: unknown,
+  timezone?: string | null,
+): { date: string; hour: number } | null {
+  if (hasLocalTimestampSyntax(value)) {
+    const localTimestamp = parseLocalTimestamp(value)
+    return localTimestamp ? { date: localTimestamp.date, hour: localTimestamp.hour } : null
+  }
+
+  const isoTimestamp = toISOString(value)
+  return isoTimestamp ? getTimeComponents(isoTimestamp, value instanceof Date ? null : timezone) : null
 }
 
 function shiftDate(date: string, days: number): string {
@@ -142,25 +236,12 @@ function shiftDate(date: string, days: number): string {
 }
 
 function getTimeComponents(isoTimestamp: string, timezone?: string | null): { date: string; hour: number } {
-  let offsetMinutes = 0
-  if (timezone) {
-    const match = timezone.match(/UTC([+-])(\d{1,2}):(\d{2})/)
-    if (match) {
-      const sign = match[1] === '+' ? 1 : -1
-      offsetMinutes = sign * (parseInt(match[2], 10) * 60 + parseInt(match[3], 10))
-    }
-  }
-
+  const offsetMinutes = timezoneOffsetMinutes(timezone)
   const shifted = new Date(new Date(isoTimestamp).getTime() + offsetMinutes * 60_000)
   return {
     date: shifted.toISOString().slice(0, 10),
     hour: shifted.getUTCHours(),
   }
-}
-
-function deriveWhoopDateFromCycleStart(isoTimestamp: string, timezone?: string | null): string {
-  const { date, hour } = getTimeComponents(isoTimestamp, timezone)
-  return hour >= 18 ? shiftDate(date, 1) : date
 }
 
 function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
@@ -176,16 +257,23 @@ export function getCycleLookupKey(value: unknown): string | null {
 
 export function resolveWellnessDate(row: Record<string, unknown>): string | null {
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const wakeOnsetIso = toISOString(row['Wake onset'])
-  if (wakeOnsetIso) return toLocalDate(wakeOnsetIso, timezone)
+  if (
+    isInvalidLocalTimestamp(row['Wake onset']) ||
+    isInvalidLocalTimestamp(row['Cycle end time']) ||
+    isInvalidLocalTimestamp(row['Cycle start time'])
+  ) {
+    return null
+  }
+  const wakeOnset = sourceTimeComponents(row['Wake onset'], timezone)
+  if (wakeOnset) return wakeOnset.date
 
-  const cycleEndIso = toISOString(row['Cycle end time'])
-  if (cycleEndIso) return toLocalDate(cycleEndIso, timezone)
+  const cycleEnd = sourceTimeComponents(row['Cycle end time'], timezone)
+  if (cycleEnd) return cycleEnd.date
 
-  const cycleStartIso = toISOString(row['Cycle start time'])
-  if (!cycleStartIso) return null
+  const cycleStart = sourceTimeComponents(row['Cycle start time'], timezone)
+  if (!cycleStart) return null
 
-  return deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
+  return cycleStart.hour >= 18 ? shiftDate(cycleStart.date, 1) : cycleStart.date
 }
 
 /** Clamp a percentage value to [0, 100]; return null if out of range */
@@ -232,15 +320,19 @@ export function validateExerciseRow(
     return null
   }
 
-  const startTimeIso = toISOString(row['Workout start time'])
+  const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
+  const startTimeIso = normalizeWorkoutTimestamp(row['Workout start time'], timezone)
   if (!startTimeIso) {
     errors.push({ tab: TAB_EXERCISE, row: rowIndex, field: 'Workout start time', message: 'Unparsable or missing workout start time' })
     return null
   }
 
-  const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const date = toLocalDate(startTimeIso, timezone)
-  const endTimeIso = toISOString(row['Workout end time'])
+  const date = sourceTimeComponents(row['Workout start time'], timezone)?.date
+  if (!date) {
+    errors.push({ tab: TAB_EXERCISE, row: rowIndex, field: 'Workout start time', message: 'Unparsable or missing workout start time' })
+    return null
+  }
+  const endTimeIso = normalizeWorkoutTimestamp(row['Workout end time'], timezone)
 
   return {
     participantId,
@@ -300,6 +392,13 @@ export function validateWellnessRow(
     return null
   }
 
+  for (const field of ['Wake onset', 'Cycle end time', 'Cycle start time']) {
+    if (isInvalidLocalTimestamp(row[field])) {
+      errors.push({ tab: tabName, row: rowIndex, field, message: 'Invalid WHOOP timestamp' })
+      return null
+    }
+  }
+
   const date = preferredDate ?? resolveWellnessDate(row) ?? null
   if (!date) {
     errors.push({ tab: tabName, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing WHOOP cycle date' })
@@ -315,11 +414,9 @@ export function validateWellnessRow(
   return {
     participantId,
     date,
-    // Read exactly like "Wake onset" already is: neither is declared on
-    // RawStressRow's required-column list, both are read dynamically off the
-    // row. Kept as a full ISO timestamp (not just an hour) because the Team
-    // Health Score's night-mapping rule needs both the date and the hour.
-    sleepOnsetIso: toISOString(row['Sleep onset']),
+    // This is optional in the export, and stays a full ISO timestamp because
+    // the Team Health Score's night-mapping rule needs both date and hour.
+    sleepOnsetIso: normalizeSleepOnset(row['Sleep onset'], row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null),
     recoveryScore: clampPct(toInt(row['Recovery score %'])),
     hrvMs: nonNegative(toInt(row['Heart rate variability (ms)'])),
     restingHr: nonNegative(toInt(row['Resting heart rate (bpm)'])),
@@ -374,11 +471,16 @@ export function validateManualRow(
   }
 
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const cycleEndIso = toISOString(row['Cycle end time'])
+  const cycleEnd = sourceTimeComponents(row['Cycle end time'], timezone)
+  const cycleStart = sourceTimeComponents(row['Cycle start time'], timezone)
   const date =
     cycleDateLookup?.get(cycleStartIso) ??
-    (cycleEndIso ? toLocalDate(cycleEndIso, timezone) : null) ??
-    deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
+    cycleEnd?.date ??
+    (cycleStart ? (cycleStart.hour >= 18 ? shiftDate(cycleStart.date, 1) : cycleStart.date) : null)
+  if (!date) {
+    errors.push({ tab: TAB_MANUAL, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing cycle date' })
+    return null
+  }
   const answeredYes = toBool(row['Answered yes']) ?? false
 
   return { participantId, date, questionText, answeredYes }

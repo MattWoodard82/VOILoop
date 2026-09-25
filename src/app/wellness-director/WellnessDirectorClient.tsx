@@ -1,9 +1,14 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ParticipantWithWellness } from '@/types'
 import { Card, Badge, BarRow, ChartSkeleton, LoadingNotice, SkeletonBlock, TableSkeleton } from '@/components/ui'
+import { InfoTooltip } from '@/components/ui/InfoTooltip'
 import { normalizeParticipantDisplayName, recoveryColor } from '@/lib/utils'
 import { WellnessDirectorCharts } from './WellnessDirectorCharts'
+import {
+  CALCULATION_DEFINITIONS,
+  type CalculationDefinitionKey,
+} from './calculationDefinitions'
 import type { ParticipantScoreResult, TeamHealthComponentKey, Window as ThsWindow } from '@/lib/team-health-score'
 import type { TeamHealthScoreConfig } from '@/lib/team-health-score-config'
 
@@ -180,7 +185,26 @@ function formatAuditNumber(value: number | null, suffix = '') {
   return value == null ? '—' : `${Math.round(value * 10) / 10}${suffix}`
 }
 
-function TeamHealthAudit({
+function CalculationField({
+  definitionKey,
+  label,
+  children,
+}: {
+  definitionKey: CalculationDefinitionKey
+  label?: string
+  children: ReactNode
+}) {
+  const definition = CALCULATION_DEFINITIONS[definitionKey]
+  return (
+    <span>
+      {label ?? definition.label}
+      <InfoTooltip definition={definition} />:{' '}
+      <strong style={{ color: '#fff' }}>{children}</strong>
+    </span>
+  )
+}
+
+export function TeamHealthAudit({
   score,
   participantLabel,
   participantId,
@@ -206,51 +230,65 @@ function TeamHealthAudit({
 
   return (
     <div style={{ marginTop: 12, borderTop: '1px solid #0a3560', paddingTop: 12 }}>
-      <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Calculation audit</div>
+      <div style={{ color: '#fff', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Calculation details</div>
       <div style={{ color: '#A5ACAF', fontSize: 11, marginBottom: 10 }}>
-        {participantLabel} ({participantId}) · scores use the same persisted rows shown below.
+        {participantLabel} ({participantId}) · scores below use the saved wellness and workout records listed here.
       </div>
       <div style={{ display: 'grid', gap: 8, fontSize: 11 }}>
         {auditRows.map((row) => (
           <div key={row.label} style={{ background: '#001a33', border: '1px solid #0a3560', borderRadius: 6, padding: '8px 10px' }}>
-            <div style={{ color: '#fff', fontWeight: 700, marginBottom: 5 }}>{row.label}: {row.window}</div>
+            <div style={{ color: '#fff', fontWeight: 700, marginBottom: 5 }}>
+              {row.label}
+              <InfoTooltip definition={row.label === 'Baseline' ? CALCULATION_DEFINITIONS.baselineWindow : CALCULATION_DEFINITIONS.comparisonWindow} />: {row.window}
+            </div>
             <div style={{ color: '#A5ACAF', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }}>
-              <span>Sleep avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.sleepHours, ' h')}</strong> ({row.audit.rows.sleep} rows)</span>
-              <span>HRV avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.hrvMs, ' ms')}</strong> ({row.audit.rows.hrv} rows)</span>
-              <span>Recovery avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.recoveryPct, '%')}</strong> ({row.audit.rows.recovery} rows)</span>
-              <span>Day strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.dayStrain)}</strong> ({row.audit.rows.dayStrain} rows)</span>
-              <span>Workout strain avg: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.averages.workoutStrain)}</strong> ({row.audit.rows.workoutStrain} rows)</span>
-              <span>HRV baseline: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.baselineMs, ' ms')}</strong> · change: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.audit.hrv.percentChange, '%')}</strong></span>
-              <span>Sleep final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.sleep)}</strong></span>
-              <span>HRV final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.hrv)}</strong></span>
-              <span>Zone 2 final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.zone2)}</strong></span>
-              <span>Recovery final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.recovery)}</strong></span>
-              <span>Strain final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.strain)}</strong></span>
-              <span>Composite final: <strong style={{ color: '#fff' }}>{formatAuditNumber(row.score.composite)}</strong></span>
-              <span>Night rows: <strong style={{ color: '#fff' }}>{row.audit.rows.nights}</strong></span>
-              <span>Workouts: <strong style={{ color: '#fff' }}>{row.audit.rows.measurableWorkouts}/{row.audit.rows.workouts} measurable</strong></span>
-              <span>Onset dates: <strong style={{ color: '#fff' }}>{row.audit.dateAssignment.sleepOnsetRows}</strong></span>
-              <span>Fallback dates: <strong style={{ color: '#fff' }}>{row.audit.dateAssignment.storedDateFallbackRows}</strong></span>
+              <CalculationField definitionKey="sleepAverage">{formatAuditNumber(row.audit.averages.sleepHours, ' h')} ({row.audit.rows.sleep} nights)</CalculationField>
+              <CalculationField definitionKey="hrvAverage">{formatAuditNumber(row.audit.averages.hrvMs, ' ms')} ({row.audit.rows.hrv} nights)</CalculationField>
+              <CalculationField definitionKey="recoveryAverage">{formatAuditNumber(row.audit.averages.recoveryPct, '%')} ({row.audit.rows.recovery} nights)</CalculationField>
+              <CalculationField definitionKey="dayStrainAverage">{formatAuditNumber(row.audit.averages.dayStrain)} ({row.audit.rows.dayStrain} nights)</CalculationField>
+              <CalculationField definitionKey="workoutStrainAverage">{formatAuditNumber(row.audit.averages.workoutStrain)} ({row.audit.rows.workoutStrain} workouts)</CalculationField>
+              <CalculationField definitionKey="hrvBaseline">{formatAuditNumber(row.audit.hrv.baselineMs, ' ms')}</CalculationField>
+              <CalculationField definitionKey="hrvChange">{formatAuditNumber(row.audit.hrv.percentChange, '%')}</CalculationField>
+              <CalculationField definitionKey="sleepScore">{formatAuditNumber(row.score.sleep)}</CalculationField>
+              <CalculationField definitionKey="hrvScore">{formatAuditNumber(row.score.hrv)}</CalculationField>
+              <CalculationField definitionKey="zone2Score">{formatAuditNumber(row.score.zone2)}</CalculationField>
+              <CalculationField definitionKey="recoveryScore">{formatAuditNumber(row.score.recovery)}</CalculationField>
+              <CalculationField definitionKey="strainScore">{formatAuditNumber(row.score.strain)}</CalculationField>
+              <CalculationField definitionKey="teamHealthScore">{formatAuditNumber(row.score.composite)}</CalculationField>
+              <CalculationField definitionKey="wellnessNights">{row.audit.rows.nights}</CalculationField>
+              <CalculationField definitionKey="usableWorkouts">{row.audit.rows.measurableWorkouts} of {row.audit.rows.workouts}</CalculationField>
+              <CalculationField definitionKey="onsetDatedNights">{row.audit.dateAssignment.sleepOnsetRows}</CalculationField>
+              <CalculationField definitionKey="fallbackDatedNights">{row.audit.dateAssignment.storedDateFallbackRows}</CalculationField>
             </div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 10, color: fallbackRows > 0 ? '#FFA500' : '#A5ACAF', fontSize: 11 }}>
+        <strong style={{ color: '#fff' }}>Night-date confidence</strong>
+        <InfoTooltip definition={CALCULATION_DEFINITIONS.dateConfidence} />:{' '}
         {fallbackRows > 0
-          ? `${fallbackRows} window rows use stored daily_wellness.date because sleep_onset_time was unavailable. This can shift overnight records and affect HRV and Recovery comparisons.`
-          : 'All displayed window rows have sleep_onset_time available; no stored-date fallback was used.'}
+          ? `${fallbackRows} nights use the saved wellness date because sleep onset was unavailable. This can shift overnight records and affect HRV and Recovery comparisons.`
+          : 'All displayed nights were dated from sleep onset; no saved-date fallback was used.'}
       </div>
       <div style={{ marginTop: 10, color: '#A5ACAF', fontSize: 11 }}>
-        <strong style={{ color: '#fff' }}>CSV mappings:</strong> {current.sourceMappings.sleep}; {current.sourceMappings.hrv}; {current.sourceMappings.recovery}; {current.sourceMappings.zone2}.
+        <strong style={{ color: '#fff' }}>Data sources</strong>
+        <InfoTooltip definition={CALCULATION_DEFINITIONS.dataSources} />: {current.sourceMappings.sleep}; {current.sourceMappings.hrv}; {current.sourceMappings.recovery}; {current.sourceMappings.zone2}.
       </div>
       <div style={{ marginTop: 8, color: '#A5ACAF', fontSize: 11 }}>
-        <strong style={{ color: '#fff' }}>Constants:</strong> sleep target {baseline.constants.sleepTargetHours} h · Zone 2+ target {baseline.constants.zone2TargetMinPerDay} min/day · HRV multiplier {baseline.hrv.multiplier} · strain decline multiplier {baseline.constants.strainDeclineMultiplier}.
+        <strong style={{ color: '#fff' }}>Formula settings</strong>
+        <InfoTooltip definition={CALCULATION_DEFINITIONS.formulaSettings} />:{' '}
+        Sleep target <InfoTooltip definition={CALCULATION_DEFINITIONS.sleepTarget} /> {baseline.constants.sleepTargetHours} h ·{' '}
+        Zone 2+ target <InfoTooltip definition={CALCULATION_DEFINITIONS.zone2Target} /> {baseline.constants.zone2TargetMinPerDay} min/day ·{' '}
+        HRV multiplier <InfoTooltip definition={CALCULATION_DEFINITIONS.hrvMultiplier} /> {baseline.hrv.multiplier} ·{' '}
+        Recovery-decline multiplier <InfoTooltip definition={CALCULATION_DEFINITIONS.recoveryDeclineMultiplier} /> {baseline.constants.strainDeclineMultiplier}.
       </div>
       <div style={{ marginTop: 10, background: '#10263a', borderRadius: 6, padding: 8, color: '#A5ACAF', fontSize: 11 }}>
-        <strong style={{ color: '#fff' }}>Strain-Recovery Balance:</strong> confirmed recovery-only production formula. It uses {current.sourceMappings.recovery}, sets baseline to 100, and penalizes current/last-week recovery declines by {baseline.constants.strainDeclineMultiplier}×. Workout strain is not part of this score.
+        <strong style={{ color: '#fff' }}>Strain-Recovery Balance formula</strong>
+        <InfoTooltip definition={CALCULATION_DEFINITIONS.strainFormula} />: Uses {current.sourceMappings.recovery}, sets baseline to 100, and reduces current or prior-week scores by {baseline.constants.strainDeclineMultiplier}× the recovery decline. Workout strain is not part of this score.
       </div>
       <div style={{ marginTop: 8, background: '#10263a', borderRadius: 6, padding: 8, color: '#FFA500', fontSize: 11 }}>
-        <strong style={{ color: '#fff' }}>Timezone limitation:</strong> {current.timezone.message} Matt’s raw exports use the Cycle timezone, so exact timezone parity cannot be verified from the persisted rows.
+        <strong style={{ color: '#fff' }}>Timezone note</strong>
+        <InfoTooltip definition={CALCULATION_DEFINITIONS.timezoneNote} />: WHOOP local timestamps now use the Cycle timezone during import. Older imported records may need reimport or repair before exact parity can be verified.
       </div>
     </div>
   )
@@ -458,6 +496,7 @@ export function WellnessDirectorClient({ participants }: Props) {
             <WellnessDirectorCharts
               type="recovery"
               data={engagementRows.map((row) => ({ id: row.id, name: row.label, value: row.value, color: recoveryColor(row.value) }))}
+              seriesName="Engagement score"
               onBarClick={(participantId) => setPersonFilter(participantId)}
             />
           ) : (

@@ -1,10 +1,12 @@
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { WellnessDirectorClient } from '../WellnessDirectorClient'
+import { TeamHealthAudit, WellnessDirectorClient } from '../WellnessDirectorClient'
 import WellnessDirectorPage from '../page'
 import { requireAuth } from '@/lib/supabase/server'
 import { getTeamDashboard } from '@/lib/supabase/queries'
 import type { ParticipantWithWellness } from '@/types'
+import { scoreParticipant } from '@/lib/team-health-score'
+import { DEFAULT_TEAM_HEALTH_SCORE_CONFIG } from '@/lib/team-health-score-config'
 
 jest.mock('@/lib/supabase/server', () => ({
   requireAuth: jest.fn(),
@@ -21,7 +23,8 @@ jest.mock('@/components/layout/DashboardShell', () => {
 })
 
 jest.mock('../WellnessDirectorCharts', () => ({
-  WellnessDirectorCharts: ({ data }: { data: unknown }) => React.createElement('pre', null, JSON.stringify(data)),
+  WellnessDirectorCharts: ({ data, seriesName }: { data: unknown; seriesName?: string }) =>
+    React.createElement('pre', null, JSON.stringify({ data, seriesName })),
 }))
 jest.mock('@/components/ui', () => {
   const React = require('react')
@@ -171,6 +174,31 @@ describe('WellnessDirectorClient', () => {
     expect(markup.match(new RegExp(explanation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))?.length ?? 0).toBe(1)
   })
 
+  test('uses plain-language labels in calculation details', () => {
+    const score = scoreParticipant(
+      [
+        { nightDate: '2026-07-02', sleepHours: 7, hrvMs: 22, recoveryPct: 60, dateSource: 'sleep_onset', dayStrain: 7 },
+        { nightDate: '2026-09-14', sleepHours: 7.5, hrvMs: 18, recoveryPct: 55, dateSource: 'sleep_onset', dayStrain: 8 },
+      ],
+      [{ date: '2026-09-14', durationMin: 30, zone2Pct: 50, zone3Pct: 0, zone4Pct: 0, zone5Pct: 0, strain: 5 }],
+      '2026-09-14',
+      DEFAULT_TEAM_HEALTH_SCORE_CONFIG,
+    )
+    const markup = renderToStaticMarkup(React.createElement(TeamHealthAudit, {
+      score,
+      participantLabel: 'David Perea',
+      participantId: 'EMP012',
+    }))
+
+    expect(markup).toContain('Calculation details')
+    expect(markup).toContain('Average sleep duration')
+    expect(markup).toContain('HRV trend score')
+    expect(markup).toContain('Nights with wellness data')
+    expect(markup).toContain('Workouts with usable Zone 2+ data')
+    expect(markup).not.toContain('Night rows')
+    expect(markup).not.toContain('measurable')
+  })
+
   test('describes Baseline/overrides accurately: baseline is enrollment-age based, and dismiss is indefinite (not day-limited)', () => {
     const markup = renderClientMarkup([participant], { personFilter: 'P1' })
     expect(markup).toContain('21 days since')
@@ -238,6 +266,7 @@ describe('WellnessDirectorClient', () => {
 
     expect(markup).toContain('&quot;id&quot;:&quot;P1&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
     expect(markup).toContain('&quot;id&quot;:&quot;P2&quot;,&quot;name&quot;:&quot;Alex Able&quot;,&quot;value&quot;:68,&quot;color&quot;:&quot;#69BE28&quot;')
+    expect(markup).toContain('&quot;seriesName&quot;:&quot;Engagement score&quot;')
   })
 
   test('shows empty states when selected participant data is unavailable or out of scope', () => {

@@ -12,6 +12,10 @@ export const AT_LEAST_ONE_TABS = [TAB_STRESS, TAB_SLEEP] as const
 /** Parsed workbook: map from sheet name → array of row objects */
 export type ParsedWorkbook = Record<string, Record<string, unknown>[]>
 
+function isXlsxBuffer(buffer: Buffer): boolean {
+  return buffer[0] === 0x50 && buffer[1] === 0x4b
+}
+
 /**
  * Parse an xlsx or csv buffer into a map of sheet-name → row objects.
  * Each row object uses XLSX's default header-row-based conversion.
@@ -19,8 +23,11 @@ export type ParsedWorkbook = Record<string, Record<string, unknown>[]>
 export function parseWorkbook(buffer: Buffer): ParsedWorkbook {
   const wb = XLSX.read(buffer, {
     type: 'buffer',
-    cellDates: true,   // parse date cells as JS Date objects
-    raw: false,        // format numbers as strings where needed
+    // WHOOP CSV timestamps are local wall-clock text with the offset supplied
+    // separately in "Cycle timezone". Converting them to Date here applies the
+    // server timezone before validation and can collapse distinct local nights.
+    cellDates: isXlsxBuffer(buffer),
+    raw: true,
     dateNF: 'yyyy-mm-dd hh:mm:ss',
   })
 

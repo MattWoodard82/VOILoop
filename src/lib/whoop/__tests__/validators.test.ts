@@ -42,6 +42,9 @@ describe('toISOString', () => {
     const iso = toISOString('2024-03-15 08:00:00')
     expect(iso).toBe('2024-03-15T08:00:00.000Z')
   })
+  test('rejects invalid local clock components', () => {
+    expect(toISOString('2024-03-15 25:99:99')).toBeNull()
+  })
   test('returns null for ##########', () => expect(toISOString('##########')).toBeNull())
   test('returns null for invalid', () => expect(toISOString('not a date')).toBeNull())
 })
@@ -228,6 +231,55 @@ describe('validateWellnessRow', () => {
     })
 
     expect(date).toBe('2024-01-15')
+  })
+
+  test('treats timezone-less WHOOP timestamps as local wall-clock times', () => {
+    const date = resolveWellnessDate({
+      'Cycle start time': '##########',
+      'Cycle end time': '##########',
+      'Cycle timezone': 'UTC-06:00',
+      'Wake onset': '2026-09-17 05:29:19',
+    })
+
+    expect(date).toBe('2026-09-17')
+  })
+
+  test('applies Cycle timezone when the source timestamp has an explicit UTC offset', () => {
+    const date = resolveWellnessDate({
+      'Cycle start time': '##########',
+      'Cycle end time': '##########',
+      'Cycle timezone': 'UTC-06:00',
+      'Wake onset': '2026-09-17T05:29:19Z',
+    })
+
+    expect(date).toBe('2026-09-16')
+  })
+
+  test('rejects an invalid Wake onset instead of falling back to a valid cycle end', () => {
+    const row = {
+      ...validRow,
+      'Cycle end time': '2024-01-15 07:00:00',
+      'Wake onset': '2024-01-15 25:99:99',
+    }
+    const errors: ImportRowError[] = []
+
+    expect(resolveWellnessDate(row)).toBeNull()
+    expect(validateWellnessRow('Sleep', row, 2, errors)).toBeNull()
+    expect(errors).toEqual([
+      { tab: 'Sleep', row: 2, field: 'Wake onset', message: 'Invalid WHOOP timestamp' },
+    ])
+  })
+
+  test('normalizes explicit-offset sleep onset to the cycle-local wall clock', () => {
+    const row = {
+      ...validRow,
+      'Sleep onset': '2026-09-17T11:00:00Z',
+    }
+    const errors: ImportRowError[] = []
+    const result = validateWellnessRow('Sleep', row, 2, errors)
+
+    expect(errors).toHaveLength(0)
+    expect(result?.sleepOnsetIso).toBe('2026-09-17T05:00:00.000Z')
   })
 })
 
