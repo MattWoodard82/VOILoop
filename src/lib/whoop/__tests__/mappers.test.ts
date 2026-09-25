@@ -1,4 +1,5 @@
 import { mapExercise, mapWellness, mapManualEntries } from '../mappers'
+import { sleepNightDate } from '../../team-health-score'
 import type { ParsedWorkbook } from '../parser'
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -109,6 +110,50 @@ describe('mapExercise', () => {
     })
   })
 
+  test('converts timezone-less workout start and end timestamps to UTC', () => {
+    const { workouts, errors } = mapExercise({
+      Exercise: [{
+        ...exerciseRows[0],
+        'Workout start time': '2024-01-15 05:00:00',
+        'Workout end time': '2024-01-15 06:00:00',
+      }],
+    })
+
+    expect(errors).toHaveLength(0)
+    expect(workouts[0].start_time).toBe('2024-01-15T11:00:00.000Z')
+    expect(workouts[0].end_time).toBe('2024-01-15T12:00:00.000Z')
+    expect(workouts[0].date).toBe('2024-01-15')
+  })
+
+  test('preserves explicit-offset workout timestamps as the same UTC instants', () => {
+    const { workouts, errors } = mapExercise({
+      Exercise: [{
+        ...exerciseRows[0],
+        'Workout start time': '2024-01-15T05:00:00-06:00',
+        'Workout end time': '2024-01-15T06:00:00-06:00',
+      }],
+    })
+
+    expect(errors).toHaveLength(0)
+    expect(workouts[0].start_time).toBe('2024-01-15T11:00:00.000Z')
+    expect(workouts[0].end_time).toBe('2024-01-15T12:00:00.000Z')
+  })
+
+  test('applies the cycle timezone to date-valued spreadsheet workout timestamps', () => {
+    const { workouts, errors } = mapExercise({
+      Exercise: [{
+        ...exerciseRows[0],
+        'Workout start time': new Date('2024-01-15T05:00:00.000Z'),
+        'Workout end time': new Date('2024-01-15T06:00:00.000Z'),
+      }],
+    })
+
+    expect(errors).toHaveLength(0)
+    expect(workouts[0].start_time).toBe('2024-01-15T11:00:00.000Z')
+    expect(workouts[0].end_time).toBe('2024-01-15T12:00:00.000Z')
+    expect(workouts[0].date).toBe('2024-01-15')
+  })
+
   test('skips row with ## timestamp and emits error', () => {
     const badWb: ParsedWorkbook = {
       Exercise: [
@@ -164,6 +209,21 @@ describe('mapWellness', () => {
     const { wellness } = mapWellness(wb)
     expect(wellness).toHaveLength(1)
     expect(wellness[0].sleep_onset_time).toBe('2024-01-14T23:15:00.000Z')
+  })
+
+  test('stores explicit-offset Sleep onset as cycle-local wall time for night scoring', () => {
+    const wb: ParsedWorkbook = {
+      Sleep: [{
+        ...sleepRows[0],
+        'Cycle start time': '2026-09-17 00:00:00',
+        'Sleep onset': '2026-09-17T11:00:00Z',
+      }],
+    }
+    const { wellness, errors } = mapWellness(wb)
+
+    expect(errors).toHaveLength(0)
+    expect(wellness[0].sleep_onset_time).toBe('2026-09-17T05:00:00.000Z')
+    expect(sleepNightDate(wellness[0].sleep_onset_time!)).toBe('2026-09-16')
   })
 
   test('preserves all seven local nights across an UTC-06:00 reporting week', () => {

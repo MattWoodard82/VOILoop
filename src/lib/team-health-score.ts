@@ -82,11 +82,9 @@ function daysBetween(start: string, end: string): number {
 //       onset <  6:00 AM -> belongs to the PREVIOUS date's night (a late
 //       bedtime that rolled past midnight).
 //
-// `sleepOnsetIso` is expected to already be in the wall-clock timezone the
-// CSV was in (our toISOString() normalizes without applying any timezone
-// conversion, exactly like the rest of the WHOOP import pipeline), so the
-// hour extracted here is the raw wall-clock hour, matching Matt's Python
-// (which reads a naive/local pd.Timestamp with no tz conversion either).
+// The WHOOP importer stores onset timestamps as cycle-local wall-clock values
+// (represented with a Z suffix), so the hour extracted here matches the raw
+// local wall-clock hour used by Matt's Python.
 export function sleepNightDate(sleepOnsetIso: string): string {
   const datePart = sleepOnsetIso.slice(0, 10)
   const hour = Number(sleepOnsetIso.slice(11, 13))
