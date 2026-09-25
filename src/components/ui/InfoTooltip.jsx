@@ -7,18 +7,29 @@
 //     Recovery Score <InfoTooltip metricKey="recoveryScore" />
 //   </MetricLabel>
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useId } from 'react';
 import { METRIC_DEFINITIONS } from './metricDefinitions';
 
-export function InfoTooltip({ metricKey }) {
+/**
+ * @param {{
+ *   metricKey?: string,
+ *   definition?: { label: string, whatItIs: string, whyItMatters?: string }
+ * }} props
+ */
+export function InfoTooltip({ metricKey, definition }) {
   const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
   const ref = useRef(null);
-  const def = METRIC_DEFINITIONS[metricKey];
+  const tooltipId = useId();
+  const def = definition ?? METRIC_DEFINITIONS[metricKey];
 
   useEffect(() => {
     if (!open) return;
     function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false);
+        setPinned(false);
+      }
     }
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
@@ -30,13 +41,34 @@ export function InfoTooltip({ metricKey }) {
   }
 
   return (
-    <span ref={ref} style={{ position: 'relative', display: 'inline-block', marginLeft: 4 }}>
+    <span
+      ref={ref}
+      style={{ position: 'relative', display: 'inline-block', marginLeft: 4 }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => { if (!pinned) setOpen(false); }}
+    >
       <button
         type="button"
         aria-label={`What is ${def.label}?`}
+        aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { if (!pinned) setOpen(false); }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false);
+            setPinned(false);
+          }
+        }}
         onClick={(e) => {
           e.stopPropagation();
-          setOpen((v) => !v);
+          if (pinned) {
+            setOpen(false);
+            setPinned(false);
+          } else {
+            setOpen(true);
+            setPinned(true);
+          }
         }}
         style={{
           background: 'none',
@@ -53,13 +85,14 @@ export function InfoTooltip({ metricKey }) {
 
       {open && (
         <div
+          id={tooltipId}
           role="tooltip"
           style={{
             position: 'absolute',
             top: '120%',
             left: 0,
             zIndex: 20,
-            width: 240,
+            width: 'min(280px, calc(100vw - 32px))',
             background: '#001a33',
             border: '1px solid #0a3560',
             borderRadius: 8,

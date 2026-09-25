@@ -166,6 +166,45 @@ describe('mapWellness', () => {
     expect(wellness[0].sleep_onset_time).toBe('2024-01-14T23:15:00.000Z')
   })
 
+  test('preserves all seven local nights across an UTC-06:00 reporting week', () => {
+    const sourceRows = [
+      ['2026-09-14 19:59:48', '2026-09-15 05:24:19', 13, 35, 449],
+      ['2026-09-15 21:51:44', '2026-09-16 06:07:27', 14, 46, 490],
+      ['2026-09-16 21:10:47', '2026-09-17 05:29:19', 16, 56, 486],
+      ['2026-09-17 21:53:50', '2026-09-18 05:29:38', 14, 42, 436],
+      ['2026-09-18 23:02:51', '2026-09-19 07:20:05', 24, 94, 489],
+      ['2026-09-19 22:29:54', '2026-09-20 07:50:25', 23, 87, 525],
+      ['2026-09-20 22:00:25', '2026-09-21 05:22:32', 23, 80, 426],
+    ]
+    const wb: ParsedWorkbook = {
+      Sleep: sourceRows.map(([sleepOnset, wakeOnset, hrv, recovery, asleepDuration]) => ({
+        'Participant Identifier': 'EMP012',
+        'Cycle start time': sleepOnset,
+        'Sleep onset': sleepOnset,
+        'Wake onset': wakeOnset,
+        'Cycle timezone': 'UTC-06:00',
+        'Heart rate variability (ms)': hrv,
+        'Recovery score %': recovery,
+        'Asleep duration (min)': asleepDuration,
+      })),
+    }
+
+    const { wellness, errors } = mapWellness(wb)
+
+    expect(errors).toHaveLength(0)
+    expect(wellness).toHaveLength(7)
+    expect(wellness.map((row) => row.date)).toEqual([
+      '2026-09-15',
+      '2026-09-16',
+      '2026-09-17',
+      '2026-09-18',
+      '2026-09-19',
+      '2026-09-20',
+      '2026-09-21',
+    ])
+    expect(wellness.map((row) => row.hrv_ms)).toEqual([13, 14, 16, 14, 24, 23, 23])
+  })
+
   test('deduplicates same participant+date across rows', () => {
     const dupeRows = [...stressRows, ...stressRows]
     const wb: ParsedWorkbook = { Stress: dupeRows }

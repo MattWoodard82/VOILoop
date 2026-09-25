@@ -135,6 +135,22 @@ export function toLocalDate(isoTimestamp: string, timezone?: string | null): str
   return new Date(ms).toISOString().slice(0, 10)
 }
 
+function sourceTimeComponents(
+  value: unknown,
+  timezone?: string | null,
+): { date: string; hour: number } | null {
+  if (typeof value === 'string') {
+    const source = value.trim()
+    const localMatch = source.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}):\d{2}(?::\d{2}(?:\.\d+)?)?$/)
+    if (localMatch) {
+      return { date: localMatch[1], hour: Number(localMatch[2]) }
+    }
+  }
+
+  const isoTimestamp = toISOString(value)
+  return isoTimestamp ? getTimeComponents(isoTimestamp, timezone) : null
+}
+
 function shiftDate(date: string, days: number): string {
   const shifted = new Date(`${date}T00:00:00.000Z`)
   shifted.setUTCDate(shifted.getUTCDate() + days)
@@ -158,11 +174,6 @@ function getTimeComponents(isoTimestamp: string, timezone?: string | null): { da
   }
 }
 
-function deriveWhoopDateFromCycleStart(isoTimestamp: string, timezone?: string | null): string {
-  const { date, hour } = getTimeComponents(isoTimestamp, timezone)
-  return hour >= 18 ? shiftDate(date, 1) : date
-}
-
 function getRowValue(row: Record<string, unknown>, keys: string[]): unknown {
   for (const key of keys) {
     if (row[key] !== undefined) return row[key]
@@ -176,16 +187,16 @@ export function getCycleLookupKey(value: unknown): string | null {
 
 export function resolveWellnessDate(row: Record<string, unknown>): string | null {
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const wakeOnsetIso = toISOString(row['Wake onset'])
-  if (wakeOnsetIso) return toLocalDate(wakeOnsetIso, timezone)
+  const wakeOnset = sourceTimeComponents(row['Wake onset'], timezone)
+  if (wakeOnset) return wakeOnset.date
 
-  const cycleEndIso = toISOString(row['Cycle end time'])
-  if (cycleEndIso) return toLocalDate(cycleEndIso, timezone)
+  const cycleEnd = sourceTimeComponents(row['Cycle end time'], timezone)
+  if (cycleEnd) return cycleEnd.date
 
-  const cycleStartIso = toISOString(row['Cycle start time'])
-  if (!cycleStartIso) return null
+  const cycleStart = sourceTimeComponents(row['Cycle start time'], timezone)
+  if (!cycleStart) return null
 
-  return deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
+  return cycleStart.hour >= 18 ? shiftDate(cycleStart.date, 1) : cycleStart.date
 }
 
 /** Clamp a percentage value to [0, 100]; return null if out of range */
@@ -239,7 +250,11 @@ export function validateExerciseRow(
   }
 
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const date = toLocalDate(startTimeIso, timezone)
+  const date = sourceTimeComponents(row['Workout start time'], timezone)?.date
+  if (!date) {
+    errors.push({ tab: TAB_EXERCISE, row: rowIndex, field: 'Workout start time', message: 'Unparsable or missing workout start time' })
+    return null
+  }
   const endTimeIso = toISOString(row['Workout end time'])
 
   return {
@@ -374,11 +389,16 @@ export function validateManualRow(
   }
 
   const timezone = row['Cycle timezone'] ? String(row['Cycle timezone']).trim() || null : null
-  const cycleEndIso = toISOString(row['Cycle end time'])
+  const cycleEnd = sourceTimeComponents(row['Cycle end time'], timezone)
+  const cycleStart = sourceTimeComponents(row['Cycle start time'], timezone)
   const date =
     cycleDateLookup?.get(cycleStartIso) ??
-    (cycleEndIso ? toLocalDate(cycleEndIso, timezone) : null) ??
-    deriveWhoopDateFromCycleStart(cycleStartIso, timezone)
+    cycleEnd?.date ??
+    (cycleStart ? (cycleStart.hour >= 18 ? shiftDate(cycleStart.date, 1) : cycleStart.date) : null)
+  if (!date) {
+    errors.push({ tab: TAB_MANUAL, row: rowIndex, field: 'Cycle start time', message: 'Unparsable or missing cycle date' })
+    return null
+  }
   const answeredYes = toBool(row['Answered yes']) ?? false
 
   return { participantId, date, questionText, answeredYes }

@@ -19,8 +19,11 @@ export type ParsedWorkbook = Record<string, Record<string, unknown>[]>
 export function parseWorkbook(buffer: Buffer): ParsedWorkbook {
   const wb = XLSX.read(buffer, {
     type: 'buffer',
-    cellDates: true,   // parse date cells as JS Date objects
-    raw: false,        // format numbers as strings where needed
+    // WHOOP CSV timestamps are local wall-clock text with the offset supplied
+    // separately in "Cycle timezone". Converting them to Date here applies the
+    // server timezone before validation and can collapse distinct local nights.
+    cellDates: false,
+    raw: true,
     dateNF: 'yyyy-mm-dd hh:mm:ss',
   })
 

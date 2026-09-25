@@ -229,6 +229,28 @@ describe('validateWellnessRow', () => {
 
     expect(date).toBe('2024-01-15')
   })
+
+  test('treats timezone-less WHOOP timestamps as local wall-clock times', () => {
+    const date = resolveWellnessDate({
+      'Cycle start time': '##########',
+      'Cycle end time': '##########',
+      'Cycle timezone': 'UTC-06:00',
+      'Wake onset': '2026-09-17 05:29:19',
+    })
+
+    expect(date).toBe('2026-09-17')
+  })
+
+  test('applies Cycle timezone when the source timestamp has an explicit UTC offset', () => {
+    const date = resolveWellnessDate({
+      'Cycle start time': '##########',
+      'Cycle end time': '##########',
+      'Cycle timezone': 'UTC-06:00',
+      'Wake onset': '2026-09-17T05:29:19Z',
+    })
+
+    expect(date).toBe('2026-09-16')
+  })
 })
 
 describe('validateManualRow', () => {
