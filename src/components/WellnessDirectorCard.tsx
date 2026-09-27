@@ -1,35 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+import type { Nudge } from '@/components/participant-events-types'
 
-interface Nudge {
-  id: string
-  message: string
-  author: string
-  week_of: string
-}
-
-export function WellnessDirectorCard({ name }: { name: string }) {
-  const [nudge, setNudge] = useState<Nudge | null>(null)
-
-  useEffect(() => {
-    let mounted = true
-    const loadNudge = async () => {
-      try {
-        // Same-day visibility: fetch fresh (no cache) so a nudge appears here
-        // immediately after the wellness director publishes it, alongside the
-        // Nudges & Events card below.
-        const response = await fetch('/api/participant/events', { cache: 'no-store' })
-        if (!response.ok) return
-        const payload = await response.json() as { nudge?: Nudge | null }
-        if (mounted) setNudge(payload.nudge ?? null)
-      } catch {
-        // Silently ignore; this card degrades to name-only display.
-      }
-    }
-    void loadNudge()
-    return () => { mounted = false }
-  }, [])
-
+export function WellnessDirectorCard({ name, nudge }: { name: string; nudge: Nudge | null }) {
   return (
     <div
       style={{

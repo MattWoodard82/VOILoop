@@ -40,6 +40,7 @@ describe('admin events routes', () => {
       data: [{ id: 'evt-1', title: 'Morning Run' }],
       error: null,
     }))
+    const observedNudgeOrders: Array<[string, { ascending: boolean }]> = []
     const nudgesLimit = jest.fn(async () => ({
       data: [{ id: 'nud-1', message: 'Hydrate today' }],
       error: null,
@@ -58,11 +59,17 @@ describe('admin events routes', () => {
         if (table === 'weekly_nudges') {
           return {
             select: jest.fn(() => ({
-              order: jest.fn(() => ({
-                order: jest.fn(() => ({
-                  limit: nudgesLimit,
-                })),
-              })),
+              order: jest.fn((column: string, options: { ascending: boolean }) => {
+                observedNudgeOrders.push([column, options])
+                return {
+                  order: jest.fn((tieBreakerColumn: string, tieBreakerOptions: { ascending: boolean }) => {
+                    observedNudgeOrders.push([tieBreakerColumn, tieBreakerOptions])
+                    return {
+                      limit: nudgesLimit,
+                    }
+                  }),
+                }
+              }),
             })),
           }
         }
@@ -134,6 +141,10 @@ describe('admin events routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(observedNudgeOrders).toEqual([
+      ['week_of', { ascending: false }],
+      ['created_at', { ascending: false }],
+    ])
     expect(nudgesLimit).toHaveBeenCalledWith(50)
     expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
     expect(body).toEqual({
@@ -169,6 +180,7 @@ describe('admin events routes', () => {
     mockRequireLeadership.mockResolvedValue({ session: { user: { id: 'wd-1' } }, role: 'wellness_director' } as never)
 
     const eventsOrder = jest.fn(async () => ({ data: [], error: null }))
+    const observedNudgeOrders: Array<[string, { ascending: boolean }]> = []
     const nudgesLimit = jest.fn(async () => ({
       data: [{ id: 'nud-1', message: 'Hydrate today' }],
       error: null,
@@ -179,7 +191,21 @@ describe('admin events routes', () => {
           return { select: jest.fn(() => ({ gte: jest.fn(() => ({ order: eventsOrder })) })) }
         }
         if (table === 'weekly_nudges') {
-          return { select: jest.fn(() => ({ order: jest.fn(() => ({ order: jest.fn(() => ({ limit: nudgesLimit })) })) })) }
+          return {
+            select: jest.fn(() => ({
+              order: jest.fn((column: string, options: { ascending: boolean }) => {
+                observedNudgeOrders.push([column, options])
+                return {
+                  order: jest.fn((tieBreakerColumn: string, tieBreakerOptions: { ascending: boolean }) => {
+                    observedNudgeOrders.push([tieBreakerColumn, tieBreakerOptions])
+                    return {
+                      limit: nudgesLimit,
+                    }
+                  }),
+                }
+              }),
+            })),
+          }
         }
         throw new Error(`Unexpected table ${table}`)
       }),
@@ -222,6 +248,10 @@ describe('admin events routes', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(observedNudgeOrders).toEqual([
+      ['week_of', { ascending: false }],
+      ['created_at', { ascending: false }],
+    ])
     expect(nudgesLimit).toHaveBeenCalledWith(50)
     expect(acknowledgementsLimit).toHaveBeenCalledWith(50)
     expect(body.nudge_responses).toHaveLength(1)
@@ -332,3 +362,4 @@ describe('admin events routes', () => {
     })
   })
 })
+

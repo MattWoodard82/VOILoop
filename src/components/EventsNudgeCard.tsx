@@ -2,40 +2,13 @@
 import { useEffect, useState } from 'react'
 import { parseFrontendError } from '@/lib/frontend-error'
 import { Card, LoadingNotice, SkeletonBlock, SkeletonText } from '@/components/ui'
-
-interface Event {
-  id: string
-  title: string
-  description: string
-  event_date: string
-  event_time: string
-  location: string
-  event_type: string
-  recurring: boolean
-  recurrence: string | null
-  rsvp_enabled: boolean
-}
-
-interface Nudge {
-  id: string
-  message: string
-  author: string
-  week_of: string
-}
-
-interface Acknowledgement {
-  acknowledged_at: string
-  response_text: string
-  response_due_at: string
-}
-
-interface HistoryNudge {
-  id: string
-  message: string
-  author: string
-  week_of: string
-  acknowledgement: Acknowledgement | null
-}
+import type {
+  Acknowledgement,
+  Event,
+  HistoryNudge,
+  Nudge,
+  ParticipantEventsCardData,
+} from '@/components/participant-events-types'
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
@@ -78,18 +51,54 @@ function daysUntil(d: string) {
   return `In ${diff} days`
 }
 
-export function EventsNudgeCard() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [nudge, setNudge] = useState<Nudge | null>(null)
-  const [acknowledgement, setAcknowledgement] = useState<Acknowledgement | null>(null)
-  const [history, setHistory] = useState<HistoryNudge[]>([])
-  const [rsvps, setRsvps] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+function normalizeCardData(data: ParticipantEventsCardData | null | undefined) {
+  return {
+    events: data?.events ?? [],
+    nudge: data?.nudge ?? null,
+    acknowledgement: data?.acknowledgement ?? null,
+    history: data?.history ?? [],
+    rsvps: data?.rsvpEventIds ?? [],
+  }
+}
+
+interface EventsNudgeCardProps {
+  sharedData?: ParticipantEventsCardData | null
+  sharedLoading?: boolean
+  sharedError?: string
+}
+
+export function EventsNudgeCard({ sharedData, sharedLoading, sharedError }: EventsNudgeCardProps = {}) {
+  const normalized = normalizeCardData(sharedData)
+  const useSharedData = sharedData !== undefined || sharedLoading !== undefined || sharedError !== undefined
+  const [events, setEvents] = useState<Event[]>(normalized.events)
+  const [nudge, setNudge] = useState<Nudge | null>(normalized.nudge)
+  const [acknowledgement, setAcknowledgement] = useState<Acknowledgement | null>(normalized.acknowledgement)
+  const [history, setHistory] = useState<HistoryNudge[]>(normalized.history)
+  const [rsvps, setRsvps] = useState<string[]>(normalized.rsvps)
+  const [loading, setLoading] = useState(sharedLoading ?? true)
+  const [error, setError] = useState(sharedError ?? '')
   const [ackText, setAckText] = useState('')
   const [ackSubmitting, setAckSubmitting] = useState(false)
 
   useEffect(() => {
+    if (!useSharedData) return
+    const next = normalizeCardData(sharedData)
+    setEvents(next.events)
+    setNudge(next.nudge)
+    setAcknowledgement(next.acknowledgement)
+    setHistory(next.history)
+    setRsvps(next.rsvps)
+    setLoading(sharedLoading ?? false)
+  }, [sharedData, sharedLoading, useSharedData])
+
+  useEffect(() => {
+    if (!useSharedData) return
+    setError(sharedError ?? '')
+  }, [sharedError, useSharedData])
+
+  useEffect(() => {
+    if (useSharedData) return
+
     const loadCardData = async () => {
       try {
         const response = await fetch('/api/participant/events', { cache: 'no-store' })
@@ -97,13 +106,7 @@ export function EventsNudgeCard() {
           const errorPayload = await response.json().catch(() => null) as { error?: string } | null
           throw new Error(errorPayload?.error ?? `Request failed (${response.status})`)
         }
-        const payload = await response.json() as {
-          events?: Event[]
-          nudge?: Nudge | null
-          acknowledgement?: Acknowledgement | null
-          history?: HistoryNudge[]
-          rsvpEventIds?: string[]
-        }
+        const payload = await response.json() as ParticipantEventsCardData
 
         setEvents(payload.events ?? [])
         setNudge(payload.nudge ?? null)
@@ -119,7 +122,7 @@ export function EventsNudgeCard() {
       }
     }
     void loadCardData()
-  }, [])
+  }, [useSharedData])
 
   const toggleRsvp = async (eventId: string) => {
     const isRsvped = rsvps.includes(eventId)
