@@ -59,7 +59,9 @@ describe('admin events routes', () => {
           return {
             select: jest.fn(() => ({
               order: jest.fn(() => ({
-                limit: nudgesLimit,
+                order: jest.fn(() => ({
+                  limit: nudgesLimit,
+                })),
               })),
             })),
           }
@@ -177,7 +179,7 @@ describe('admin events routes', () => {
           return { select: jest.fn(() => ({ gte: jest.fn(() => ({ order: eventsOrder })) })) }
         }
         if (table === 'weekly_nudges') {
-          return { select: jest.fn(() => ({ order: jest.fn(() => ({ limit: nudgesLimit })) })) }
+          return { select: jest.fn(() => ({ order: jest.fn(() => ({ order: jest.fn(() => ({ limit: nudgesLimit })) })) })) }
         }
         throw new Error(`Unexpected table ${table}`)
       }),
