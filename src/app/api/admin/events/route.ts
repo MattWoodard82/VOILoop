@@ -78,6 +78,7 @@ export async function GET() {
       .from('weekly_nudges')
       .select('*')
       .order('week_of', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(MAX_DISPLAYED_NUDGES),
     adminClient
       .from('participants')

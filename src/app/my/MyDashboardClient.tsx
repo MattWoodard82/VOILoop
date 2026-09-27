@@ -8,6 +8,7 @@ import { Alert, Badge, Card, KpiCard } from '@/components/ui'
 import { formatDate, recoveryColor, sleepColor } from '@/lib/utils'
 import type { DailyWellness, Participant, Habit, ImportBatch, PulseSurvey, Workout } from '@/types'
 import { EventsNudgeCard } from '@/components/EventsNudgeCard'
+import type { ParticipantEventsCardData } from '@/components/participant-events-types'
 import type { BaselineComparison, PersonalBest, PersonalStreak, PersonalTrend } from './insights'
 import Link from 'next/link'
 
@@ -91,6 +92,17 @@ function statusLabel(status: ImportBatch['status']) {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message
+    }
+  }
+  return String(error)
+}
+
 function MetricRow({
   label,
   value,
@@ -152,6 +164,9 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
   const router = useRouter()
   const searchParams = useSearchParams()
   const [pulseDoneBanner, setPulseDoneBanner] = useState(false)
+  const [participantEvents, setParticipantEvents] = useState<ParticipantEventsCardData | null>(null)
+  const [participantEventsLoading, setParticipantEventsLoading] = useState(true)
+  const [participantEventsError, setParticipantEventsError] = useState('')
 
   useEffect(() => {
     if (searchParams.get('pulse_done') === '1') {
@@ -161,6 +176,34 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
       router.replace(url.pathname + (url.search || ''))
     }
   }, [searchParams, router])
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadParticipantEvents = async () => {
+      try {
+        const response = await fetch('/api/participant/events', { cache: 'no-store' })
+        if (!response.ok) {
+          const errorPayload = await response.json().catch(() => null) as { error?: string } | null
+          throw new Error(errorPayload?.error ?? `Request failed (${response.status})`)
+        }
+
+        const payload = await response.json() as ParticipantEventsCardData
+        if (!mounted) return
+        setParticipantEvents(payload)
+        setParticipantEventsError('')
+      } catch (fetchError) {
+        if (!mounted) return
+        setParticipantEvents(null)
+        setParticipantEventsError(`Events card failed to load. Detail: ${getErrorMessage(fetchError)}`)
+      } finally {
+        if (mounted) setParticipantEventsLoading(false)
+      }
+    }
+
+    void loadParticipantEvents()
+    return () => { mounted = false }
+  }, [])
 
   const latest = wellness[0] ?? null
   const latestPulse = pulse[0] ?? null
@@ -318,8 +361,12 @@ export function MyDashboardClient({ participant, wellness, habits, workout, puls
           {participant.is_exact_data ? <Badge variant="green">Exact WHOOP data</Badge> : null}
         </div>
       </div>
-<WellnessDirectorCard name="Heather" />
-<EventsNudgeCard />
+      <WellnessDirectorCard name="Heather" nudge={participantEvents?.nudge ?? null} />
+      <EventsNudgeCard
+        sharedData={participantEvents}
+        sharedLoading={participantEventsLoading}
+        sharedError={participantEventsError}
+      />
       {challenge && challenge.visibility_state !== 'none' && challenge.data ? (
         <Card title="Challenge progress" badge={<Badge variant={challenge.data.completed ? 'green' : 'wolf'}>{challenge.data.completed ? 'Completed' : challenge.data.status === 'active' ? 'Active' : 'Not completed'}</Badge>}>
           <div style={{ fontSize: 12, color: '#A5ACAF', marginBottom: 8, lineHeight: 1.5 }}>
