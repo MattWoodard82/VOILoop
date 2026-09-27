@@ -19,43 +19,56 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('next/link', () => {
   const React = require('react')
-  return ({ children, ...props }: { children: React.ReactNode }) => React.createElement('a', props, children)
+  function MockNextLink({ children, ...props }: { children: React.ReactNode }) {
+    return React.createElement('a', props, children)
+  }
+  return MockNextLink
 })
 
 jest.mock('recharts', () => {
   const React = require('react')
-  const Mock = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children)
+  function MockRechartsComponent({ children }: { children?: React.ReactNode }) {
+    return React.createElement('div', null, children)
+  }
   return {
-    Line: Mock,
-    LineChart: Mock,
-    ResponsiveContainer: Mock,
-    Tooltip: Mock,
-    XAxis: Mock,
-    YAxis: Mock,
-    CartesianGrid: Mock,
+    Line: MockRechartsComponent,
+    LineChart: MockRechartsComponent,
+    ResponsiveContainer: MockRechartsComponent,
+    Tooltip: MockRechartsComponent,
+    XAxis: MockRechartsComponent,
+    YAxis: MockRechartsComponent,
+    CartesianGrid: MockRechartsComponent,
   }
 })
 
 jest.mock('@/components/ui/InfoTooltip', () => ({
-  InfoTooltip: () => null,
+  InfoTooltip: function MockInfoTooltip() {
+    return null
+  },
 }))
 
 jest.mock('@/components/WellnessDirectorCard', () => ({
-  WellnessDirectorCard: () => null,
+  WellnessDirectorCard: function MockWellnessDirectorCard() {
+    return null
+  },
 }))
 
 jest.mock('@/components/EventsNudgeCard', () => ({
-  EventsNudgeCard: () => null,
+  EventsNudgeCard: function MockEventsNudgeCard() {
+    return null
+  },
 }))
 
 jest.mock('@/components/ui', () => {
   const React = require('react')
-  const Mock = ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children)
+  function MockUiComponent({ children }: { children?: React.ReactNode }) {
+    return React.createElement('div', null, children)
+  }
   return {
-    Alert: Mock,
-    Badge: Mock,
-    Card: Mock,
-    KpiCard: Mock,
+    Alert: MockUiComponent,
+    Badge: MockUiComponent,
+    Card: MockUiComponent,
+    KpiCard: MockUiComponent,
   }
 })
 
