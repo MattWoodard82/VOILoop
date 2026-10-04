@@ -3,6 +3,8 @@ import type { ImportResult, ImportRowError, ImportTabResult, ImportBatchStatus }
 import type { MappedExercise, MappedHabits, MappedWellness } from './mappers'
 import type { WhoopParticipantProfile } from './workbook-context'
 import { logger } from '@/lib/logger'
+import { workoutKey } from './workout-integrity'
+import type { WhoopWorkout } from './types'
 
 const EXERCISE_TAB = 'Exercise'
 const WELLNESS_TAB = 'Stress/Sleep'
@@ -181,14 +183,33 @@ async function upsertWorkouts(
   batchId: string,
   mapped: MappedExercise,
   allErrors: ImportRowError[],
+  skippedOutcomes: ImportRowError[],
 ): Promise<ImportTabResult> {
   const tabResult = emptyTabResult(EXERCISE_TAB, mapped.processed, countByTabs(allErrors, [EXERCISE_TAB]))
-  const rows = mapped.workouts
+  const rows = Array.from(new Map(mapped.workouts.map((row) => [workoutKey(row), row])).values())
+  tabResult.skipped += mapped.workouts.length - rows.length
+  const lastIndexes = new Map(mapped.workouts.map((row, index) => [workoutKey(row), index]))
+  mapped.workouts.forEach((row, index) => {
+    if (lastIndexes.get(workoutKey(row)) !== index) {
+      skippedOutcomes.push({
+        tab: EXERCISE_TAB,
+        row: mapped.sourceRows?.[index] ?? -1,
+        field: 'Workout start time',
+        message: 'Duplicate workout key in this upload; the last source row was retained.',
+      })
+    }
+  })
+  const existingKeys = new Set<string>()
+  const failedLookupChunks = new Set<number>()
 
+  // Read every collision key before writing any chunk from this upload.
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
     const participantIds = Array.from(new Set(chunk.map((row) => row.participant_id)))
-    const startTimes = Array.from(new Set(chunk.map((row) => row.start_time)))
+    const startTimes = Array.from(new Set(chunk.flatMap((row) => [
+      row.start_time,
+      ...(mapped.legacyStartTimes?.[workoutKey(row)] ? [mapped.legacyStartTimes[workoutKey(row)]] : []),
+    ])))
 
     const { data: existingRows, error: existingError } = await supabase
       .from('workouts')
@@ -199,24 +220,46 @@ async function upsertWorkouts(
     if (existingError) {
       tabResult.failed += chunk.length
       allErrors.push({ tab: EXERCISE_TAB, row: -1, message: existingError.message })
+      failedLookupChunks.add(i)
       continue
     }
 
-    const existingKeys = new Set((existingRows ?? []).map((row) => `${row.participant_id}|${row.start_time}`))
-    const chunkRows = chunk.map((row) => ({ ...row, source_batch_id: batchId }))
+    const existingWorkouts: Pick<WhoopWorkout, 'participant_id' | 'start_time'>[] = existingRows ?? []
+    existingWorkouts.forEach((row) => existingKeys.add(workoutKey(row)))
+  }
+
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+    if (failedLookupChunks.has(i)) continue
+    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE)
+    const safeRows = chunk.filter((row) => {
+      if (existingKeys.has(workoutKey(row))) return true
+      const legacyStart = mapped.legacyStartTimes?.[workoutKey(row)]
+      const suspect = legacyStart && existingKeys.has(`${row.participant_id}|${legacyStart}`)
+      if (!suspect) return true
+      tabResult.failed += 1
+      allErrors.push({
+        tab: EXERCISE_TAB,
+        row: mapped.sourceRowNumbers?.[workoutKey(row)] ?? -1,
+        field: 'Workout start time',
+        message: 'Possible legacy timezone-shifted workout duplicate. An administrator must audit and reconcile existing workouts before re-importing this row.',
+      })
+      return false
+    })
+    if (safeRows.length === 0) continue
+    const chunkRows = safeRows.map((row) => ({ ...row, source_batch_id: batchId }))
     const { error: upsertError } = await supabase
       .from('workouts')
       .upsert(chunkRows, { onConflict: 'participant_id,start_time' })
 
     if (upsertError) {
-      tabResult.failed += chunk.length
+      tabResult.failed += safeRows.length
       allErrors.push({ tab: EXERCISE_TAB, row: -1, message: upsertError.message })
       continue
     }
 
-    const updated = chunk.filter((row) => existingKeys.has(`${row.participant_id}|${row.start_time}`)).length
+    const updated = safeRows.filter((row) => existingKeys.has(workoutKey(row))).length
     tabResult.updated += updated
-    tabResult.inserted += chunk.length - updated
+    tabResult.inserted += safeRows.length - updated
   }
 
   return tabResult
@@ -346,6 +389,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     ...wellnessResult.errors,
     ...habitsResult.errors,
   ]
+  const skippedOutcomes: ImportRowError[] = []
 
   const { data: createdBatch, error: batchError } = await supabase
     .from('upload_batches')
@@ -370,7 +414,7 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     )
 
     const tabResults: ImportTabResult[] = [
-      await upsertWorkouts(supabase, batchId, exerciseResult, allErrors),
+      await upsertWorkouts(supabase, batchId, exerciseResult, allErrors, skippedOutcomes),
       await upsertDailyWellness(supabase, batchId, wellnessResult, allErrors),
       await upsertHabits(supabase, batchId, habitsResult, allErrors),
     ]
@@ -378,15 +422,18 @@ export async function persistWhoopImport(params: PersistWhoopImportParams): Prom
     const totals = sumTabTotals(tabResults)
     const status = deriveBatchStatus(totals)
 
-    if (allErrors.length) {
+    if (allErrors.length || skippedOutcomes.length) {
       logImportRowErrors(batchId, fileName, userId, allErrors)
 
-      const rowOutcomeRows = allErrors.map((error) => ({
+      const rowOutcomeRows = [
+        ...allErrors.map((error) => ({ ...error, outcome: 'failed' })),
+        ...skippedOutcomes.map((error) => ({ ...error, outcome: 'skipped' })),
+      ].map((error) => ({
         batch_id: batchId,
         tab_name: error.tab,
         row_number: error.row,
         field_name: error.field ?? null,
-        outcome: 'failed',
+        outcome: error.outcome,
         message: error.message,
       }))
 

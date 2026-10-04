@@ -282,5 +282,26 @@ describe('WHOOP import e2e flow (route-level)', () => {
       habitsResult: expect.objectContaining({ processed: 1 }),
       participantProfiles: [],
     }))
+
+    const duplicateError = {
+      tab: 'Exercise', row: 2, field: 'Workout start time',
+      message: 'Possible legacy timezone-shifted workout duplicate. An administrator must audit and reconcile existing workouts before re-importing this row.',
+    }
+    mockPersistWhoopImport.mockResolvedValueOnce({
+      batchId: 'batch-2', status: 'partial', success: true,
+      fileName: 'workouts.csv,sleeps.csv,physiological_cycles.csv',
+      tabs: [
+        { tab: 'Exercise', processed: 2, inserted: 0, updated: 1, skipped: 0, failed: 1 },
+        { tab: 'Stress/Sleep', processed: 1, inserted: 0, updated: 1, skipped: 0, failed: 0 },
+        { tab: 'Manual Entries', processed: 1, inserted: 0, updated: 1, skipped: 0, failed: 0 },
+      ],
+      totals: { processed: 4, inserted: 0, updated: 3, skipped: 0, failed: 1 },
+      errors: [duplicateError],
+    })
+    const rejectedReupload = await POST(makeRequest())
+    expect(rejectedReupload.status).toBe(200)
+    expect(await rejectedReupload.json()).toMatchObject({
+      status: 'partial', totals: { failed: 1, inserted: 0 }, errors: [duplicateError],
+    })
   })
 })

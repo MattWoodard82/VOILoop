@@ -210,6 +210,13 @@ The importer now persists each upload as a tracked batch:
 - `upload_batches` stores upload metadata + run status/counts.
 - Normalized records in `workouts`, `daily_wellness`, and `habits` are linked to `source_batch_id`.
 - `import_row_outcomes` stores row-level failures/skips for review/export.
+- Workouts are upserted by participant + canonical UTC start timestamp, not
+  WHOOP workout ID. Duplicate keys within an upload are skipped (last row wins).
+  Each discarded source row is recorded as a skipped import outcome.
+  Suspected legacy wall-clock key collisions are rejected for admin review.
+  See `RUNBOOK.md` for the read-only historical workout audit and repair process.
+- Team Health baseline dates are fixed but values are calculated from live
+  stored data; correcting imports or receiving late data can change them.
 
 ### Local verification runbook (no hosted demo changes)
 1. Use a local/dev Supabase project for schema testing.

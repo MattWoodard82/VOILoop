@@ -7,8 +7,10 @@ import {
 import {
   validateExerciseRow, validateWellnessRow, validateManualRow,
   getCycleLookupKey, resolveWellnessDate,
+  legacyWorkoutStartTime,
   type ValidatedWellnessRow,
 } from './validators'
+import { workoutKey } from './workout-integrity'
 
 // ─── Exercise → workouts ───────────────────────────────────────────────────────
 
@@ -16,12 +18,18 @@ export interface MappedExercise {
   workouts: WhoopWorkout[]
   errors: ImportRowError[]
   processed: number
+  legacyStartTimes?: Record<string, string>
+  sourceRowNumbers?: Record<string, number>
+  sourceRows?: number[]
 }
 
 export function mapExercise(wb: ParsedWorkbook): MappedExercise {
   const rows = wb[TAB_EXERCISE] ?? []
   const errors: ImportRowError[] = []
   const workouts: WhoopWorkout[] = []
+  const legacyStartTimes: Record<string, string> = {}
+  const sourceRowNumbers: Record<string, number> = {}
+  const sourceRows: number[] = []
 
   for (let i = 0; i < rows.length; i++) {
     const validated = validateExerciseRow(rows[i], i + 2, errors) // +2: header=1
@@ -43,9 +51,16 @@ export function mapExercise(wb: ParsedWorkbook): MappedExercise {
       zone4_pct: validated.zone4,
       zone5_pct: validated.zone5,
     })
+    const key = workoutKey(workouts[workouts.length - 1])
+    sourceRows.push(i + 2)
+    sourceRowNumbers[key] = i + 2
+    const legacyStart = legacyWorkoutStartTime(rows[i]['Workout start time'], validated.timezone)
+    if (legacyStart && legacyStart !== validated.startTimeIso) {
+      legacyStartTimes[key] = legacyStart
+    }
   }
 
-  return { workouts, errors, processed: rows.length }
+  return { workouts, errors, processed: rows.length, legacyStartTimes, sourceRowNumbers, sourceRows }
 }
 
 // ─── Stress / Sleep → daily_wellness ─────────────────────────────────────────
