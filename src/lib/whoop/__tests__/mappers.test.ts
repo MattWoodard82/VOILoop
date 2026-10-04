@@ -110,6 +110,18 @@ describe('mapExercise', () => {
     })
   })
 
+  test('preserves individual source row numbers including discarded duplicates and invalid rows', () => {
+    const mapped = mapExercise({
+      Exercise: [
+        exerciseRows[0],
+        { ...exerciseRows[0], 'Workout start time': '##########' },
+        exerciseRows[0],
+      ],
+    })
+    expect(mapped.sourceRows).toEqual([2, 4])
+    expect(Object.values(mapped.sourceRowNumbers ?? {})).toEqual([4])
+  })
+
   test.each([
     '2024-01-15 08:00:00',
     '2024-01-15T08:00:00-06:00',

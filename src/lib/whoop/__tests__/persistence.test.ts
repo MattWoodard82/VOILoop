@@ -349,10 +349,40 @@ describe('persistWhoopImport', () => {
     mapped.workouts = Array.from({ length: 251 }, () => ({ ...mapped.workouts[0] }))
     mapped.workouts[250].calories = 450
     mapped.processed = 251
+    mapped.sourceRows = Array.from({ length: 251 }, (_, index) => index + 2)
     const result = await importExercise(supabase, mapped)
     expect(result.totals).toMatchObject({ processed: 251, inserted: 1, skipped: 250, failed: 0 })
     expect(supabase.tables.workouts).toHaveLength(1)
     expect(supabase.tables.workouts[0].calories).toBe(450)
+    expect(supabase.tables.import_row_outcomes).toHaveLength(250)
+    expect(supabase.tables.import_row_outcomes.every((row) => row.outcome === 'skipped')).toBe(true)
+    expect(supabase.tables.import_row_outcomes.map((row) => row.row_number)).toEqual(
+      Array.from({ length: 250 }, (_, index) => index + 2),
+    )
+  })
+
+  test.each([false, true])('new canonical writes never become legacy collisions across chunks (reverse=%s)', async (reverse) => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(1)
+    const template = mapped.workouts[0]
+    const workouts = Array.from({ length: 251 }, (_, index) => ({
+      ...template,
+      start_time: new Date(Date.parse(template.start_time) + index * 60_000).toISOString(),
+    }))
+    const finalRow = {
+      ...template,
+      start_time: '2026-07-02T20:00:00.000Z',
+      end_time: '2026-07-02T20:30:00.000Z',
+    }
+    workouts[250] = finalRow
+    mapped.workouts = reverse ? workouts.reverse() : workouts
+    mapped.processed = 251
+    mapped.legacyStartTimes = {
+      'EMP900|2026-07-02T20:00:00.000Z': template.start_time,
+    }
+    const result = await importExercise(supabase, mapped)
+    expect(result.totals).toMatchObject({ inserted: 251, updated: 0, failed: 0 })
+    expect(supabase.tables.workouts).toHaveLength(251)
   })
 
   test('preserves an existing day strain when a re-import omits it for the same day', async () => {

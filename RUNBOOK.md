@@ -97,6 +97,9 @@ different workout at that time requires review rather than risking another
 copy. Other valid rows still import and the summary reports partial/failed
 status. Duplicate keys within one upload are collapsed (last row wins) and
 counted as skipped.
+Each discarded source row has a persisted skipped outcome. Collision lookups
+finish before workout writes begin, so this upload's earlier chunks cannot
+create false legacy collisions for its later chunks.
 
 1. Pause nudges that rely on suspect workout counts or baseline comparisons.
 2. On a trusted machine, configure `.env.local` for the intended Supabase
@@ -119,7 +122,8 @@ counted as skipped.
    Do not delete by metric similarity alone. This release performs no repair.
 6. Re-run the audit and re-upload the source files. Verify workout counts,
    Zone 2 minutes, baseline values, and recent-week counts before resuming
-   nudges. Do not assume Kevin's smaller change is free of duplicates.
+   nudges. Audit both partial and exact count increases: equally shifted
+   start/end timestamps can indicate duplicates even when totals do not double.
 
 No schema deployment is needed. Rollback is an application rollback; it does
 not restore prior baseline values or remove existing duplicates. Baseline

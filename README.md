@@ -212,6 +212,7 @@ The importer now persists each upload as a tracked batch:
 - `import_row_outcomes` stores row-level failures/skips for review/export.
 - Workouts are upserted by participant + canonical UTC start timestamp, not
   WHOOP workout ID. Duplicate keys within an upload are skipped (last row wins).
+  Each discarded source row is recorded as a skipped import outcome.
   Suspected legacy wall-clock key collisions are rejected for admin review.
   See `RUNBOOK.md` for the read-only historical workout audit and repair process.
 - Team Health baseline dates are fixed but values are calculated from live

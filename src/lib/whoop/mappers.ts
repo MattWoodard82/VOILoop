@@ -20,6 +20,7 @@ export interface MappedExercise {
   processed: number
   legacyStartTimes?: Record<string, string>
   sourceRowNumbers?: Record<string, number>
+  sourceRows?: number[]
 }
 
 export function mapExercise(wb: ParsedWorkbook): MappedExercise {
@@ -28,6 +29,7 @@ export function mapExercise(wb: ParsedWorkbook): MappedExercise {
   const workouts: WhoopWorkout[] = []
   const legacyStartTimes: Record<string, string> = {}
   const sourceRowNumbers: Record<string, number> = {}
+  const sourceRows: number[] = []
 
   for (let i = 0; i < rows.length; i++) {
     const validated = validateExerciseRow(rows[i], i + 2, errors) // +2: header=1
@@ -50,6 +52,7 @@ export function mapExercise(wb: ParsedWorkbook): MappedExercise {
       zone5_pct: validated.zone5,
     })
     const key = workoutKey(workouts[workouts.length - 1])
+    sourceRows.push(i + 2)
     sourceRowNumbers[key] = i + 2
     const legacyStart = legacyWorkoutStartTime(rows[i]['Workout start time'], validated.timezone)
     if (legacyStart && legacyStart !== validated.startTimeIso) {
@@ -57,7 +60,7 @@ export function mapExercise(wb: ParsedWorkbook): MappedExercise {
     }
   }
 
-  return { workouts, errors, processed: rows.length, legacyStartTimes, sourceRowNumbers }
+  return { workouts, errors, processed: rows.length, legacyStartTimes, sourceRowNumbers, sourceRows }
 }
 
 // ─── Stress / Sleep → daily_wellness ─────────────────────────────────────────
