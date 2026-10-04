@@ -110,6 +110,19 @@ describe('mapExercise', () => {
     })
   })
 
+  test.each([
+    '2024-01-15 08:00:00',
+    '2024-01-15T08:00:00-06:00',
+    new Date('2024-01-15T08:00:00Z'),
+  ])('retains the legacy identity separately from the persisted workout: %s', (start) => {
+    const mapped = mapExercise({ Exercise: [{ ...exerciseRows[0], 'Workout start time': start }] })
+    expect(mapped.legacyStartTimes).toEqual({
+      'E1|2024-01-15T14:00:00.000Z': '2024-01-15T08:00:00.000Z',
+    })
+    expect(mapped.sourceRowNumbers).toEqual({ 'E1|2024-01-15T14:00:00.000Z': 2 })
+    expect(mapped.workouts[0]).not.toHaveProperty('legacyStartTimes')
+  })
+
   test('converts timezone-less workout start and end timestamps to UTC', () => {
     const { workouts, errors } = mapExercise({
       Exercise: [{

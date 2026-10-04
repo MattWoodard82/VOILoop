@@ -1,5 +1,9 @@
 import type { WhoopWorkout, WhoopWellness, WhoopHabit } from '../types'
 import { deriveBatchStatus, persistWhoopImport } from '../persistence'
+import { mapExercise } from '../mappers'
+import { parseWorkbook } from '../parser'
+import { toWorkoutInputs, zone2Score } from '../../team-health-score'
+import type { Workout } from '@/types'
 
 type TableRow = Record<string, unknown>
 
@@ -43,7 +47,7 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
   ) {}
 
   select(fields: string) {
-    this.selectedFields = fields.split(',').map((field) => field.trim())
+    this.selectedFields = fields === '*' ? null : fields.split(',').map((field) => field.trim())
     if (!this.operation) {
       this.operation = 'select'
     }
@@ -157,7 +161,7 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
     const inputRows = Array.isArray(this.payload) ? this.payload : [this.payload ?? {}]
     const upsertedRows = inputRows.map((row) => {
       const existingRow = this.client.tables[this.table].find((candidate) =>
-        this.upsertConflictFields.every((field) => candidate[field] === row[field]),
+        this.upsertConflictFields.every((field) => this.valuesEqual(field, candidate[field], row[field])),
       )
 
       if (existingRow) {
@@ -180,10 +184,17 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: null }> {
     return this.client.tables[this.table].filter((row) =>
       this.filters.every((filter) =>
         filter.operator === 'eq'
-          ? row[filter.field] === filter.value
-          : filter.values.includes(row[filter.field]),
+          ? this.valuesEqual(filter.field, row[filter.field], filter.value)
+          : filter.values.some((value) => this.valuesEqual(filter.field, row[filter.field], value)),
       ),
     )
+  }
+
+  private valuesEqual(field: string, a: unknown, b: unknown) {
+    if (field === 'start_time' && typeof a === 'string' && typeof b === 'string') {
+      return Date.parse(a) === Date.parse(b)
+    }
+    return a === b
   }
 
   private applyProjection(rows: TableRow[]) {
@@ -231,6 +242,119 @@ describe('deriveBatchStatus', () => {
 })
 
 describe('persistWhoopImport', () => {
+  function csvWorkouts(count: number) {
+    const header = 'Participant Identifier,Workout start time,Workout end time,Cycle timezone,Activity name,Duration (min),Activity Strain,HR Zone 2 (% in zone)'
+    const rows = Array.from({ length: count }, (_, index) => {
+      const day = String(2 + Math.floor(index / 2)).padStart(2, '0')
+      const hour = index % 2 === 0 ? '08' : '17'
+      return `EMP900,2026-07-${day} ${hour}:00:00,2026-07-${day} ${hour}:30:00,UTC-06:00,Run,30,4.7,10`
+    })
+    const parsed = parseWorkbook(Buffer.from([header, ...rows].join('\n')))
+    return mapExercise({ Exercise: parsed[Object.keys(parsed)[0]] })
+  }
+
+  async function importExercise(supabase: FakeSupabase, exerciseResult: ReturnType<typeof mapExercise>) {
+    return persistWhoopImport({
+      supabase: supabase as never, userId: 'user-1', participantId: 'EMP900',
+      fileName: 'workouts.csv', fileSize: 1000, fileHash: 'test-hash',
+      exerciseResult, wellnessResult: { wellness: [], errors: [], processed: 0 },
+      habitsResult: { habits: [], errors: [], processed: 0 }, participantProfiles: [],
+    })
+  }
+
+  test('real CSV re-import cannot turn 50 legacy workouts into 100 or double Zone 2', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(50)
+    const legacyWorkouts: Workout[] = mapped.workouts.map((row, index) => ({
+      ...row,
+      id: `legacy-${index}`,
+      source_batch_id: 'old-batch',
+      start_time: new Date(Date.parse(row.start_time) - 6 * 3600_000).toISOString(),
+      end_time: new Date(Date.parse(row.end_time!) - 6 * 3600_000).toISOString(),
+    }))
+    supabase.tables.workouts = legacyWorkouts.map((row) => ({ ...row }))
+    const window = { start: '2026-07-02', end: '2026-07-27' }
+    const before = zone2Score(toWorkoutInputs(legacyWorkouts), window)
+    const result = await importExercise(supabase, mapped)
+    expect(result.status).toBe('failed')
+    expect(result.totals).toMatchObject({ processed: 50, inserted: 0, updated: 0, failed: 50 })
+    expect(result.errors[0]).toMatchObject({ row: 2, field: 'Workout start time' })
+    expect(result.errors[0].message).toContain('legacy timezone-shifted')
+    expect(supabase.tables.workouts).toHaveLength(50)
+    expect(supabase.tables.workouts).toEqual(legacyWorkouts)
+    expect(before).toBe(28.8)
+  })
+
+  test('blocks a legacy-key collision even when re-exported metrics changed', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(1)
+    supabase.tables.workouts = [{
+      ...mapped.workouts[0], start_time: '2026-07-02T08:00:00.000Z', strain: 6,
+    }]
+    const result = await importExercise(supabase, mapped)
+    expect(result.totals.failed).toBe(1)
+    expect(supabase.tables.workouts).toHaveLength(1)
+  })
+
+  test('canonical CSV uploads remain idempotent and do not persist identity metadata', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(50)
+    expect((await importExercise(supabase, mapped)).totals.inserted).toBe(50)
+    expect((await importExercise(supabase, mapped)).totals.updated).toBe(50)
+    expect(supabase.tables.workouts).toHaveLength(50)
+    expect(supabase.tables.workouts[0]).not.toHaveProperty('legacyStartTimes')
+  })
+
+  test('counts Postgres timestamp spellings as updates, not inserts', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(1)
+    supabase.tables.workouts = [{
+      ...mapped.workouts[0], start_time: '2026-07-02T14:00:00+00:00',
+    }]
+    const result = await importExercise(supabase, mapped)
+    expect(result.totals).toMatchObject({ inserted: 0, updated: 1, failed: 0 })
+    expect(supabase.tables.workouts).toHaveLength(1)
+  })
+
+  test('continues safe rows while reporting a legacy collision as a partial import', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(2)
+    supabase.tables.workouts = [{
+      ...mapped.workouts[0], start_time: '2026-07-02T08:00:00+00:00',
+    }]
+    const result = await importExercise(supabase, mapped)
+    expect(result.status).toBe('partial')
+    expect(result.totals).toMatchObject({ processed: 2, inserted: 1, updated: 0, failed: 1 })
+    expect(supabase.tables.workouts).toHaveLength(2)
+    expect(supabase.tables.import_row_outcomes[0]).toMatchObject({
+      outcome: 'failed', row_number: 2, field_name: 'Workout start time',
+    })
+  })
+
+  test('does not block canonical updates when another workout has the legacy start time', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(1)
+    supabase.tables.workouts = [
+      { ...mapped.workouts[0], start_time: '2026-07-02T08:00:00.000Z' },
+      { ...mapped.workouts[0] },
+    ]
+    const result = await importExercise(supabase, mapped)
+    expect(result.totals).toMatchObject({ inserted: 0, updated: 1, failed: 0 })
+    expect(supabase.tables.workouts).toHaveLength(2)
+  })
+
+  test('collapses duplicate keys across chunk boundaries and counts skipped rows', async () => {
+    const supabase = new FakeSupabase()
+    const mapped = csvWorkouts(1)
+    mapped.workouts = Array.from({ length: 251 }, () => ({ ...mapped.workouts[0] }))
+    mapped.workouts[250].calories = 450
+    mapped.processed = 251
+    const result = await importExercise(supabase, mapped)
+    expect(result.totals).toMatchObject({ processed: 251, inserted: 1, skipped: 250, failed: 0 })
+    expect(supabase.tables.workouts).toHaveLength(1)
+    expect(supabase.tables.workouts[0].calories).toBe(450)
+  })
+
   test('preserves an existing day strain when a re-import omits it for the same day', async () => {
     const supabase = new FakeSupabase()
 

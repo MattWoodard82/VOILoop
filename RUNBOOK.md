@@ -82,6 +82,49 @@ Do **not** use direct `db.<project-ref>.supabase.co` for GitHub-hosted runner de
 
 ## If something fails
 
+### WHOOP workout counts change after a historical re-upload
+
+The Sept 25, 2026 timezone correction changed workout timestamps from local
+wall-clock values stored as UTC to actual UTC instants. Workouts are keyed by
+participant and start timestamp, not a WHOOP workout ID; historical re-uploads
+can therefore leave both representations in the database. Baseline dates are
+fixed, but baseline values are recalculated from stored data, not locked.
+
+New inserts reject rows whose legacy wall-clock key is already present, with
+an actionable row error. Existing canonical keys still update normally; an
+update does not repair any older duplicate. This is intentionally conservative: even a genuinely
+different workout at that time requires review rather than risking another
+copy. Other valid rows still import and the summary reports partial/failed
+status. Duplicate keys within one upload are collapsed (last row wins) and
+counted as skipped.
+
+1. Pause nudges that rely on suspect workout counts or baseline comparisons.
+2. On a trusted machine, configure `.env.local` for the intended Supabase
+   project using its server-only service role key. Never paste credentials or
+   raw health records into tickets.
+3. Find the participant ID in the admin participant record and run
+   `npm run admin:audit-workout-duplicates -- <participant ID>`.
+   This command only reads data, paginates workout history, and reports suspect
+   row IDs, batch IDs, timestamp offsets, and associated batch timestamps.
+   Keep the output private. Compare batch timestamps to the Sept 25-Oct 1
+   interval to investigate re-uploads; this is not proof of a backfill.
+4. Compare each candidate pair with the original CSVs and the WHOOP app.
+   The audit requires matching metrics and equally shifted start/end times;
+   it can miss copies whose metrics changed, missing-end-time rows, or other
+   import defects. A clean report does not certify the data.
+5. Before any repair SQL, verify the live schema through
+   `information_schema.columns` / `information_schema.tables`. Back up the
+   exact affected rows, obtain approval for the specific IDs, and reconcile
+   them transactionally, preserving canonical UTC timestamps and provenance.
+   Do not delete by metric similarity alone. This release performs no repair.
+6. Re-run the audit and re-upload the source files. Verify workout counts,
+   Zone 2 minutes, baseline values, and recent-week counts before resuming
+   nudges. Do not assume Kevin's smaller change is free of duplicates.
+
+No schema deployment is needed. Rollback is an application rollback; it does
+not restore prior baseline values or remove existing duplicates. Baseline
+locking/versioning is deliberately deferred until historical data is corrected.
+
 ### CI or PR checks fail
 
 1. Open the failed workflow run in GitHub Actions.

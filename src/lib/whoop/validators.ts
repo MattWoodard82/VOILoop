@@ -176,6 +176,11 @@ function normalizeSleepOnset(value: unknown, timezone?: string | null): string |
   return shiftTimestamp(isoTimestamp, timezoneOffsetMinutes(timezone))
 }
 
+export function legacyWorkoutStartTime(value: unknown, timezone?: string | null): string | null {
+  // Pre-Sept 25 imports stored local wall-clock values as UTC workout keys.
+  return normalizeSleepOnset(value, timezone)
+}
+
 /**
  * Parse a WHOOP timestamp field into an ISO 8601 string.
  * WHOOP exports may have:
