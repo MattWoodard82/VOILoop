@@ -6,12 +6,14 @@
  * relevant tables to reflect the current schema, and provisions user_access
  * rows so participants can log in immediately after reset.
  *
- * test1@user.com  → Colin Stephenson (EMP005)  password: Password!
- * All other participants get <firstname>@voiloop.local  password: Pilot1234
+ * test1@user.com  → Morgan Ellis (EMP005)  password: Password!
+ * Other participants use synthetic voiloop.local accounts with password: Pilot1234
  */
 
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { ADDITIONAL_DEMO_PARTICIPANTS, demoSeedDate } from './demo-seed-profile'
+import { assertSupabaseProjectTarget } from './pilot-account-deactivation'
 
 dotenv.config({ path: '.env.local' })
 
@@ -44,6 +46,9 @@ function assertSeedingAllowed(url: string) {
   }
 
   if (allowNonLocalSeed) {
+    if (voiloopEnv === 'demo') {
+      assertSupabaseProjectTarget(url, voiloopEnv, 'demo', process.env.DEMO_SUPABASE_PROJECT_REF, null)
+    }
     console.warn('⚠ VOILOOP_ALLOW_NON_LOCAL_SEED=true set. Proceeding to seed non-local Supabase environment.')
     return
   }
@@ -63,8 +68,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   },
 })
 
-const DATE = '2026-06-09'
-const WEEK_OF = '2026-06-09' // Monday of seed week
+const DATE = demoSeedDate()
 
 function shiftIsoDate(date: string, days: number): string {
   const dt = new Date(`${date}T00:00:00.000Z`)
@@ -72,40 +76,43 @@ function shiftIsoDate(date: string, days: number): string {
   return dt.toISOString().slice(0, 10)
 }
 
-// The wearable challenge scenario uses a real-wall-clock date (rather than
-// the fixed 2026-06-09 seed anchor used elsewhere) so that:
-//   1. The window never lands in the past relative to the actual machine
-//      clock, which would otherwise cause the very next recompute to
-//      auto-finalize the challenge as 'completed' before anyone can validate
-//      progress moving from 0/5 -> 1/5.
-//   2. The window doesn't overlap the historical date range used by
-//      `db:seed:team-health-score` (which backfills daily_wellness up
-//      through "today"), so that bulk seed data doesn't inflate every
-//      participant's device-wear-consistency count.
-const CHALLENGE_DATE = shiftIsoDate(new Date().toISOString().slice(0, 10), 1)
+function mondayOfWeek(date: string): string {
+  const day = new Date(`${date}T00:00:00.000Z`).getUTCDay()
+  return shiftIsoDate(date, day === 0 ? -6 : 1 - day)
+}
+
+const WEEK_OF = mondayOfWeek(DATE)
+
+// Keep the challenge window in the future and outside the history backfill so
+// it remains active after recompute and doesn't inflate device-wear metrics.
+const CHALLENGE_DATE = shiftIsoDate(DATE, 1)
 
 // Maps participant id → { email, password }
-// test1@user.com is mapped to Colin Stephenson (EMP005)
+// test1@user.com is mapped to the synthetic EMP005 demo profile.
 const PARTICIPANT_AUTH: Record<string, { email: string; password: string }> = {
-  EMP001: { email: 'travis@voiloop.local',   password: 'Pilot1234' },
-  EMP002: { email: 'tina@voiloop.local',     password: 'Pilot1234' },
-  EMP003: { email: 'nicole@voiloop.local',   password: 'Pilot1234' },
-  EMP004: { email: 'kyle@voiloop.local',     password: 'Pilot1234' },
-  EMP005: { email: 'test1@user.com',         password: 'Password!' }, // Colin Stephenson
-  EMP006: { email: 'franklin@voiloop.local', password: 'Pilot1234' },
-  EMP007: { email: 'david@voiloop.local',    password: 'Pilot1234' },
-  EMP008: { email: 'dzenan@voiloop.local',   password: 'Pilot1234' },
-  EMP009: { email: 'eddie@voiloop.local',    password: 'Pilot1234' },
-  EMP010: { email: 'caleb@voiloop.local',    password: 'Pilot1234' },
+  EMP001: { email: 'devon@voiloop.local',   password: 'Pilot1234' },
+  EMP002: { email: 'riley@voiloop.local',   password: 'Pilot1234' },
+  EMP003: { email: 'jordan@voiloop.local',  password: 'Pilot1234' },
+  EMP004: { email: 'casey@voiloop.local',   password: 'Pilot1234' },
+  EMP005: { email: 'test1@user.com',        password: 'Password!' },
+  EMP006: { email: 'quinn@voiloop.local',   password: 'Pilot1234' },
+  EMP007: { email: 'cameron@voiloop.local', password: 'Pilot1234' },
+  EMP008: { email: 'taylor@voiloop.local',  password: 'Pilot1234' },
+  EMP009: { email: 'jamie@voiloop.local',   password: 'Pilot1234' },
+  EMP010: { email: 'skyler@voiloop.local',  password: 'Pilot1234' },
 }
 
 async function upsertAuthUser(email: string, password: string): Promise<string> {
-  // Check if user already exists
-  const { data: list } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 })
-  const existing = list?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
+  let existing: { id: string } | undefined
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 })
+    if (error) throw new Error(`Failed to list Auth users before seed: ${error.message}`)
+    existing = data.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+    if (existing || data.users.length < 1000) break
+  }
   if (existing) {
-    // Update password in case it changed
-    await supabase.auth.admin.updateUserById(existing.id, { password })
+    const { error } = await supabase.auth.admin.updateUserById(existing.id, { password, ban_duration: 'none' })
+    if (error) throw new Error(`Failed to restore seeded Auth user ${email}: ${error.message}`)
     return existing.id
   }
   const { data, error } = await supabase.auth.admin.createUser({
@@ -117,26 +124,34 @@ async function upsertAuthUser(email: string, password: string): Promise<string> 
   return data.user.id
 }
 
-async function seed() {
+export async function seed() {
   console.log('🌱 Seeding VOILoop database...')
 
   // ── Auth users + Participants ─────────────────────────────────────────────
   const participantDefs = [
-    { id: 'EMP001', first_name: 'Travis',   last_name: 'Brandenburgh', department: 'Manager',        title: 'COO',             device_id: 'WHP-001', cohort: 'management',  enrolled_date: '2026-01-15', is_exact_data: true  },
-    { id: 'EMP002', first_name: 'Tina',     last_name: 'Turley',       department: 'Pediatrics',     title: 'Pediatric Nurse', device_id: 'WHP-002', cohort: 'day-shift',   enrolled_date: '2026-01-15', is_exact_data: false },
-    { id: 'EMP003', first_name: 'Nicole',   last_name: 'Revis',        department: 'Cardiology',     title: 'Cardio Nurse',    device_id: 'WHP-003', cohort: 'day-shift',   enrolled_date: '2026-02-01', is_exact_data: false },
-    { id: 'EMP004', first_name: 'Kyle',     last_name: 'Schuppan',     department: 'Surgery',        title: 'Surgical Tech',   device_id: 'WHP-004', cohort: 'day-shift',   enrolled_date: '2026-02-01', is_exact_data: false },
-    { id: 'EMP005', first_name: 'Colin',    last_name: 'Stephenson',   department: 'Night Shift',    title: 'RN',              device_id: 'WHP-005', cohort: 'night-shift', enrolled_date: '2026-02-15', is_exact_data: false },
-    { id: 'EMP006', first_name: 'Franklin', last_name: 'Turley',       department: 'Oncology',       title: 'Oncology RN',     device_id: 'WHP-006', cohort: 'day-shift',   enrolled_date: '2026-03-01', is_exact_data: false },
-    { id: 'EMP007', first_name: 'David',    last_name: 'Rosamond',     department: 'Admin',          title: 'HR Coordinator',  device_id: 'WHP-007', cohort: 'management',  enrolled_date: '2026-03-01', is_exact_data: false },
-    { id: 'EMP008', first_name: 'Dzenan',   last_name: 'Blambic',      department: 'ICU',            title: 'ICU Nurse',       device_id: 'WHP-008', cohort: 'night-shift', enrolled_date: '2026-03-15', is_exact_data: false },
-    { id: 'EMP009', first_name: 'Eddie',    last_name: 'Rediske',      department: 'Emergency Dept', title: 'ER Tech',         device_id: 'WHP-009', cohort: 'day-shift',   enrolled_date: '2026-04-01', is_exact_data: false },
-    { id: 'EMP010', first_name: 'Caleb',    last_name: 'Stone',        department: 'Surgery',        title: 'Surgical RN',     device_id: 'WHP-010', cohort: 'day-shift',   enrolled_date: '2026-08-01', is_exact_data: false },
+    { id: 'EMP001', first_name: 'Devon',   last_name: 'Harper',  department: 'Manager',        title: 'COO',             device_id: 'WHP-001', cohort: 'management',  enrolled_date: shiftIsoDate(DATE, -270), is_exact_data: false },
+    { id: 'EMP002', first_name: 'Riley',   last_name: 'Chen',    department: 'Pediatrics',     title: 'Pediatric Nurse', device_id: 'WHP-002', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -270), is_exact_data: false },
+    { id: 'EMP003', first_name: 'Jordan',  last_name: 'Patel',   department: 'Cardiology',     title: 'Cardio Nurse',    device_id: 'WHP-003', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -250), is_exact_data: false },
+    { id: 'EMP004', first_name: 'Casey',   last_name: 'Flores',  department: 'Surgery',        title: 'Surgical Tech',   device_id: 'WHP-004', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -250), is_exact_data: false },
+    { id: 'EMP005', first_name: 'Morgan',  last_name: 'Ellis',   department: 'Night Shift',    title: 'RN',              device_id: 'WHP-005', cohort: 'night-shift', enrolled_date: shiftIsoDate(DATE, -240), is_exact_data: false },
+    { id: 'EMP006', first_name: 'Quinn',   last_name: 'Shah',    department: 'Oncology',       title: 'Oncology RN',     device_id: 'WHP-006', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -220), is_exact_data: false },
+    { id: 'EMP007', first_name: 'Cameron', last_name: 'Wells',   department: 'Admin',          title: 'HR Coordinator',  device_id: 'WHP-007', cohort: 'management',  enrolled_date: shiftIsoDate(DATE, -220), is_exact_data: false },
+    { id: 'EMP008', first_name: 'Taylor',  last_name: 'Brooks',  department: 'ICU',            title: 'ICU Nurse',       device_id: 'WHP-008', cohort: 'night-shift', enrolled_date: shiftIsoDate(DATE, -200), is_exact_data: false },
+    { id: 'EMP009', first_name: 'Jamie',   last_name: 'Alvarez', department: 'Emergency Dept', title: 'ER Tech',         device_id: 'WHP-009', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -180), is_exact_data: false },
+    { id: 'EMP010', first_name: 'Skyler',  last_name: 'Park',    department: 'Surgery',        title: 'Surgical RN',     device_id: 'WHP-010', cohort: 'day-shift',   enrolled_date: shiftIsoDate(DATE, -45),  is_exact_data: false },
+    ...ADDITIONAL_DEMO_PARTICIPANTS.map(({ daysEnrolledAgo, scenario: _scenario, ...participant }) => ({
+      ...participant,
+      enrolled_date: shiftIsoDate(DATE, -daysEnrolledAgo),
+      is_exact_data: false,
+    })),
   ]
 
   const authUserIds: Record<string, string> = {}
   for (const p of participantDefs) {
-    const { email, password } = PARTICIPANT_AUTH[p.id]
+    const { email, password } = PARTICIPANT_AUTH[p.id] ?? {
+      email: `${p.id.toLowerCase()}@voiloop.local`,
+      password: 'Pilot1234',
+    }
     const userId = await upsertAuthUser(email, password)
     authUserIds[p.id] = userId
   }
@@ -160,6 +175,7 @@ async function seed() {
     user_id: authUserIds[p.id],
     role: 'participant',
     must_change_password: false,
+    is_active: true,
   }))
   const { error: accessErr } = await supabase
     .from('user_access')
@@ -168,13 +184,13 @@ async function seed() {
   console.log('✅ user_access rows seeded')
 
   // ── Daily Wellness ─────────────────────────────────────────────────────────
-  // EMP001 = Travis exact WHOOP data from Excel
+  // EMP001 is the synthetic benchmark profile for outcomes validation.
   const wellness = [
-    { participant_id: 'EMP001', date: DATE, recovery_score: 72, hrv_ms: 37, resting_hr: 63,
-      blood_oxygen: 94.6, skin_temp: 33.0, day_strain: 10.4, calories: 2100,
-      sleep_perf: 89, sleep_hrs: 7.4, sleep_debt: 0.5, sleep_need: 8.2,
-      deep_sleep: 1.8, rem_sleep: 1.7, light_sleep: 3.9,
-      sleep_eff: 97, sleep_consistency: 82, resp_rate: 15.2 },
+    { participant_id: 'EMP001', date: DATE, recovery_score: 76, hrv_ms: 44, resting_hr: 61,
+      blood_oxygen: 97.2, skin_temp: 33.1, day_strain: 8.7, calories: 2240,
+      sleep_perf: 85, sleep_hrs: 7.8, sleep_debt: 0.3, sleep_need: 8.1,
+      deep_sleep: 1.6, rem_sleep: 1.8, light_sleep: 4.4,
+      sleep_eff: 93, sleep_consistency: 79, resp_rate: 15.5 },
     { participant_id: 'EMP002', date: DATE, recovery_score: 71, hrv_ms: 38, resting_hr: 65,
       blood_oxygen: 94.2, skin_temp: 33.1, day_strain: 9.3, calories: 1960,
       sleep_perf: 82, sleep_hrs: 7.2, sleep_debt: 0.7, sleep_need: 8.1,
@@ -315,12 +331,12 @@ async function seed() {
   if (habErr) { console.error('Habits:', habErr); process.exit(1) }
   console.log('✅ Habits seeded')
 
-  // ── Wearable challenge seed scenario (Colin 0/5 -> 1/5) ───────────────────
+  // ── Wearable challenge seed scenario (test participant 0/5 -> 1/5) ────────
   // This creates a deterministic active device-wear challenge and participant
-  // progress rows, then ensures Colin has exactly one qualifying wear day from
+  // progress rows, then ensures the test participant has one qualifying day from
   // import-shaped daily_wellness data inside the challenge window.
   // Narrow 5-day window anchored on the dynamic CHALLENGE_DATE (see above) —
-  // wide enough to comfortably contain Colin's single qualifying day without
+  // wide enough to contain the single qualifying day without
   // overlapping team-health-score's historical backfill range.
   const challengeWindowStart = `${CHALLENGE_DATE}T00:00:00.000Z`
   const challengeWindowEnd = `${shiftIsoDate(CHALLENGE_DATE, 4)}T23:59:59.000Z`
@@ -417,7 +433,7 @@ async function seed() {
     .upsert(challengeParticipants, { onConflict: 'challenge_id,participant_id' })
   if (challengeParticipantsErr) { console.error('Challenge participants seed:', challengeParticipantsErr); process.exit(1) }
 
-  const colinWearSeed = {
+  const testParticipantWearSeed = {
     participant_id: 'EMP005',
     date: CHALLENGE_DATE,
     recovery_score: 61,
@@ -425,11 +441,11 @@ async function seed() {
     sleep_hrs: 7.1,
     source_batch_id: null,
   }
-  const { error: colinWearSeedErr } = await supabase
+  const { error: testParticipantWearSeedErr } = await supabase
     .from('daily_wellness')
-    .upsert(colinWearSeed, { onConflict: 'participant_id,date' })
-  if (colinWearSeedErr) { console.error('Colin wearable seed daily_wellness:', colinWearSeedErr); process.exit(1) }
-  console.log('✅ Wearable challenge + Colin CSV-shaped seed data configured')
+    .upsert(testParticipantWearSeed, { onConflict: 'participant_id,date' })
+  if (testParticipantWearSeedErr) { console.error('Test participant wearable seed daily_wellness:', testParticipantWearSeedErr); process.exit(1) }
+  console.log('✅ Wearable challenge + test participant CSV-shaped seed data configured')
 
   // ── Pulse Surveys ──────────────────────────────────────────────────────────
   const pulse = [
@@ -457,33 +473,53 @@ async function seed() {
 
   const { error: pulseErr } = await supabase
     .from('pulse_surveys')
-    .upsert([...pulse, ...extraPulse], { onConflict: 'participant_id,date' })
+    .upsert([
+      ...pulse,
+      ...extraPulse,
+      { participant_id: 'EMP011', date: DATE, confident_health: true, body_trending_good: true, energy_level: 5, rest_quality: 5, stress_level: 1, physical_activity: ['fitness_center'], mental_wellbeing: 5, program_supported: 'yes', whoop_reviewed: 'yes_regularly', health_flag: null },
+      { participant_id: 'EMP013', date: DATE, confident_health: false, body_trending_good: false, energy_level: 2, rest_quality: 2, stress_level: 5, physical_activity: ['none'], mental_wellbeing: 2, program_supported: 'neutral', whoop_reviewed: 'yes_once', health_flag: 'Recovery and energy have declined for several weeks.' },
+      { participant_id: 'EMP014', date: DATE, confident_health: false, body_trending_good: false, energy_level: 1, rest_quality: 1, stress_level: 5, physical_activity: ['none'], mental_wellbeing: 1, program_supported: 'no', whoop_reviewed: 'no', health_flag: 'Reports persistent fatigue and poor sleep.' },
+      { participant_id: 'EMP021', date: shiftIsoDate(DATE, -7), confident_health: false, body_trending_good: false, energy_level: 2, rest_quality: 2, stress_level: 4, physical_activity: ['outside'], mental_wellbeing: 2, program_supported: 'neutral', whoop_reviewed: 'no', health_flag: 'Missed this week’s check-in; prior week reported increasing fatigue.' },
+      { participant_id: 'EMP023', date: DATE, confident_health: true, body_trending_good: true, energy_level: 4, rest_quality: 4, stress_level: 2, physical_activity: ['outside'], mental_wellbeing: 4, program_supported: 'yes', whoop_reviewed: 'yes_once', health_flag: null },
+    ], { onConflict: 'participant_id,date' })
   if (pulseErr) { console.error('Pulse:', pulseErr); process.exit(1) }
   console.log('✅ Pulse surveys seeded')
 
   // ── Interventions ──────────────────────────────────────────────────────────
   const interventions = [
-    { participant_id: 'EMP008', date_triggered: DATE, department: 'ICU',
+    { id: 'da000000-0000-4000-8000-000000000001', participant_id: 'EMP008', date_triggered: DATE, department: 'ICU',
       trigger_metric: 'Recovery Score', trigger_value: '38',
       intervention_type: '1:1 Wellness Check-in', assigned_to: 'Wellness Director',
       outcome: 'Pending', notes: 'Reached out to schedule a check-in. Flagged by WHOOP data — low recovery trend over 3 weeks.' },
-    { participant_id: 'EMP005', date_triggered: DATE, department: 'Night Shift',
+    { id: 'da000000-0000-4000-8000-000000000002', participant_id: 'EMP005', date_triggered: DATE, department: 'Night Shift',
       trigger_metric: 'Sleep Debt', trigger_value: '2.2 hrs',
       intervention_type: 'Sleep Hygiene Campaign', assigned_to: 'Wellness Director',
       outcome: 'Pending', notes: 'Discussed sleep hygiene on last call. Following up with resources this week.' },
-    { participant_id: 'EMP010', date_triggered: '2026-05-15', department: 'Surgery',
+    { id: 'da000000-0000-4000-8000-000000000003', participant_id: 'EMP010', date_triggered: shiftIsoDate(DATE, -30), department: 'Surgery',
       trigger_metric: 'Recovery Score', trigger_value: '52',
       intervention_type: 'Recovery Program', assigned_to: 'Wellness Director',
       outcome: 'In Progress', notes: 'Recovery trending up since program start. Will reassess at week 4 check-in.' },
-    { participant_id: 'EMP004', date_triggered: '2026-05-20', department: 'Surgery',
+    { id: 'da000000-0000-4000-8000-000000000004', participant_id: 'EMP004', date_triggered: shiftIsoDate(DATE, -21), department: 'Surgery',
       trigger_metric: 'Day Strain', trigger_value: '11.9',
       intervention_type: 'Manager Coaching', assigned_to: 'Dept Manager',
       outcome: 'Monitoring', notes: 'Spoke with dept manager. Monitoring weekly — strain appears workload-related.' },
+    { id: 'da000000-0000-4000-8000-000000000005', participant_id: 'EMP013', date_triggered: shiftIsoDate(DATE, -14), date_actioned: shiftIsoDate(DATE, -12), date_resolved: shiftIsoDate(DATE, -7), department: 'ICU',
+      trigger_metric: 'Recovery Score', trigger_value: '46',
+      intervention_type: '1:1 Wellness Check-in', assigned_to: 'Wellness Director',
+      outcome: 'Resolved', notes: 'Completed check-in; participant is trying a consistent sleep routine.' },
+    { id: 'da000000-0000-4000-8000-000000000006', participant_id: 'EMP014', date_triggered: shiftIsoDate(DATE, -3), department: 'Surgery',
+      trigger_metric: 'Sleep Performance', trigger_value: '39',
+      intervention_type: 'Manager Coaching', assigned_to: 'Dept Manager',
+      outcome: 'Pending', notes: 'Escalated for a supportive check-in; avoid presenting this synthetic flag as a diagnosis.' },
+    { id: 'da000000-0000-4000-8000-000000000007', participant_id: 'EMP016', date_triggered: DATE, department: 'Cardiology',
+      trigger_metric: 'Enrollment', trigger_value: '7 days',
+      intervention_type: 'New Participant Welcome', assigned_to: 'Wellness Director',
+      outcome: 'In Progress', notes: 'Welcome workflow is in progress for a recently enrolled participant.' },
   ]
 
   const { error: intErr } = await supabase
     .from('interventions')
-    .upsert(interventions)
+    .upsert(interventions, { onConflict: 'id' })
   if (intErr) { console.error('Interventions:', intErr); process.exit(1) }
   console.log('✅ Interventions seeded')
 
@@ -495,22 +531,26 @@ async function seed() {
     { organization_id: null, weight_name: 'intervention_follow_up_weight',   weight_value: 0.15 },
     { organization_id: null, weight_name: 'trend_consistency_weight',        weight_value: 0.15 },
   ]
-  const { error: weightsErr } = await supabase
-    .from('engagement_score_weights')
-    .upsert(weights, { onConflict: 'organization_id,weight_name' })
-  if (weightsErr) { console.error('Engagement weights:', weightsErr); process.exit(1) }
-  console.log('✅ Engagement score weights seeded')
+  if ((process.env.VOILOOP_ENV ?? '').toLowerCase() !== 'demo') {
+    const { error: weightsErr } = await supabase
+      .from('engagement_score_weights')
+      .upsert(weights, { onConflict: 'organization_id,weight_name' })
+    if (weightsErr) { console.error('Engagement weights:', weightsErr); process.exit(1) }
+    console.log('✅ Engagement score weights seeded')
+  } else {
+    console.log('✅ Existing demo engagement score configuration preserved')
+  }
 
   // ── Events ────────────────────────────────────────────────────────────────
   const events = [
-    { title: 'Group Hike — Foothills Trail', description: 'Meet at the trailhead parking lot. All fitness levels welcome.',
-      event_date: '2026-06-21', event_time: '7:00 AM', location: 'Foothills Trail, Boise ID',
+    { id: 'de000000-0000-4000-8000-000000000001', title: 'Group Hike — Foothills Trail', description: 'Meet at the trailhead parking lot. All fitness levels welcome.',
+      event_date: shiftIsoDate(DATE, 8), event_time: '7:00 AM', location: 'Foothills Trail, Boise ID',
       event_type: 'outdoor', recurring: false, recurrence: null, rsvp_enabled: true },
-    { title: 'Lunchtime Yoga', description: '30-minute guided yoga session in the breakroom.',
-      event_date: '2026-06-18', event_time: '12:00 PM', location: 'Breakroom B',
+    { id: 'de000000-0000-4000-8000-000000000002', title: 'Lunchtime Yoga', description: '30-minute guided yoga session in the breakroom.',
+      event_date: shiftIsoDate(DATE, 3), event_time: '12:00 PM', location: 'Breakroom B',
       event_type: 'fitness', recurring: true, recurrence: 'weekly', rsvp_enabled: false },
-    { title: 'Hospital 5K Fun Run', description: 'Annual charity 5K around the hospital campus.',
-      event_date: '2026-07-04', event_time: '8:00 AM', location: 'Hospital Main Campus',
+    { id: 'de000000-0000-4000-8000-000000000003', title: 'Hospital 5K Fun Run', description: 'Annual charity 5K around the hospital campus.',
+      event_date: shiftIsoDate(DATE, 21), event_time: '8:00 AM', location: 'Hospital Main Campus',
       event_type: 'race', recurring: false, recurrence: null, rsvp_enabled: true },
   ]
   const { error: eventsErr } = await supabase
@@ -529,8 +569,8 @@ async function seed() {
   // weekly_nudges alone.
   const nudgeFields = {
     message: 'Great work this week, team. Remember: small consistent habits compound over time. Even 10 minutes of movement today counts. You\'ve got this. 💪',
-    author: 'Heather Simpson',
-    response_due_at: '2099-12-31T23:59:00Z', // far future — always open for pilot testing
+    author: 'Demo Wellness Director',
+    response_due_at: `${shiftIsoDate(DATE, 7)}T23:59:00Z`,
   }
 
   const { data: existingNudge, error: existingNudgeErr } = await supabase
@@ -583,15 +623,17 @@ async function seed() {
   console.log('✅ Weekly nudge seeded')
 
   console.log('\n🎉 VOILoop database seeded successfully!')
-  console.log('   Travis Brandenburgh (EMP001) — exact WHOOP data, travis@voiloop.local / Pilot1234')
-  console.log('   Colin Stephenson (EMP005)   — test1@user.com / Password!')
-  console.log('   8 other participants        — <firstname>@voiloop.local / Pilot1234')
-  console.log('   4 interventions             — 2 pending, 1 in progress, 1 monitoring')
-  console.log('   engagement_score_weights    — global defaults seeded')
+  console.log('   Synthetic profile (EMP001)   — devon@voiloop.local / Pilot1234')
+  console.log('   Test login (EMP005)          — test1@user.com / Password!')
+  console.log(`   ${participantDefs.length - 2} other participants — <participant-id>@voiloop.local / Pilot1234`)
+  console.log('   7 interventions             — pending, in progress, monitoring, resolved')
+  console.log('   engagement_score_weights    — existing demo config retained; local defaults seeded')
   console.log('   events + weekly nudge       — sample data seeded')
 }
 
-seed().catch((err) => {
-  console.error('Seed failed:', err)
-  process.exit(1)
-})
+if (require.main === module) {
+  seed().catch((err) => {
+    console.error('Seed failed:', err)
+    process.exit(1)
+  })
+}

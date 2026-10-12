@@ -37,6 +37,29 @@ describe('middleware role routing', () => {
     expect(response.headers.get('location')).toBe('https://example.com/my')
   })
 
+  test('redirects inactive users away from protected pages', async () => {
+    mockCreateServerClient.mockReturnValue({
+      auth: {
+        getUser: jest.fn(async () => ({ data: { user: { id: 'inactive-user' } } })),
+      },
+      from: jest.fn(() => ({
+        select: jest.fn(() => ({
+          eq: jest.fn(() => ({
+            maybeSingle: jest.fn(async () => ({
+              data: { role: 'participant', must_change_password: false, is_active: false },
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    } as never)
+
+    const response = await middleware(new NextRequest('https://example.com/my'))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe('https://example.com/login?error=account_deactivated')
+  })
+
   test('allows authenticated participant users on /admin/import', async () => {
     mockCreateServerClient.mockReturnValue({
       auth: {

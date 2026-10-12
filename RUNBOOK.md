@@ -40,7 +40,167 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
    - `confirm=APPLY`
 4. Confirm workflow success.
 5. Verify production pages that rely on changed data.
-6. Do **not** run `npm run db:seed` against pilot/prod. Seed data is local-development only.
+6. Do **not** run `npm run db:seed` against pilot/prod except for the explicitly
+   guarded pilot-to-demo cutover below. Seed data is local-development-only
+   otherwise.
+
+### Pilot account deactivation before demo cutover
+
+The first pilot-to-demo step blocks every current Supabase Auth account except
+`test1@user.com`, while retaining account and participant records. The script
+also marks linked participant rows inactive and sets `user_access.is_active`
+false. The application rejects inactive accounts at login and for existing
+sessions; RLS also blocks their browser access to protected public tables.
+
+Before using the script:
+
+1. Apply migration `20261012080000_pilot_account_deactivation.sql` to the pilot
+   project, then deploy the matching application changes before deactivation.
+   Both are required to deny existing sessions on browser and server/API paths.
+2. On a trusted machine, configure `.env.local` with the pilot URL, anonymous
+   key, and server-only service role key. Set `PILOT_SUPABASE_PROJECT_REF` to
+   the exact project ref and `VOILOOP_ENV=pilot`. Never expose or commit the
+   service role key.
+3. Run the disposable-account verification. It creates and removes a temporary
+   Auth user, checks whether an Auth ban blocks new password sign-in, checks an
+   existing access token, and tests password rotation if the ban test fails:
+
+   ```powershell
+   $env:PILOT_SUPABASE_PROJECT_REF = 'exact-pilot-project-ref'
+   npm run admin:deactivate-pilot-accounts -- --verify-ban --confirm-project-ref $env:PILOT_SUPABASE_PROJECT_REF
+   ```
+
+4. Preview the exact accounts to be changed. Keep the output private because
+   it contains account email addresses:
+
+   ```powershell
+   npm run admin:deactivate-pilot-accounts -- --confirm-project-ref $env:PILOT_SUPABASE_PROJECT_REF
+   ```
+
+5. If verification confirms that Auth bans block new sign-ins, apply the ban
+   method. If the ban test fails but password rotation is verified, use the
+   password-rotation fallback instead:
+
+   ```powershell
+   npm run admin:deactivate-pilot-accounts -- --apply --method ban --confirm-project-ref $env:PILOT_SUPABASE_PROJECT_REF
+   # Only when the ban test fails and the password-rotation probe succeeds:
+   npm run admin:deactivate-pilot-accounts -- --apply --method password-rotation --confirm-project-ref $env:PILOT_SUPABASE_PROJECT_REF
+   ```
+
+The apply command repeats the disposable verification, requires an exact
+project-ref confirmation, and defaults to no changes unless `--apply` is
+provided. Password-rotation passwords are unique random values and are neither
+printed nor stored. The protected test account is `test1@user.com`; no other
+`testN@user.com` account is implicitly exempted. This operation does not delete
+pilot data. Use the existing manual backup process and verify its result before
+the later destructive data refresh. The repository's `admin:delete-accounts`
+command is destructive and must not be used for this deactivation step.
+
+### Pilot-to-demo data refresh
+
+This cutover reuses the existing pilot Supabase project. It first deactivates
+pilot accounts, then clears pilot rows and replaces them with a 30-person
+synthetic demo cohort. The seed scenarios include improving, steady, declining,
+and red-flag trends; incomplete and stale wearable history; no-device users;
+new enrollees; and varied pulse/intervention states.
+
+Do not start until the existing manual backup has completed and its contents
+have been verified. The backup reference passed to the command is an operator acknowledgement;
+the script cannot validate the backup itself or store a durable audit record.
+Privately record the backup location, recovery point, verification result,
+cutover approver, and command output. Confirm the manual backup covers public
+data and Auth accounts needed for recovery before authorizing account deletion.
+
+1. Apply migrations `20261012080000_pilot_account_deactivation.sql` and
+   `20261012090000_demo_data_refresh.sql` to the exact pilot project. Before
+   using **Deploy Supabase Schema**, verify its `demo-prod` environment
+   `SUPABASE_DB_URL` points to this pilot project, not another environment.
+2. Configure `.env.local` with that project's URL and server-only service role
+   key, `PILOT_ADMIN_EMAIL`, and `DEMO_SUPABASE_PROJECT_REF` set to the exact
+   project ref. For the refresh command, set `VOILOOP_ENV=demo`; this selects
+   the guarded demo operation and does not change which Supabase project is
+   targeted. The deactivation step separately requires `VOILOOP_ENV=pilot`.
+3. Preview the deletion. Review every Auth email and table count in the private
+   output, and stop if anything is unexpected:
+
+   ```powershell
+   $env:DEMO_SUPABASE_PROJECT_REF = 'exact-pilot-project-ref'
+   $env:VOILOOP_ENV = 'demo'
+   npm run admin:refresh-demo-data -- --confirm-project-ref $env:DEMO_SUPABASE_PROJECT_REF
+   ```
+
+4. After confirming the backup and preview, run the guarded refresh. Use the
+   actual backup reference from the manual process:
+
+   ```powershell
+   $env:VERIFIED_BACKUP_REFERENCE = 'backup-id-from-manual-process'
+   npm run admin:refresh-demo-data -- --apply --confirm-project-ref $env:DEMO_SUPABASE_PROJECT_REF --confirm-demo-refresh DELETE_PILOT_DATA --backup-reference $env:VERIFIED_BACKUP_REFERENCE
+   ```
+
+   The SQL cleanup is transactional, but subsequent Auth-user deletion is
+   separate; if it stops partway, review the error and rerun the dry-run before
+   continuing. The command preserves `test1@user.com` and the configured admin,
+   deletes other Auth accounts, and keeps schema/configuration.
+5. Restore/provision the demo admin and seed the refreshed cohort. Remote
+   seeding requires the explicit opt-in below; use it only after verifying the
+   project ref again:
+
+   ```powershell
+   npm run admin:bootstrap
+   $env:VOILOOP_ENV = 'demo'
+   $env:VOILOOP_ALLOW_NON_LOCAL_SEED = 'true'
+   $env:DEMO_SEED_DATE = [DateTime]::UtcNow.ToString('yyyy-MM-dd')
+   npm run db:seed
+   npm run db:seed:team-health-score
+   npm run db:seed:nudge-responses -- 30
+   ```
+
+   `test1@user.com` remains the protected participant login (`Password!`).
+   The first ten seeded profiles use their listed synthetic
+   `@voiloop.local` emails; the 20 additional edge-case profiles use
+   `<participant-id>@voiloop.local`. All use `Pilot1234`. Keep credentials and
+   refresh output private. Do not run `admin:delete-accounts` during this
+   procedure.
+
+   Configure `PILOT_ADMIN_PASSWORD` explicitly for the hosted admin and
+   `NUDGE_RESPONSE_ENCRYPTION_KEY` to match the app before running these commands.
+   Remote demo seeds require a URL matching `DEMO_SUPABASE_PROJECT_REF` and do
+   not overwrite existing scoring configuration. Keep the same
+   `DEMO_SEED_DATE` when rerunning a seed to preserve enrollment ages and gaps;
+   use a full guarded refresh when changing the date to renew demo freshness.
+   The default date when unset is the current UTC day.
+
+6. Verify two retained logins: the configured admin opens the leadership
+   dashboard, and `test1@user.com` opens its participant dashboard. An old pilot
+   login and a previously authenticated pilot session must both be denied.
+   Confirm 30 active synthetic profiles, 7 interventions (including a resolved
+   record with a resolution date), 3 upcoming events, and 30 nudge replies.
+   Check `EMP014` for declining/red-flag history, `EMP015`/`EMP030` for no
+   wearable history, `EMP016` for an 8-day history, `EMP018` for a 21-day stale
+   history, and `EMP019` for intermittent coverage. Confirm the wellness,
+   pulse, intervention, and outcomes pages show these expected states and no
+   pilot identities remain.
+
+### Cutover recovery and local SQL verification
+
+Deactivation can be reversed deliberately by removing the Auth ban
+(`ban_duration=none`), restoring the affected access flags and participant
+statuses, and resetting passwords when the password-rotation fallback was used.
+Automatic admin login repair does not reactivate an inactive account.
+`admin:bootstrap` intentionally restores the configured admin only.
+
+Data refresh is irreversible without the verified manual backup/PITR recovery
+procedure. If cleanup or Auth deletion fails, stop before seeding; preserve
+private output and use the recovery owner and recovery point recorded above.
+An app rollback alone neither restores deleted data nor reverses Auth changes.
+Do not disable the active-account RLS gate to work around a deployment problem.
+
+On a disposable migrated Postgres/Supabase database, run
+`supabase\tests\pilot-demo-refresh.sql` with `psql -v ON_ERROR_STOP=1`.
+It exercises inactive-session RLS, the privileged nudge path, backup refusal,
+orphan cleanup, configuration/Auth preservation, and repeat cleanup. Its
+fixtures and destructive test operations run in a rolled-back transaction;
+never point this verification at the hosted pilot.
 
 ### Application-layer encryption for participant text
 

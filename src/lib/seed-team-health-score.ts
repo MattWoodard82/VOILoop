@@ -2,8 +2,8 @@
  * Team Health Score (GH #119) local test-data generator.
  * Run: npm run db:seed:team-health-score  (after `npm run db:seed`)
  *
- * `seed.ts` only inserts one snapshot day (2026-06-09) per participant, which is
- * enough for the existing KPI cards/engagement score, but is *not* enough to
+ * `seed.ts` only inserts one snapshot day per participant, which is enough for
+ * the existing KPI cards/engagement score, but is *not* enough to
  * exercise the Team Health Score baseline/last-week/current windows, which each
  * need many consecutive days of daily_wellness + workouts history. This script
  * additively backfills several months of realistic daily_wellness and workouts
@@ -23,6 +23,13 @@
 
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { assertSupabaseProjectTarget } from './pilot-account-deactivation'
+import {
+  ADDITIONAL_DEMO_PARTICIPANTS,
+  demoSeedDate,
+  type DemoTrendDirection,
+  type DemoWearableHistory,
+} from './demo-seed-profile'
 
 dotenv.config({ path: '.env.local' })
 
@@ -51,6 +58,9 @@ function assertSeedingAllowed(url: string) {
   }
   if (isLocalSupabaseUrl(url)) return
   if (allowNonLocalSeed) {
+    if (voiloopEnv === 'demo') {
+      assertSupabaseProjectTarget(url, voiloopEnv, 'demo', process.env.DEMO_SUPABASE_PROJECT_REF, null)
+    }
     console.warn('⚠ VOILOOP_ALLOW_NON_LOCAL_SEED=true set. Proceeding to seed non-local Supabase environment.')
     return
   }
@@ -66,24 +76,6 @@ const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
-// Mirrors seed.ts's participantDefs (id + enrolled_date only -- the rest of
-// each participant's profile already lives in seed.ts). Each entry also gets
-// a distinct performance profile so the cohort isn't uniform: `baseOffset`
-// shifts recovery/sleep/HRV up or down, and `salt` keeps each participant's
-// pseudo-random day-to-day noise independent of the others.
-const PARTICIPANTS: { id: string; enrolledDate: string; baseOffset: number; salt: number }[] = [
-  { id: 'EMP001', enrolledDate: '2026-01-15', baseOffset: 0,   salt: 100 }, // Travis -- exact-data reference participant, unchanged
-  { id: 'EMP002', enrolledDate: '2026-01-15', baseOffset: 5,   salt: 200 },
-  { id: 'EMP003', enrolledDate: '2026-02-01', baseOffset: -8,  salt: 300 },
-  { id: 'EMP004', enrolledDate: '2026-02-01', baseOffset: 2,   salt: 400 },
-  { id: 'EMP005', enrolledDate: '2026-02-15', baseOffset: -12, salt: 500 },
-  { id: 'EMP006', enrolledDate: '2026-03-01', baseOffset: 6,   salt: 600 },
-  { id: 'EMP007', enrolledDate: '2026-03-01', baseOffset: -3,  salt: 700 },
-  { id: 'EMP008', enrolledDate: '2026-03-15', baseOffset: -15, salt: 800 },
-  { id: 'EMP009', enrolledDate: '2026-04-01', baseOffset: 4,   salt: 900 },
-  { id: 'EMP010', enrolledDate: '2026-08-01', baseOffset: -5,  salt: 1000 }, // Caleb -- enrolled recently, so short history is expected
-]
-
 function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
@@ -93,6 +85,42 @@ function addDays(dateKey: string, days: number): string {
   d.setUTCDate(d.getUTCDate() + days)
   return toDateKey(d)
 }
+
+const today = demoSeedDate()
+
+// Relative enrollment dates keep the cohort recent and make seed reruns useful
+// regardless of when the demo project is refreshed.
+const PARTICIPANTS: {
+  id: string
+  enrolledDate: string
+  baseOffset: number
+  salt: number
+  trendDirection: DemoTrendDirection
+  wearableHistory: DemoWearableHistory
+  staleDays?: number
+  missingEveryNthDay?: number
+}[] = [
+  { id: 'EMP001', enrolledDate: addDays(today, -270), baseOffset: 0, salt: 100, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP002', enrolledDate: addDays(today, -270), baseOffset: 5, salt: 200, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP003', enrolledDate: addDays(today, -250), baseOffset: -8, salt: 300, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP004', enrolledDate: addDays(today, -250), baseOffset: 2, salt: 400, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP005', enrolledDate: addDays(today, -240), baseOffset: -12, salt: 500, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP006', enrolledDate: addDays(today, -220), baseOffset: 6, salt: 600, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP007', enrolledDate: addDays(today, -220), baseOffset: -3, salt: 700, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP008', enrolledDate: addDays(today, -200), baseOffset: -15, salt: 800, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP009', enrolledDate: addDays(today, -180), baseOffset: 4, salt: 900, trendDirection: 'improving', wearableHistory: 'complete' },
+  { id: 'EMP010', enrolledDate: addDays(today, -45), baseOffset: -5, salt: 1000, trendDirection: 'improving', wearableHistory: 'complete' },
+  ...ADDITIONAL_DEMO_PARTICIPANTS.map((participant) => ({
+    id: participant.id,
+    enrolledDate: addDays(today, -participant.daysEnrolledAgo),
+    baseOffset: participant.scenario.baseOffset,
+    salt: Number(participant.id.slice(3)) * 100,
+    trendDirection: participant.scenario.trendDirection,
+    wearableHistory: participant.scenario.wearableHistory,
+    staleDays: participant.scenario.staleDays,
+    missingEveryNthDay: participant.scenario.missingEveryNthDay,
+  })),
+]
 
 // Cheap deterministic pseudo-random in [0, 1), seeded per-day so re-runs
 // produce identical data (idempotent upserts stay byte-for-byte stable).
@@ -105,7 +133,7 @@ function dayRandom(dateKey: string, salt: number): number {
   return (Math.abs(hash) % 10000) / 10000
 }
 
-async function main() {
+export async function seedTeamHealthScore() {
   const { data: config, error: configErr } = await supabase
     .from('team_health_score_config')
     .select('baseline_start')
@@ -113,24 +141,30 @@ async function main() {
     .maybeSingle()
   if (configErr) { console.error('team_health_score_config:', configErr); process.exit(1) }
 
-  const baselineStart = config?.baseline_start ?? '2026-07-02'
-  const endDate = toDateKey(new Date()) // through "today", whenever this runs
+  const endDate = today
+  const configuredBaselineStart = config?.baseline_start
+  const baselineStart = configuredBaselineStart && configuredBaselineStart <= endDate
+    ? configuredBaselineStart
+    : addDays(endDate, -90)
 
   const wellnessRows: Record<string, unknown>[] = []
   const workoutRows: Record<string, unknown>[] = []
 
   for (const participant of PARTICIPANTS) {
-    // Never backfill before a participant's real enrolled_date -- e.g. Caleb
-    // (EMP010) enrolled 2026-08-01, so a short, recent-only history is correct
-    // for him even once every other participant has a full baseline window.
+    // Never backfill before a participant's enrolled date; recent enrollees
+    // should retain short histories even when others have a full baseline.
     const startDate = baselineStart > participant.enrolledDate ? baselineStart : participant.enrolledDate
-    if (startDate > endDate) continue
+    const participantEndDate = participant.staleDays ? addDays(endDate, -participant.staleDays) : endDate
+    if (participant.wearableHistory === 'none' || startDate > participantEndDate) {
+      console.log(`  ${participant.id}: no wearable history (${participant.wearableHistory})`)
+      continue
+    }
 
     let cursor = startDate
     let dayIndex = 0
     let rowCount = 0
     let woCount = 0
-    while (cursor <= endDate) {
+    while (cursor <= participantEndDate) {
       const r1 = dayRandom(cursor, participant.salt + 1)
       const r2 = dayRandom(cursor, participant.salt + 2)
       const r3 = dayRandom(cursor, participant.salt + 3)
@@ -139,7 +173,10 @@ async function main() {
       // Gentle upward trend over the whole range so the Trend chart shows
       // visible baseline -> last week -> current movement, plus day-to-day noise,
       // offset per-participant so the cohort isn't uniform.
-      const trend = Math.min(dayIndex / 45, 1) // ramps up over ~45 days then holds
+      const trendProgress = Math.min(dayIndex / 45, 1)
+      const trend = participant.trendDirection === 'declining'
+        ? -trendProgress
+        : participant.trendDirection === 'steady' ? 0 : trendProgress
       const offset = participant.baseOffset
       const sleepHrs = Math.round((6.6 + offset / 20 + trend * 0.9 + (r1 - 0.5) * 1.0) * 100) / 100
       const hrvMs = Math.round(34 + offset / 2 + trend * 10 + (r2 - 0.5) * 8)
@@ -151,7 +188,11 @@ async function main() {
       const onsetDate = addDays(cursor, -1)
       const sleepOnsetTime = `${onsetDate}T${String(onsetHour).padStart(2, '0')}:${String(onsetMinute).padStart(2, '0')}:00.000Z`
 
-      wellnessRows.push({
+      const skipWearableDay = participant.wearableHistory === 'sparse'
+        && participant.missingEveryNthDay !== undefined
+        && (dayIndex + 1) % participant.missingEveryNthDay === 0
+
+      if (!skipWearableDay) wellnessRows.push({
         participant_id: participant.id,
         date: cursor,
         recovery_score: recoveryScore,
@@ -159,7 +200,7 @@ async function main() {
         resting_hr: 60 - Math.round(offset / 4) - Math.round(trend * 4),
         blood_oxygen: 97.5,
         skin_temp: 33.2,
-        day_strain: Math.round((8 + r1 * 6) * 100) / 100,
+        day_strain: Math.round((8 + r1 * 6 + Math.max(0, -offset) / 5) * 100) / 100,
         calories: 2200 + Math.round(r2 * 400),
         sleep_perf: Math.max(1, Math.min(100, Math.round(70 + offset + trend * 15 + (r3 - 0.5) * 20))),
         sleep_hrs: sleepHrs,
@@ -173,19 +214,23 @@ async function main() {
         resp_rate: 15.8,
         sleep_onset_time: sleepOnsetTime,
       })
-      rowCount += 1
+      if (!skipWearableDay) rowCount += 1
 
       // Rest days on Tue/Thu (dow 2, 4) so zone2Score and coverage still read
       // realistically <100% workout days but with plenty of coverage for the
       // wear-consistency/coverage% calculations, which key off daily_wellness.
-      if (dow !== 2 && dow !== 4) {
+      if (!skipWearableDay && dow !== 2 && dow !== 4) {
         const durationMin = 25 + Math.round(r1 * 30)
         const startHour = 6 + Math.floor(r2 * 3)
+        const startTime = new Date(`${cursor}T${String(startHour).padStart(2, '0')}:15:00.000Z`)
+        const endTime = new Date(startTime.getTime() + durationMin * 60 * 1000)
+        const zone2Pct = 20 + Math.round(trend * 8)
+        const zone4Pct = 20 - Math.round(trend * 4)
         workoutRows.push({
           participant_id: participant.id,
           date: cursor,
-          start_time: `${cursor}T${String(startHour).padStart(2, '0')}:15:00Z`,
-          end_time: `${cursor}T${String(startHour).padStart(2, '0')}:${String(15 + (durationMin % 45)).padStart(2, '0')}:00Z`,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
           activity: dow % 2 === 0 ? 'Running' : 'Weightlifting',
           duration_min: durationMin,
           strain: Math.round((7 + r3 * 5) * 100) / 100,
@@ -193,10 +238,10 @@ async function main() {
           max_hr: 165 + Math.round(r2 * 15),
           avg_hr: 125 + Math.round(r3 * 20),
           zone1_pct: 30,
-          zone2_pct: 20 + Math.round(trend * 8),
+          zone2_pct: zone2Pct,
           zone3_pct: 20,
-          zone4_pct: 20 - Math.round(trend * 4),
-          zone5_pct: 10 - Math.round(trend * 4),
+          zone4_pct: zone4Pct,
+          zone5_pct: 50 - zone2Pct - zone4Pct,
         })
         woCount += 1
       }
@@ -223,4 +268,9 @@ async function main() {
   console.log('\n🎉 Team Health Score test data ready for the whole cohort on /wellness-director.')
 }
 
-main()
+if (require.main === module) {
+  seedTeamHealthScore().catch((error) => {
+    console.error('Team Health Score seed failed:', error)
+    process.exit(1)
+  })
+}

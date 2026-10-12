@@ -21,9 +21,16 @@ async function bootstrapAdmin() {
     mustChangePassword: false,
   })
 
+  const { error: unbanError } = await adminClient.auth.admin.updateUserById(result.userId, {
+    ban_duration: 'none',
+  })
+  if (unbanError) {
+    throw new Error(`Failed to restore admin sign-in: ${unbanError.message}`)
+  }
+
   const { data: accessRow, error: accessError } = await adminClient
     .from('user_access')
-    .select('role, must_change_password')
+    .select('role, must_change_password, is_active')
     .eq('user_id', result.userId)
     .maybeSingle()
 
@@ -31,7 +38,7 @@ async function bootstrapAdmin() {
     throw new Error(`Failed to verify user_access for admin: ${accessError.message}`)
   }
 
-  if (!accessRow || accessRow.role !== 'admin' || accessRow.must_change_password !== false) {
+  if (!accessRow || accessRow.role !== 'admin' || accessRow.must_change_password !== false || accessRow.is_active !== true) {
     throw new Error('Admin bootstrap did not produce required user_access values.')
   }
 

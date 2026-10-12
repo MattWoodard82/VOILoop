@@ -74,6 +74,34 @@ describe('POST /api/auth/login', () => {
     expect(mockProvisionSupabaseAccount).not.toHaveBeenCalled()
   })
 
+  test('rejects accounts marked inactive even if password authentication succeeds', async () => {
+    const signOut = jest.fn(async () => ({ error: null }))
+    mockCreateServerSupabaseClient.mockReturnValue({
+      auth: {
+        signInWithPassword: jest.fn(async () => ({
+          data: { user: { id: 'inactive-user' } },
+          error: null,
+        })),
+        signOut,
+      },
+    } as never)
+    mockGetUserAccess.mockResolvedValue({
+      role: 'participant',
+      mustChangePassword: false,
+      isActive: false,
+    })
+
+    const response = await POST(makeJsonLoginRequest('pilot@example.com', 'Password123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(403)
+    expect(body).toMatchObject({
+      error: 'This account has been deactivated. Contact an administrator.',
+      code: 'ACCOUNT_DEACTIVATED',
+    })
+    expect(signOut).toHaveBeenCalled()
+  })
+
   test('respects requested redirectTo after successful sign-in', async () => {
     mockCreateServerSupabaseClient.mockReturnValue({
       auth: {
@@ -159,6 +187,8 @@ describe('POST /api/auth/login', () => {
 
     expect(response.status).toBe(200)
     expect(body).toMatchObject({ success: true, redirectTo: '/wellness-director' })
-    expect(mockProvisionSupabaseAccount).toHaveBeenCalled()
+    expect(mockProvisionSupabaseAccount).toHaveBeenCalledWith(expect.objectContaining({
+      activateExistingAccount: false,
+    }))
   })
 })

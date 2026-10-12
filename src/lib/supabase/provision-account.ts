@@ -1,4 +1,4 @@
-import { createAdminSupabaseClient } from '@/lib/supabase/admin'
+import type { createAdminSupabaseClient } from '@/lib/supabase/admin'
 
 export type ProvisionableRole = 'admin' | 'participant' | 'wellness_director'
 
@@ -30,6 +30,7 @@ interface ProvisionSupabaseAccountInput {
   mustChangePassword: boolean
   existingUserId?: string | null
   updateExistingPassword?: boolean
+  activateExistingAccount?: boolean
 }
 
 interface ProvisionSupabaseAccountResult {
@@ -112,10 +113,14 @@ export async function provisionSupabaseAccount(
   const accessPayload: {
     user_id: string
     role: ProvisionableRole
+    is_active?: boolean
     must_change_password?: boolean
   } = {
     user_id: userId,
     role: input.role,
+  }
+  if (status === 'created' || input.activateExistingAccount !== false) {
+    accessPayload.is_active = true
   }
 
   if (status === 'created' || shouldUpdateExistingPassword) {
