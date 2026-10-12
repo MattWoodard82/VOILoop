@@ -35,6 +35,24 @@ function createMockAdminClient() {
 }
 
 describe('provisionSupabaseAccount', () => {
+  test('automatic credential repair cannot reactivate an existing deactivated account', async () => {
+    const mocks = createMockAdminClient()
+    await provisionSupabaseAccount({
+      adminClient: mocks.adminClient,
+      email: 'admin@example.com',
+      password: 'Password123',
+      role: 'admin',
+      mustChangePassword: false,
+      existingUserId: 'inactive-admin-id',
+      activateExistingAccount: false,
+    })
+    expect(mocks.upsert).toHaveBeenCalledWith({
+      user_id: 'inactive-admin-id',
+      role: 'admin',
+      must_change_password: false,
+    }, { onConflict: 'user_id' })
+  })
+
   test('creates a new account and access row when no existing user is found', async () => {
     const mocks = createMockAdminClient()
 
@@ -56,6 +74,7 @@ describe('provisionSupabaseAccount', () => {
     expect(mocks.upsert).toHaveBeenCalledWith({
       user_id: 'new-user-id',
       role: 'participant',
+      is_active: true,
       must_change_password: true,
     }, { onConflict: 'user_id' })
   })
@@ -84,6 +103,7 @@ describe('provisionSupabaseAccount', () => {
     expect(mocks.upsert).toHaveBeenCalledWith({
       user_id: 'existing-user-id',
       role: 'admin',
+      is_active: true,
       must_change_password: false,
     }, { onConflict: 'user_id' })
   })
@@ -129,6 +149,7 @@ describe('provisionSupabaseAccount', () => {
     expect(mocks.upsert).toHaveBeenCalledWith({
       user_id: 'known-user-id',
       role: 'wellness_director',
+      is_active: true,
     }, { onConflict: 'user_id' })
   })
 })

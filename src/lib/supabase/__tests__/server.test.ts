@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
-import { setMustChangePassword } from '../server'
+import { getSession, setMustChangePassword } from '../server'
 
 jest.mock('next/headers', () => ({
   cookies: jest.fn(),
@@ -20,6 +20,58 @@ describe('setMustChangePassword', () => {
       getAll: jest.fn(() => []),
       set: jest.fn(),
     } as never)
+  })
+
+  describe('getSession account deactivation', () => {
+    const mockCreateServerClient = createServerClient as jest.MockedFunction<typeof createServerClient>
+
+    beforeEach(() => {
+      jest.clearAllMocks()
+      ;(cookies as jest.MockedFunction<typeof cookies>).mockReturnValue({
+        getAll: jest.fn(() => []),
+        set: jest.fn(),
+      } as never)
+    })
+
+    test('rejects an authenticated session whose user_access row is inactive', async () => {
+      mockCreateServerClient.mockReturnValue({
+        auth: {
+          getUser: jest.fn(async () => ({ data: { user: { id: 'inactive-user' } }, error: null })),
+        },
+        from: jest.fn(() => ({
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(async () => ({
+                data: { role: 'participant', must_change_password: false, is_active: false },
+                error: null,
+              })),
+            })),
+          })),
+        })),
+      } as never)
+
+      await expect(getSession()).resolves.toBeNull()
+    })
+
+    test('keeps active authenticated sessions available', async () => {
+      mockCreateServerClient.mockReturnValue({
+        auth: {
+          getUser: jest.fn(async () => ({ data: { user: { id: 'active-user' } }, error: null })),
+        },
+        from: jest.fn(() => ({
+          select: jest.fn(() => ({
+            eq: jest.fn(() => ({
+              maybeSingle: jest.fn(async () => ({
+                data: { role: 'participant', must_change_password: false, is_active: true },
+                error: null,
+              })),
+            })),
+          })),
+        })),
+      } as never)
+
+      await expect(getSession()).resolves.toEqual({ user: { id: 'active-user' } })
+    })
   })
 
   test('preserves the existing role when updating the password gate', async () => {

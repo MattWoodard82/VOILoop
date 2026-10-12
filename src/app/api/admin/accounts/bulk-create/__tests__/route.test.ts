@@ -105,6 +105,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
       user_id: 'wd-1',
       role: 'wellness_director',
       must_change_password: true,
+      is_active: true,
     }, { onConflict: 'user_id' })
     expect(response.headers.get('Content-Disposition')).toContain('wellness-director-passwords.csv')
 
@@ -161,6 +162,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
       user_id: 'emp-auth-1',
       role: 'participant',
       must_change_password: true,
+      is_active: true,
     }, { onConflict: 'user_id' })
     expect(insertParticipant).toHaveBeenCalledWith(expect.objectContaining({
       id: 'EMP001',
@@ -354,6 +356,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     expect(upsertUserAccess).toHaveBeenCalledWith({
       user_id: 'existing-auth-user',
       role: 'participant',
+      is_active: true,
     }, { onConflict: 'user_id' })
 
     const body = await response.text()
@@ -401,6 +404,7 @@ describe('POST /api/admin/accounts/bulk-create', () => {
     expect(upsertUserAccess).toHaveBeenCalledWith({
       user_id: 'concurrent-user',
       role: 'wellness_director',
+      is_active: true,
     }, { onConflict: 'user_id' })
     await expect(response.text()).resolves.toContain(
       '"concurrent@example.com","wellness_director","","","existing-password-preserved"'

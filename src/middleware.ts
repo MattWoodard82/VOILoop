@@ -25,7 +25,16 @@ function isRouteMatch(pathname: string, route: string): boolean {
 function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
   if (!error) return false
   const message = (error.message ?? '').toLowerCase()
-  return error.code === 'PGRST205' || message.includes('user_access')
+  return error.code === 'PGRST205'
+    || (message.includes('user_access')
+      && (error.code === '42P01' || message.includes('does not exist') || message.includes('could not find the table')))
+}
+
+function isMissingActiveUserColumn(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (error.code === 'PGRST204' || error.code === '42703')
+    && message.includes('is_active')
 }
 
 function isMissingUserIdColumn(error: { code?: string | null; message?: string | null } | null): boolean {
@@ -82,14 +91,25 @@ export async function middleware(request: NextRequest) {
   async function getAccessForUser() {
     const { data: roleData, error: roleError } = await supabase
       .from('user_access')
-      .select('role, must_change_password')
+      .select('role, must_change_password, is_active')
       .eq('user_id', user!.id)
       .maybeSingle()
 
     let role = roleData?.role ?? null
-    const mustChangePassword = roleData?.must_change_password ?? false
+    let mustChangePassword = roleData?.must_change_password ?? false
+    let isActive = roleData?.is_active ?? true
 
-    if (roleError && isMissingUserAccessTable(roleError)) {
+    if (roleError && isMissingActiveUserColumn(roleError)) {
+      const { data: legacyAccessData, error: legacyAccessError } = await supabase
+        .from('user_access')
+        .select('role, must_change_password')
+        .eq('user_id', user!.id)
+        .maybeSingle()
+      if (legacyAccessError) throw legacyAccessError
+      role = legacyAccessData?.role ?? null
+      mustChangePassword = legacyAccessData?.must_change_password ?? false
+      isActive = true
+    } else if (roleError && isMissingUserAccessTable(roleError)) {
       const { data: legacyRoleData, error: legacyRoleError } = await supabase
         .from('user_roles')
         .select('role')
@@ -116,12 +136,13 @@ export async function middleware(request: NextRequest) {
       throw roleError
     }
 
-    return { role, mustChangePassword }
+    return { role, mustChangePassword, isActive }
   }
 
   if (PUBLIC_ROUTES.some(r => pathname.startsWith(r))) {
     if (user && pathname === '/login') {
-      const { role, mustChangePassword } = await getAccessForUser()
+      const { role, mustChangePassword, isActive } = await getAccessForUser()
+      if (!isActive) return response
       const redirectTo = mustChangePassword
         ? PASSWORD_CHANGE_ROUTE
         : role === 'participant' || !role
@@ -138,7 +159,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  const { role, mustChangePassword } = await getAccessForUser()
+  const { role, mustChangePassword, isActive } = await getAccessForUser()
+  if (!isActive) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('error', 'account_deactivated')
+    return NextResponse.redirect(loginUrl)
+  }
 
   if (mustChangePassword && !isRouteMatch(pathname, PASSWORD_CHANGE_ROUTE)) {
     return NextResponse.redirect(new URL(PASSWORD_CHANGE_ROUTE, request.url))

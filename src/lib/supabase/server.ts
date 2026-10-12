@@ -7,6 +7,7 @@ export type AppRole = 'admin' | 'wellness_director' | 'participant'
 export interface UserAccess {
   role: AppRole | null
   mustChangePassword: boolean
+  isActive?: boolean
 }
 
 export interface AuthenticatedUserSession {
@@ -27,7 +28,16 @@ function getRedirectPathForRole(role: AppRole | null): string {
 function isMissingUserAccessTable(error: { code?: string | null; message?: string | null } | null): boolean {
   if (!error) return false
   const message = (error.message ?? '').toLowerCase()
-  return error.code === 'PGRST205' || message.includes('user_access')
+  return error.code === 'PGRST205'
+    || (message.includes('user_access')
+      && (error.code === '42P01' || message.includes('does not exist') || message.includes('could not find the table')))
+}
+
+function isMissingActiveUserColumn(error: { code?: string | null; message?: string | null } | null): boolean {
+  if (!error) return false
+  const message = (error.message ?? '').toLowerCase()
+  return (error.code === 'PGRST204' || error.code === '42703')
+    && message.includes('is_active')
 }
 
 function isNoRowsError(error: { code?: string | null; message?: string | null } | null): boolean {
@@ -68,6 +78,8 @@ export async function getSession() {
   const supabase = createServerSupabaseClient()
   const { data, error } = await supabase.auth.getUser()
   if (error || !data.user) return null
+  const access = await getUserAccess(data.user.id)
+  if (access.isActive === false) return null
   return { user: data.user } satisfies AuthenticatedUserSession
 }
 
@@ -76,23 +88,41 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
   if (userId) {
     const { data, error } = await supabase
       .from('user_access')
-      .select('role, must_change_password')
+      .select('role, must_change_password, is_active')
       .eq('user_id', userId)
       .maybeSingle()
+
+    if (error && isMissingActiveUserColumn(error)) {
+      const { data: legacyAccess, error: legacyAccessError } = await supabase
+        .from('user_access')
+        .select('role, must_change_password')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (legacyAccessError) throw legacyAccessError
+      if (legacyAccess) {
+        return {
+          role: (legacyAccess.role as AppRole) ?? null,
+          mustChangePassword: legacyAccess.must_change_password ?? false,
+          isActive: true,
+        }
+      }
+      return { role: null, mustChangePassword: false, isActive: true }
+    }
 
     if (!error && data) {
       return {
         role: (data.role as AppRole) ?? null,
         mustChangePassword: data.must_change_password ?? false,
+        isActive: data.is_active ?? true,
       }
     }
 
     if (!error) {
-      return { role: null, mustChangePassword: false }
+      return { role: null, mustChangePassword: false, isActive: true }
     }
 
     if (isNoRowsError(error)) {
-      return { role: null, mustChangePassword: false }
+      return { role: null, mustChangePassword: false, isActive: true }
     }
 
     if (!isMissingUserAccessTable(error)) {
@@ -110,7 +140,7 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
       throw singletonLegacyError
     }
 
-    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false }
+    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false, isActive: true }
   }
 
   const { data: legacyData, error: legacyError } = await supabase
@@ -129,14 +159,14 @@ export async function getUserAccess(userId?: string): Promise<UserAccess> {
       throw singletonLegacyError
     }
 
-    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false }
+    return { role: (singletonLegacyData?.role as AppRole) ?? null, mustChangePassword: false, isActive: true }
   }
 
   if (legacyError) {
     throw legacyError
   }
 
-  return { role: (legacyData?.role as AppRole) ?? null, mustChangePassword: false }
+  return { role: (legacyData?.role as AppRole) ?? null, mustChangePassword: false, isActive: true }
 }
 
 export async function getUserRole(session?: AuthenticatedUserSession | null): Promise<AppRole | null> {

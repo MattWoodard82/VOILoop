@@ -38,6 +38,7 @@ async function attemptAdminCredentialRepair(email: string): Promise<void> {
     password: configuredAdminPassword,
     role: 'admin',
     mustChangePassword: false,
+    activateExistingAccount: false,
   })
 }
 
@@ -203,6 +204,22 @@ export async function POST(request: Request) {
     if (!access.role) {
       await ensureUserAccessRow(data.user.id)
       access = await getUserAccess(data.user.id)
+    }
+    if (access.isActive === false) {
+      const { error: signOutError } = await supabase.auth.signOut()
+      if (signOutError) {
+        logger.warn({
+          event: 'deactivated_account_signout_failed',
+          user_id: data.user.id,
+          error: signOutError.message,
+        })
+      }
+      return jsonOrRedirect(
+        request,
+        buildErrorBody(request, 'ACCOUNT_DEACTIVATED', 'This account has been deactivated. Contact an administrator.'),
+        403,
+        '/login'
+      )
     }
 
     try {

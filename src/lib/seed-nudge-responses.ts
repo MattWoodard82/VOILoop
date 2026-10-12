@@ -5,10 +5,9 @@
  * acknowledgements attach to)
  *
  * The admin/wellness-director "Responses" tab (src/app/admin/events/AdminEventsClient.tsx,
- * backed by src/app/api/admin/events/route.ts) only ever had 10 real seeded
- * participants to acknowledge a nudge, which was never enough to exercise the
- * reporting UI's most-recent-50 cap or its "showing most recent 50" note. This
- * script backfills additional synthetic participants (if needed) and creates
+ * backed by src/app/api/admin/events/route.ts) uses the curated 30-person demo
+ * cohort by default. This script can backfill additional synthetic participants
+ * when an explicit response count exceeds the active cohort, then creates
  * `count` nudge_acknowledgements rows (default: a random number between 10 and
  * 50) against the most recently published weekly nudge, with acknowledged_at
  * timestamps spread over the past few days so ordering/pagination looks
@@ -29,12 +28,15 @@
 
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
+import { demoSeedDate } from './demo-seed-profile'
+import { assertSupabaseProjectTarget } from './pilot-account-deactivation'
 
 dotenv.config({ path: '.env.local' })
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const encryptionKey = process.env.NUDGE_RESPONSE_ENCRYPTION_KEY
+const seedDate = demoSeedDate()
 
 if (!supabaseUrl || !supabaseServiceRoleKey) {
   throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in environment.')
@@ -61,6 +63,9 @@ function assertSeedingAllowed(url: string) {
   }
   if (isLocalSupabaseUrl(url)) return
   if (allowNonLocalSeed) {
+    if (voiloopEnv === 'demo') {
+      assertSupabaseProjectTarget(url, voiloopEnv, 'demo', process.env.DEMO_SUPABASE_PROJECT_REF, null)
+    }
     console.warn('⚠ VOILOOP_ALLOW_NON_LOCAL_SEED=true set. Proceeding to seed non-local Supabase environment.')
     return
   }
@@ -98,6 +103,7 @@ async function getOrCreateSyntheticParticipants(count: number): Promise<string[]
     .from('participants')
     .select('id')
     .eq('status', 'Active')
+    .order('id', { ascending: true })
   if (error) { console.error('Participant lookup:', error); process.exit(1) }
 
   const existingIds = (activeParticipants ?? []).map((p) => p.id as string)
@@ -128,7 +134,7 @@ async function getOrCreateSyntheticParticipants(count: number): Promise<string[]
       title: 'Synthetic Participant',
       device_id: `SEED-${String(n).padStart(3, '0')}`,
       cohort: 'seed-nudge-responses',
-      enrolled_date: '2026-01-01',
+      enrolled_date: seedDate,
       is_exact_data: false,
       consent: true,
       status: 'Active',
@@ -179,14 +185,15 @@ async function seedNudgeResponses() {
   }
 
   const participantIds = await getOrCreateSyntheticParticipants(count)
-  const now = Date.now()
+  const today = seedDate
+  const responseTimeAnchor = Date.parse(`${today}T00:00:00.000Z`)
 
   for (let i = 0; i < count; i++) {
     const participantId = participantIds[i]
     const responseText = SAMPLE_RESPONSES[i % SAMPLE_RESPONSES.length]
     // Spread acknowledgements over the past week, newest first as i increases,
     // so the "most recent 50" ordering has realistic variety to display/verify.
-    const acknowledgedAt = new Date(now - (count - i) * 45 * 60 * 1000).toISOString()
+    const acknowledgedAt = new Date(responseTimeAnchor - (count - i) * 45 * 60 * 1000).toISOString()
 
     const { data, error } = await supabase.rpc('seed_nudge_acknowledgement', {
       p_nudge_id: recentNudge.id,
