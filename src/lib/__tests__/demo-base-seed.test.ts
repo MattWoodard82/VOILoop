@@ -1,6 +1,7 @@
 type Row = Record<string, unknown>
 const mockWrites: { table: string; rows: Row[]; conflict: string }[] = []
 const mockInserts: string[] = []
+const mockChallengeInserts: Row[] = []
 let mockSeeded = false
 const mockListUsers = jest.fn(async (): Promise<{
   data: { users: { id: string; email?: string }[] }
@@ -25,7 +26,11 @@ class SeedQuery {
   }
   async single() { return { data: { id: `${this.table}-fixture` }, error: null } }
   update() { return this }
-  insert() { mockInserts.push(this.table); return this }
+  insert(rows?: Row | Row[]) {
+    mockInserts.push(this.table)
+    if (this.table === 'challenges' && rows) mockChallengeInserts.push(...(Array.isArray(rows) ? rows : [rows]))
+    return this
+  }
   async upsert(rows: Row[] | Row, options: { onConflict: string }) {
     mockWrites.push({ table: this.table, rows: Array.isArray(rows) ? rows : [rows], conflict: options.onConflict })
     return { error: null }
@@ -72,6 +77,31 @@ describe('base demo seed', () => {
     process.env = savedEnvironment
     consoleSpy.mockRestore()
     jest.useRealTimers()
+  })
+
+  test('keeps the seeded active challenge in the future when the fixed demo anchor is old', async () => {
+    const savedSeedDate = process.env.DEMO_SEED_DATE
+    process.env.DEMO_SEED_DATE = '2020-01-01'
+    mockSeeded = false
+    mockWrites.length = 0
+    mockInserts.length = 0
+    mockChallengeInserts.length = 0
+
+    try {
+      await jest.isolateModulesAsync(async () => {
+        const { seed: seedWithOldAnchor } = await import('../seed')
+        await seedWithOldAnchor()
+      })
+
+      expect(mockChallengeInserts).toHaveLength(1)
+      expect(mockChallengeInserts[0].window_start_at).toBe('2026-10-13T00:00:00.000Z')
+      expect(mockChallengeInserts[0].window_end_at).toBe('2026-10-17T23:59:59.000Z')
+    } finally {
+      process.env.DEMO_SEED_DATE = savedSeedDate
+      mockWrites.length = 0
+      mockInserts.length = 0
+      mockChallengeInserts.length = 0
+    }
   })
 
   test('seeds 30 synthetic active profiles and stable IDs without inserting duplicate events or interventions', async () => {

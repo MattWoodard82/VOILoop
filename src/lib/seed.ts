@@ -85,7 +85,8 @@ const WEEK_OF = mondayOfWeek(DATE)
 
 // Keep the challenge window in the future and outside the history backfill so
 // it remains active after recompute and doesn't inflate device-wear metrics.
-const CHALLENGE_DATE = shiftIsoDate(DATE, 1)
+const UTC_TODAY = new Date().toISOString().slice(0, 10)
+const CHALLENGE_DATE = shiftIsoDate(DATE > UTC_TODAY ? DATE : UTC_TODAY, 1)
 
 // Maps participant id → { email, password }
 // test1@user.com is mapped to the synthetic EMP005 demo profile.

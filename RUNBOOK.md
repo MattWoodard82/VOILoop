@@ -46,8 +46,13 @@ VOILoop is a web app hosted on Vercel, with data stored in Supabase.
 
 ### Pilot account deactivation before demo cutover
 
-The first pilot-to-demo step blocks every current Supabase Auth account except
-`test1@user.com`, while retaining account and participant records. The script
+The first pilot-to-demo step deactivates every current Supabase Auth account
+except for the required protected accounts `test1@user.com`, `admin@voiloop.com`,
+`hr@voiloop.com`, `matt@voiloop.com`, and `mattwoodard82@gmail.com`, while
+retaining account and participant records. This protected list is always applied
+by default; optional `--preserve-email` / `--preserve-emails` arguments and the
+comma-separated `PILOT_PRESERVE_EMAILS` environment variable add accounts to it
+and cannot remove any required protected account. The script
 also marks linked participant rows inactive and sets `user_access.is_active`
 false. The application rejects inactive accounts at login and for existing
 sessions; RLS also blocks their browser access to protected public tables.
@@ -90,7 +95,10 @@ Before using the script:
 The apply command repeats the disposable verification, requires an exact
 project-ref confirmation, and defaults to no changes unless `--apply` is
 provided. Password-rotation passwords are unique random values and are neither
-printed nor stored. The protected test account is `test1@user.com`; no other
+printed nor stored. The required protected accounts are `test1@user.com`,
+`admin@voiloop.com`, `hr@voiloop.com`, `matt@voiloop.com`, and
+`mattwoodard82@gmail.com`. Additional accounts may be preserved additively with
+`--preserve-email` / `--preserve-emails` or `PILOT_PRESERVE_EMAILS`; no other
 `testN@user.com` account is implicitly exempted. This operation does not delete
 pilot data. Use the existing manual backup process and verify its result before
 the later destructive data refresh. The repository's `admin:delete-accounts`
@@ -117,9 +125,13 @@ data and Auth accounts needed for recovery before authorizing account deletion.
    `SUPABASE_DB_URL` points to this pilot project, not another environment.
 2. Configure `.env.local` with that project's URL and server-only service role
    key, `PILOT_ADMIN_EMAIL`, and `DEMO_SUPABASE_PROJECT_REF` set to the exact
-   project ref. For the refresh command, set `VOILOOP_ENV=demo`; this selects
-   the guarded demo operation and does not change which Supabase project is
-   targeted. The deactivation step separately requires `VOILOOP_ENV=pilot`.
+   project ref. The Auth deletion step always preserves the five required accounts
+   listed above, plus `PILOT_ADMIN_EMAIL`; additional accounts can be preserved
+   with `--preserve-email` / `--preserve-emails` or the additive
+   `PILOT_PRESERVE_EMAILS` environment variable. For the refresh command, set
+   `VOILOOP_ENV=demo`; this selects the guarded demo operation and does not
+   change which Supabase project is targeted. The deactivation step separately
+   requires `VOILOOP_ENV=pilot`.
 3. Preview the deletion. Review every Auth email and table count in the private
    output, and stop if anything is unexpected:
 

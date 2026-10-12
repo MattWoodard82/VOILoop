@@ -26,24 +26,31 @@ describe('demo data refresh safety', () => {
     })
   })
 
-  test('only retains the designated test account and configured admin by default', () => {
+  test('preserves every required operational account and configured admin by default', () => {
     const toDelete = selectAuthUsersToDelete([
       { id: 'test', email: 'TEST1@USER.COM' },
-      { id: 'admin', email: 'demo-admin@example.com' },
+      { id: 'admin', email: 'admin@voiloop.com' },
+      { id: 'hr', email: 'hr@voiloop.com' },
+      { id: 'matt', email: 'matt@voiloop.com' },
+      { id: 'owner', email: 'mattwoodard82@gmail.com' },
+      { id: 'configured-admin', email: 'demo-admin@example.com' },
       { id: 'pilot', email: 'pilot@example.com' },
     ], ' Demo-Admin@example.com ')
 
     expect(toDelete.map(({ id }) => id)).toEqual(['pilot'])
   })
 
-  test('retains additional specified accounts during refresh', () => {
+  test('adds extra preservation values during refresh', () => {
     const toDelete = selectAuthUsersToDelete([
       { id: 'test', email: 'test1@user.com' },
       { id: 'admin', email: 'admin@voiloop.com' },
       { id: 'hr', email: 'hr@voiloop.com' },
       { id: 'matt', email: 'matt@voiloop.com' },
+      { id: 'owner', email: 'mattwoodard82@gmail.com' },
+      { id: 'configured-admin', email: 'demo-admin@example.com' },
+      { id: 'extra', email: 'extra@voiloop.com' },
       { id: 'pilot', email: 'pilot@example.com' },
-    ], 'admin@voiloop.com', ['hr@voiloop.com', 'matt@voiloop.com'])
+    ], 'demo-admin@example.com', [' EXTRA@VOILOOP.COM '])
 
     expect(toDelete.map(({ id }) => id)).toEqual(['pilot'])
   })

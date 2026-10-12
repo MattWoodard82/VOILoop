@@ -8,6 +8,7 @@ import {
 import {
   assertSupabaseProjectTarget,
   normalizeEmail,
+  PRESERVED_PILOT_ACCOUNT_EMAILS,
   PRESERVED_TEST_ACCOUNT_EMAIL,
   type PilotAuthUser,
 } from './pilot-account-deactivation'
@@ -97,7 +98,7 @@ async function main() {
   }))
 
   console.log(`Demo Supabase project: ${projectRef}`)
-  console.log(`Protected test account: ${PRESERVED_TEST_ACCOUNT_EMAIL}`)
+  console.log(`Protected accounts: ${PRESERVED_PILOT_ACCOUNT_EMAILS.join(', ')}`)
   console.log(`Preserved admin account: ${adminEmail}`)
   if (allPreservedEmails.length > 0) {
     console.log(`Additional preserved accounts: ${allPreservedEmails.join(', ')}`)

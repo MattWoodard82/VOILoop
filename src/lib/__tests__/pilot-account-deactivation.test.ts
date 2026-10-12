@@ -5,9 +5,13 @@ import {
 } from '../pilot-account-deactivation'
 
 describe('pilot account deactivation safety', () => {
-  test('keeps only the named test account out of the deactivation set by default', () => {
+  test('preserves every required operational account by default', () => {
     const selected = selectPilotAccountsToDeactivate([
       { id: 'test-user', email: ' TEST1@USER.COM ' },
+      { id: 'admin-user', email: 'admin@voiloop.com' },
+      { id: 'hr-user', email: 'hr@voiloop.com' },
+      { id: 'matt-user', email: 'matt@voiloop.com' },
+      { id: 'owner-user', email: 'mattwoodard82@gmail.com' },
       { id: 'pilot-user', email: 'pilot@example.com' },
       { id: 'no-email', email: null },
     ])
@@ -15,14 +19,16 @@ describe('pilot account deactivation safety', () => {
     expect(selected.map(({ id }) => id)).toEqual(['pilot-user', 'no-email'])
   })
 
-  test('keeps additional specified accounts out of the deactivation set', () => {
+  test('adds extra preservation values to the required defaults', () => {
     const selected = selectPilotAccountsToDeactivate([
       { id: 'test-user', email: 'test1@user.com' },
       { id: 'admin-user', email: 'admin@voiloop.com' },
       { id: 'hr-user', email: 'hr@voiloop.com' },
       { id: 'matt-user', email: 'matt@voiloop.com' },
+      { id: 'owner-user', email: 'mattwoodard82@gmail.com' },
+      { id: 'custom-user', email: 'custom@voiloop.com' },
       { id: 'pilot-user', email: 'pilot@example.com' },
-    ], ['admin@voiloop.com', 'hr@voiloop.com', 'matt@voiloop.com'])
+    ], [' CUSTOM@VOILOOP.COM '])
 
     expect(selected.map(({ id }) => id)).toEqual(['pilot-user'])
   })

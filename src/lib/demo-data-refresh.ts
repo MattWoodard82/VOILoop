@@ -1,5 +1,6 @@
 import {
   normalizeEmail,
+  PRESERVED_PILOT_ACCOUNT_EMAILS,
   PRESERVED_TEST_ACCOUNT_EMAIL,
   type PilotAuthUser,
 } from './pilot-account-deactivation'
@@ -85,7 +86,7 @@ export function selectAuthUsersToDelete<T extends PilotAuthUser>(
   }
 
   const retainedEmails = new Set([
-    PRESERVED_TEST_ACCOUNT_EMAIL,
+    ...PRESERVED_PILOT_ACCOUNT_EMAILS,
     normalizedAdminEmail,
     ...extraPreservedEmails.map(normalizeEmail),
   ])

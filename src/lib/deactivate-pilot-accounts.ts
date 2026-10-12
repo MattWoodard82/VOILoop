@@ -7,6 +7,7 @@ import {
   normalizeEmail,
   parseDeactivationOptions,
   PILOT_ACCOUNT_BAN_DURATION,
+  PRESERVED_PILOT_ACCOUNT_EMAILS,
   PRESERVED_TEST_ACCOUNT_EMAIL,
   selectPilotAccountsToDeactivate,
   type PilotAuthUser,
@@ -218,7 +219,7 @@ async function main() {
   )
   const targets = selectPilotAccountsToDeactivate(allUsers, allPreservedEmails)
   console.log(`Pilot Supabase project: ${projectRef}`)
-  console.log(`Protected account: ${PRESERVED_TEST_ACCOUNT_EMAIL}`)
+  console.log(`Protected accounts: ${PRESERVED_PILOT_ACCOUNT_EMAILS.join(', ')}`)
   if (allPreservedEmails.length > 0) {
     console.log(`Additional preserved accounts: ${allPreservedEmails.join(', ')}`)
   }

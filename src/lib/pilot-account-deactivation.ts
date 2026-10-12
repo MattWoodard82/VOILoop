@@ -1,4 +1,11 @@
-export const PRESERVED_TEST_ACCOUNT_EMAIL = 'test1@user.com'
+export const PRESERVED_PILOT_ACCOUNT_EMAILS = [
+  'test1@user.com',
+  'admin@voiloop.com',
+  'hr@voiloop.com',
+  'matt@voiloop.com',
+  'mattwoodard82@gmail.com',
+] as const
+export const PRESERVED_TEST_ACCOUNT_EMAIL = PRESERVED_PILOT_ACCOUNT_EMAILS[0]
 export const PILOT_ACCOUNT_BAN_DURATION = '876000h'
 
 export type PilotDeactivationMethod = 'ban' | 'password-rotation'
@@ -28,7 +35,7 @@ export function selectPilotAccountsToDeactivate<T extends PilotAuthUser>(
     throw new Error('Protected test1@user.com account is absent; refusing pilot account deactivation.')
   }
   const preservedSet = new Set([
-    PRESERVED_TEST_ACCOUNT_EMAIL,
+    ...PRESERVED_PILOT_ACCOUNT_EMAILS,
     ...extraPreservedEmails.map(normalizeEmail),
   ])
   return users.filter((user) => !preservedSet.has(normalizeEmail(user.email)))
