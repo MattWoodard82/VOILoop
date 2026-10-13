@@ -16,29 +16,29 @@ begin
     raise exception 'A verified manual-backup reference is required before demo refresh.';
   end if;
 
-  delete from public.events;
+  delete from public.events where id is not null;
   get diagnostics deleted_events = row_count;
 
-  delete from public.weekly_nudges;
+  delete from public.weekly_nudges where id is not null;
   get diagnostics deleted_nudges = row_count;
 
-  delete from public.challenges;
+  delete from public.challenges where id is not null;
   get diagnostics deleted_challenges = row_count;
 
-  delete from public.import_logs;
+  delete from public.import_logs where id is not null;
   get diagnostics deleted_import_logs = row_count;
 
-  delete from public.upload_batches;
+  delete from public.upload_batches where id is not null;
   get diagnostics deleted_upload_batches = row_count;
 
   -- Nullable participant links can leave orphaned rows outside the cascades.
-  delete from public.daily_wellness;
-  delete from public.workouts;
-  delete from public.habits;
-  delete from public.pulse_surveys;
-  delete from public.interventions;
+  delete from public.daily_wellness where id is not null;
+  delete from public.workouts where id is not null;
+  delete from public.habits where id is not null;
+  delete from public.pulse_surveys where id is not null;
+  delete from public.interventions where id is not null;
 
-  delete from public.participants;
+  delete from public.participants where id is not null;
   get diagnostics deleted_participants = row_count;
 
   return jsonb_build_object(

@@ -19,6 +19,7 @@ async function bootstrapAdmin() {
     password: adminPassword,
     role: 'admin',
     mustChangePassword: false,
+    updateExistingPassword: Boolean(process.env.PILOT_ADMIN_PASSWORD),
   })
 
   const { error: unbanError } = await adminClient.auth.admin.updateUserById(result.userId, {

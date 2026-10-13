@@ -29,8 +29,9 @@ const DATA_TABLES = [
   'event_rsvps',
   'weekly_nudges',
   'nudge_targets',
-  'nudge_responses',
   'nudge_acknowledgements',
+  'engagement_nudge_responses',
+  'engagement_nudge_targets',
   'login_activity',
   'risk_flags',
   'leaderboard_metric_snapshots',
@@ -54,7 +55,7 @@ async function listAuthUsers(admin: ReturnType<typeof createAdminSupabaseClient>
 }
 
 function countRows(admin: ReturnType<typeof createAdminSupabaseClient>, table: string) {
-  return admin.from(table).select('id', { count: 'exact', head: true })
+  return admin.from(table).select('*', { count: 'exact', head: true })
 }
 
 function requireEnvironment() {
