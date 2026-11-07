@@ -433,12 +433,15 @@ export async function getTeamWellnessTrend(months: number = 6): Promise<{ month:
   const supabase = getQueryClient()
   const since = new Date()
   since.setMonth(since.getMonth() - months)
-  const { data, error } = await supabase
-    .from('daily_wellness')
-    .select('participant_id, date, recovery_score')
-    .gte('date', since.toISOString().split('T')[0])
-    .order('date', { ascending: true })
-  if (error) throw error
+  const data = await fetchAllPages<Pick<DailyWellness, 'participant_id' | 'date' | 'recovery_score'>>((from, to) =>
+    supabase
+      .from('daily_wellness')
+      .select('participant_id, date, recovery_score')
+      .gte('date', since.toISOString().split('T')[0])
+      .order('date', { ascending: true })
+      .order('participant_id', { ascending: true })
+      .range(from, to)
+  )
 
   // Build month → participantId → latest score (later dates overwrite earlier ones
   // because rows are ordered by date ASC). This matches the KPI methodology of one

@@ -11,6 +11,7 @@ import { createAdminSupabaseClient } from '@/lib/supabase/admin'
 import { getAuthEmailsByUserId } from '@/lib/supabase/auth-emails'
 import type { Participant } from '@/types'
 import Link from 'next/link'
+import { DemoDataRefreshClient } from './DemoDataRefreshClient'
 
 async function getAuthEmailByUserId(authUserIds: string[]): Promise<Map<string, string>> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -43,6 +44,7 @@ export default async function AdminPage() {
   return (
     <DashboardShell title="Admin" showPeriodFilter={false} showExport={false} showSignOut={false}>
       <div style={{ display: 'grid', gap: 16 }}>
+        <DemoDataRefreshClient />
         <section id="whoop-import" className="card">
           <div style={{ fontSize: 15, fontWeight: 700, color: '#fff', marginBottom: 6 }}>
             WHOOP data import

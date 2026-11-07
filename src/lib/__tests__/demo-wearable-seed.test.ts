@@ -1,4 +1,5 @@
 type SeedRow = Record<string, string | number | null>
+import { generateDemoStory } from '../demo-story'
 
 const mockUpsert = jest.fn(async (_rows: SeedRow[], _options: { onConflict: string }) => ({ error: null }))
 const mockMaybeSingle = jest.fn(async () => ({
@@ -54,6 +55,11 @@ describe('generated demo wearable history', () => {
     expect(days('EMP012').at(-1)?.date).toBe('2026-10-12')
     expect(new Set(wellness.map(row => `${row.participant_id}:${row.date}`)).size).toBe(wellness.length)
     expect(new Set(workouts.map(row => `${row.participant_id}:${row.start_time}`)).size).toBe(workouts.length)
+    const story = generateDemoStory('2026-10-12')
+    for (const row of story.recovery) {
+      expect(wellness.find(day => day.participant_id === row.participant_id && day.date === row.date)?.recovery_score)
+        .toBe(row.recovery_score)
+    }
     for (const workout of workouts) {
       expect(Date.parse(String(workout.end_time)) - Date.parse(String(workout.start_time)))
         .toBe(Number(workout.duration_min) * 60000)

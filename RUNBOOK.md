@@ -179,7 +179,8 @@ data and Auth accounts needed for recovery before authorizing account deletion.
    Remote demo seeds require a URL matching `DEMO_SUPABASE_PROJECT_REF` and do
    not overwrite existing scoring configuration. Keep the same
    `DEMO_SEED_DATE` when rerunning a seed to preserve enrollment ages and gaps;
-   use a full guarded refresh when changing the date to renew demo freshness.
+   use a full guarded refresh when changing the CLI anchor to renew the entire
+   demo cohort. For pulse/recovery freshness only, use the Admin button below.
    The default date when unset is the current UTC day.
 
 6. Verify two retained logins: the configured admin opens the leadership
@@ -192,6 +193,51 @@ data and Auth accounts needed for recovery before authorizing account deletion.
    history, and `EMP019` for intermittent coverage. Confirm the wellness,
    pulse, intervention, and outcomes pages show these expected states and no
    pilot identities remain.
+
+### Refresh pulse and recovery before a demo
+
+Apply `20261105030000_refresh_demo_story.sql` to the intended project. On the
+**app host**, configure `NEXT_PUBLIC_SUPABASE_URL` and the server-only
+`SUPABASE_SERVICE_ROLE_KEY`; CLI `.env.local` settings alone do not configure
+the hosted app. No demo environment flag or project-ref setting is required
+for this button. The complete 30-person synthetic cohort must already exist
+from the seed sequence above.
+
+Sign in as an admin, open **Admin**, and use **Refresh demo data** at the top,
+then **Confirm refresh**. The operation anchors to the current UTC day even if
+`DEMO_SEED_DATE` is fixed to an older date. It replaces synthetic pulse history
+and refreshes recovery scores over a 160-day window, using one response per
+responding participant per UTC week. Verify the success message's date and counts,
+then open Pulse Surveys and Outcomes. Old pulse responses naturally age out of
+the current-week dashboard; repeat this narrow refresh before later walkthroughs.
+
+The button does **not** run `admin:refresh-demo-data`, delete Auth users,
+provision accounts, move enrollment dates, or reset settings, interventions,
+workouts, habits, events, or nudges. Existing non-recovery wellness columns and
+wellness rows outside the refreshed window survive. New history rows contain
+recovery only; no-device, sparse, stale, and recent-enrollee scenarios constrain
+their generation. Recovery and pulse changes also affect dashboard scores that
+consume those measures; other measurements remain unchanged.
+
+Refreshes are transactional, and concurrent attempts are rejected while a refresh
+is running. The button is visible to admins in every environment and writes to
+the database configured for that app, so verify the target and back it up before
+confirming. If configuration, cohort identity, or imported wearable data checks
+fail, correct the reported prerequisite rather than using the destructive cutover
+as a shortcut. The endpoint independently enforces admin access, confirmation,
+synthetic cohort identity and imported-data protections.
+
+Walkthrough narrative: "A demanding period lowered recovery and raised reported
+stress. As wellness support was introduced, recovery, energy, rest, and wellbeing
+improved together. Some participants still report fatigue or miss check-ins, so
+support stays targeted rather than declaring everyone recovered." Use EMP011
+for an improving profile, EMP010 for existing recovery-program context, and
+EMP014/EMP008 for ongoing concerns. Existing intervention records are unchanged;
+this synthetic story does not establish a clinical or causal outcome.
+
+For local SQL regression, run `supabase/tests/demo-story-refresh.sql` only in a
+disposable migrated and seeded database. It rolls back its fixtures and checks
+preservation, repeated refreshes, failure rollback, validation, and RPC grants.
 
 ### Cutover recovery and local SQL verification
 
