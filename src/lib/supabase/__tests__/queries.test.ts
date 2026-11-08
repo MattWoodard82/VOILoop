@@ -298,6 +298,18 @@ describe('getLatestWellness', () => {
     ])
   })
 
+  test('retains wearable measurements and their date behind newer recovery-only history', async () => {
+    mockCreateClient.mockReturnValue(makeTableClient({
+      daily_wellness: [
+        { id: 'recovery-only', participant_id: 'P1', date: '2024-06-12', recovery_score: 92 },
+        wellnessRows[0],
+      ],
+    }) as never)
+    await expect(getLatestWellness(undefined, ['P1'])).resolves.toEqual([{
+      ...wellnessRows[0], recovery_score: 92, recovery_date: '2024-06-12',
+    }])
+  })
+
   test('returns explicit-date rows in deterministic participant order', async () => {
     mockCreateClient.mockReturnValue(
       makeTableClient({

@@ -35,6 +35,9 @@ begin
     raise exception 'Unexpected synthetic participant IDs.';
   end if;
 
+  -- Imports update existing rows without locking their participant. Lock wellness
+  -- first so provenance cannot change between the check and recovery writes.
+  lock table public.daily_wellness in share row exclusive mode;
   perform p.id from public.participants p
   join jsonb_to_recordset(p_profiles) as x(id text) on x.id = p.id
   order by p.id for update of p;

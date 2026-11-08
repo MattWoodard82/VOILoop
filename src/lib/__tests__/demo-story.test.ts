@@ -1,6 +1,17 @@
 import { DEMO_STORY_PARTICIPANTS, demoRecoveryScore, generateDemoStory, shiftDemoDate } from '../demo-story'
 
 describe('demo pulse and recovery story', () => {
+  test('later refreshes retain sparse coverage on overlapping persisted-enrollment dates', () => {
+    const enrollment = { EMP019: '2026-07-22', EMP021: '2026-08-01', EMP028: '2026-08-26' }
+    const first = generateDemoStory('2026-11-04', enrollment)
+    const next = generateDemoStory('2026-11-05', enrollment)
+    for (const id of Object.keys(enrollment)) {
+      const dates = (story: typeof first) => story.recovery
+        .filter(row => row.participant_id === id && row.date >= '2026-09-01' && row.date <= '2026-11-04')
+        .map(row => row.date)
+      expect(dates(next)).toEqual(dates(first))
+    }
+  })
   test.each(['2026-11-04', '2026-01-01', '2026-03-01', '2026-12-31', '2026-06-15'])(
     'has a visible monthly dip and rebound on %s using the Outcomes aggregation', anchor => {
       const story = generateDemoStory(anchor)

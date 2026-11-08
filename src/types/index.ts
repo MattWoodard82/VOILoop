@@ -29,6 +29,8 @@ export interface DailyWellness {
   // this field existed, or when the source row had no parsable value.
   sleep_onset_time?: string | null
   recovery_score: number | null
+  // Latest recovery can be newer than the retained wearable snapshot's date.
+  recovery_date?: string
   hrv_ms: number | null
   resting_hr: number | null
   blood_oxygen: number | null

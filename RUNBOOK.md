@@ -216,7 +216,11 @@ provision accounts, move enrollment dates, or reset settings, interventions,
 workouts, habits, events, or nudges. Existing non-recovery wellness columns and
 wellness rows outside the refreshed window survive. New history rows contain
 recovery only; no-device, sparse, stale, and recent-enrollee scenarios constrain
-their generation. Recovery and pulse changes also affect dashboard scores that
+their generation. Participant snapshots retain the latest wearable measurements
+and their original date when newer rows contain only recovery; `recovery_date`
+identifies the newer recovery separately. Sparse coverage keeps persisted
+enrollment as its cadence origin across refreshes.
+Recovery and pulse changes also affect dashboard scores that
 consume those measures; other measurements remain unchanged.
 
 Refreshes are transactional, and concurrent attempts are rejected while a refresh

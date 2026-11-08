@@ -396,8 +396,28 @@ export async function getLatestWellness(
 
     const { data: meaningfulRows, error: meaningfulError } = await meaningfulQuery
     if (meaningfulError) throw meaningfulError
-    if ((meaningfulRows ?? []).length > 0) {
-      return meaningfulRows?.[0] ?? null
+    const latest = meaningfulRows?.[0]
+    if (latest) {
+      const nonRecoveryFields = WELLNESS_METRIC_FIELDS.filter(field => field !== 'recovery_score')
+      if (nonRecoveryFields.some(field => latest[field] !== null && latest[field] !== undefined)) return latest
+
+      // A demo refresh can add recovery-only days. Retain the original wearable
+      // snapshot date instead of making older HRV/sleep/strain look newly measured.
+      const { data: wearableRows, error: wearableError } = await supabase
+        .from('daily_wellness')
+        .select('*')
+        .eq('participant_id', participantId)
+        .or(nonRecoveryFields.map(field => `${field}.not.is.null`).join(','))
+        .order('date', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(1)
+      if (wearableError) throw wearableError
+      const wearable = wearableRows?.[0]
+      return wearable ? {
+        ...wearable,
+        recovery_score: latest.recovery_score,
+        recovery_date: latest.date,
+      } : latest
     }
 
     const { data: latestRows, error: latestError } = await supabase

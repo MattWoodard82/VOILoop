@@ -73,13 +73,14 @@ export function generateDemoStory(anchorDate: string, enrollmentDates: Record<st
   for (const profile of DEMO_STORY_PARTICIPANTS) {
     const relativeEnrollment = shiftDemoDate(anchor, -profile.daysEnrolledAgo)
     const persistedEnrollment = enrollmentDates[profile.id]
+    const cadenceOrigin = persistedEnrollment ?? relativeEnrollment
     const enrolled = persistedEnrollment && persistedEnrollment > relativeEnrollment ? persistedEnrollment : relativeEnrollment
     const firstDate = enrolled > start ? enrolled : start
     const scenario = profile.scenario
     const wearableEnd = shiftDemoDate(anchor, -('staleDays' in scenario ? scenario.staleDays ?? 0 : 0))
     for (let date = firstDate; date <= wearableEnd; date = shiftDemoDate(date, 1)) {
       const missing = 'missingEveryNthDay' in scenario ? scenario.missingEveryNthDay : undefined
-      if (scenario.wearableHistory === 'none' || (missing && (daysBetween(enrolled, date) + 1) % missing === 0)) continue
+      if (scenario.wearableHistory === 'none' || (missing && (daysBetween(cadenceOrigin, date) + 1) % missing === 0)) continue
       recovery.push({ participant_id: profile.id, date, recovery_score: demoRecoveryScore(profile.id, date, anchor) })
     }
 
