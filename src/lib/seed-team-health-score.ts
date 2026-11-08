@@ -6,7 +6,7 @@
  * the existing KPI cards/engagement score, but is *not* enough to
  * exercise the Team Health Score baseline/last-week/current windows, which each
  * need many consecutive days of daily_wellness + workouts history. This script
- * additively backfills several months of realistic daily_wellness and workouts
+ * additively backfills at least 160 days of realistic daily_wellness and workouts
  * rows for every participant seeded by seed.ts, spanning from the later of the
  * admin-configured baseline window or each participant's enrolled_date through
  * "today" (computed at run time), so the Team Health Score Trend / 5-Metric
@@ -24,6 +24,7 @@
 import dotenv from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { assertSupabaseProjectTarget } from './pilot-account-deactivation'
+import { DEMO_STORY_DAYS, demoRecoveryScore } from './demo-story'
 import {
   ADDITIONAL_DEMO_PARTICIPANTS,
   demoSeedDate,
@@ -143,9 +144,11 @@ export async function seedTeamHealthScore() {
 
   const endDate = today
   const configuredBaselineStart = config?.baseline_start
-  const baselineStart = configuredBaselineStart && configuredBaselineStart <= endDate
+  const scoringStart = configuredBaselineStart && configuredBaselineStart <= endDate
     ? configuredBaselineStart
     : addDays(endDate, -90)
+  const storyStart = addDays(endDate, -DEMO_STORY_DAYS)
+  const baselineStart = scoringStart < storyStart ? scoringStart : storyStart
 
   const wellnessRows: Record<string, unknown>[] = []
   const workoutRows: Record<string, unknown>[] = []
@@ -170,9 +173,8 @@ export async function seedTeamHealthScore() {
       const r3 = dayRandom(cursor, participant.salt + 3)
       const dow = new Date(`${cursor}T00:00:00.000Z`).getUTCDay() // 0=Sun..6=Sat
 
-      // Gentle upward trend over the whole range so the Trend chart shows
-      // visible baseline -> last week -> current movement, plus day-to-day noise,
-      // offset per-participant so the cohort isn't uniform.
+      // Retain the existing non-recovery profiles; recovery uses the shared
+      // workload dip and rebound so monthly Outcomes and weekly pulse agree.
       const trendProgress = Math.min(dayIndex / 45, 1)
       const trend = participant.trendDirection === 'declining'
         ? -trendProgress
@@ -180,7 +182,7 @@ export async function seedTeamHealthScore() {
       const offset = participant.baseOffset
       const sleepHrs = Math.round((6.6 + offset / 20 + trend * 0.9 + (r1 - 0.5) * 1.0) * 100) / 100
       const hrvMs = Math.round(34 + offset / 2 + trend * 10 + (r2 - 0.5) * 8)
-      const recoveryScore = Math.max(1, Math.min(100, Math.round(58 + offset + trend * 20 + (r3 - 0.5) * 24)))
+      const recoveryScore = demoRecoveryScore(participant.id, cursor, endDate)
       // "Sleep onset" the previous night, ~22:00-23:30 local, so sleepNightDate's
       // 6am-cutoff rule maps it onto `cursor` (the night that ends this morning).
       const onsetHour = 22 + Math.floor(r1 * 2) // 22 or 23
@@ -190,7 +192,7 @@ export async function seedTeamHealthScore() {
 
       const skipWearableDay = participant.wearableHistory === 'sparse'
         && participant.missingEveryNthDay !== undefined
-        && (dayIndex + 1) % participant.missingEveryNthDay === 0
+        && ((Date.parse(cursor) - Date.parse(participant.enrolledDate)) / 86400000 + 1) % participant.missingEveryNthDay === 0
 
       if (!skipWearableDay) wellnessRows.push({
         participant_id: participant.id,

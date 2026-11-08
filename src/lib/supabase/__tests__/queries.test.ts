@@ -1,5 +1,6 @@
 import {
   getCurrentWeekPulse,
+  getTeamWellnessTrend,
   getLatestWellness,
   getLatestWorkouts,
   getParticipantImportBatches,
@@ -13,6 +14,7 @@ import {
 import { createClient } from '../client'
 import { createServerSupabaseClient } from '../server'
 import { createAdminSupabaseClient } from '../admin'
+import { generateDemoStory } from '@/lib/demo-story'
 
 jest.mock('../client', () => ({
   createClient: jest.fn(),
@@ -31,6 +33,23 @@ jest.mock('../admin', () => ({
 }))
 
 type QueryResult<T> = { data: T | null; error: { code?: string; message?: string } | null }
+
+test('Outcomes recovery trend pages through the entire demo story, including the latest month', async () => {
+  jest.useFakeTimers().setSystemTime(new Date('2026-11-04T12:00:00Z'))
+  try {
+    const story = generateDemoStory('2026-11-04')
+    expect(story.recovery.length).toBeGreaterThan(1000)
+    const client = makeTableClient({ daily_wellness: story.recovery })
+    jest.mocked(createClient).mockReturnValue(client as never)
+    const trend = await getTeamWellnessTrend(5)
+    expect(trend.length).toBeGreaterThanOrEqual(5)
+    expect(trend.at(-1)?.month).toBe('2026-11')
+    expect(trend.at(-1)!.avg_recovery - Math.min(...trend.map(month => month.avg_recovery))).toBeGreaterThanOrEqual(10)
+    expect(client.from.mock.calls.length).toBeGreaterThan(1)
+  } finally {
+    jest.useRealTimers()
+  }
+})
 
 function makeSupabaseClient<T>(resultForStartTime: QueryResult<T>, fallbackResult: QueryResult<T>) {
   const from = jest.fn(() => {
@@ -277,6 +296,18 @@ describe('getLatestWellness', () => {
       wellnessRows[1],
       wellnessRows[2],
     ])
+  })
+
+  test('retains wearable measurements and their date behind newer recovery-only history', async () => {
+    mockCreateClient.mockReturnValue(makeTableClient({
+      daily_wellness: [
+        { id: 'recovery-only', participant_id: 'P1', date: '2024-06-12', recovery_score: 92 },
+        wellnessRows[0],
+      ],
+    }) as never)
+    await expect(getLatestWellness(undefined, ['P1'])).resolves.toEqual([{
+      ...wellnessRows[0], recovery_score: 92, recovery_date: '2024-06-12',
+    }])
   })
 
   test('returns explicit-date rows in deterministic participant order', async () => {
